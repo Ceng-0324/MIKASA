@@ -1,6 +1,6 @@
 # Mikasa
 
-Mikasa 是与人类成员共同开发、监督工程质量并推进交付的仿生程序员。本目录包含人格与工程规则 1.0，以及 Python 运行时 0.1：任务持久化、审计、拆解、实现验证、PR 审查、进度查询、CLI 和 HTTP API。Hermes 0.21.3/CCH 已完成合成任务真实联调，人格与三类工程 skill 已验证加载；GitHub 账号和 VM 尚未完成运行验收。
+Mikasa 是与人类成员共同开发、监督工程质量并推进交付的仿生程序员。本目录包含人格与工程规则 1.0，以及 Python 运行时 0.1：任务持久化、审计、拆解、实现验证、PR 审查、进度查询、CLI 和 HTTP API。Hermes 0.21.3/CCH 已完成合成任务真实联调，人格与三类工程 skill 已验证加载，Hermes 可主动检索源码并通过受限工具修改、检查和修复；GitHub 账号和 VM 尚未完成运行验收。
 
 ## 本地运行
 
@@ -22,7 +22,7 @@ python3.12 -m mikasa --config config/local/mikasa.json run
 
 API 和 runner 分别运行。默认示例不启用仓库、模型、定期审计或外部发布；`doctor` 会明确显示缺少的运行条件。完整说明见 [运行手册](docs/runbooks/OPERATIONS.md)、[API 契约](docs/architecture/API.md) 和 [架构决定](docs/decisions/0001-runtime.md)。
 
-本地回归检查见 [验证记录](docs/VALIDATION.md)，模型、skill 与完整任务链的真实证据见 [Hermes/CCH 联调记录](docs/HERMES_CCH_VALIDATION.md)。
+本地回归检查见 [验证记录](docs/VALIDATION.md)，新增主动工具循环见 [工具覆盖验证](docs/HERMES_TOOLS_VALIDATION.md)，模型、skill 与完整任务链的早期真实证据见 [Hermes/CCH 联调记录](docs/HERMES_CCH_VALIDATION.md)。
 
 ## 聊天与模型切换
 

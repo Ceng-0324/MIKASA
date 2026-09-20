@@ -40,8 +40,14 @@ uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/b
 
 bridge 是单次进程：stdin 接收 version=1、rules、instruction、skills、task、context、output_contract；stdout 返回 `{"version":1,"result":{...},"runtime":{...}}`。result 是任务对应严格 JSON；runtime 包含 SDK 版本、请求模型、通过公开 post_api_request hook 观察到的响应模型标识 reported_model、API 模式、规则/system/skill SHA-256、来源和工具数。宿主验证规则、skill 指纹及工具数并保存到任务 execution，不能用模型自述代替加载证据。
 
-Hermes 工具、上下文自动发现、原生记忆、soul、trajectory 和后台 review 关闭。三个 canonical 规则及对应 [项目 skill](../../skills/README.md) 明确注入 system message。SDK stdout/stderr 不进入协议或持久化诊断；专用 home 仍有 SDK 自身日志/SQLite，联调后检查认证值是否落盘。工具数必须为零；GitHub/控制面 token 不传入 worker。
+Hermes 通过官方 `PluginContext.register_tool` 加载宿主提供的工具。`plan/review` 获得 `mikasa_list_files`、`mikasa_read_file`、`mikasa_search`；`implement` 另获得 `mikasa_apply_changes`、`mikasa_run_checks`。没有工作区的直接探针与聊天仍无工具。固定上游默认通过 Tool Search 渐进披露插件工具，所以模型可见的是 `tool_search/tool_describe/tool_call`；`runtime.tools` 记录这个入口集合，`granted_tools` 记录实际授权集合，宿主核对两者。
 
-文件应用、验证、修复、提交和发布由宿主负责。默认最多修复 3 轮；超限保留工作区和阻塞状态。模型单轮最大输出 4096 tokens、最多 2 次内部迭代、预算 120 秒；复杂生成可能受到这些边界限制。worker 超时由宿主控制。
+工具经继承的专用 socket FD 请求宿主，串行处理，不能选择其他工作区、任意命令或扩展权限。审查读取固定 PR head 的 Git blob，实现读取当前工作树。文件应用沿用规则、凭据、执行配置和符号链接保护；检查只接受配置中的命令，生产仍需隔离镜像。检查修改 Git 索引、HEAD 或已暂存内容会中止交付。超时/取消会结束模型进程组、取消正在执行的检查并关闭通道。`runtime.tool_events` 由宿主记录工具名称、路径、读取版本/摘要与检查退出码，不采信模型自报。
 
-上下文优先保留规则与变更文件，被截断内容列入 omitted。缺少变更文件会阻止批准；当前没有交互式源码检索，合成小任务成功不证明任意规模仓库均可完成。运行证据中的 requested_model 只是请求值，reported_model 是 SDK 响应标识（没有观察到时为 null），两者均不独立保证供应商实际模型身份。聊天入口可以覆盖单次请求模型，详见 [聊天手册](../../docs/runbooks/CHAT.md)。
+上下文自动发现、原生记忆、soul、trajectory 和后台 review 关闭。三个 canonical 规则及对应 [项目 skill](../../skills/README.md) 明确注入 system message。SDK stdout/stderr 不进入协议或持久化诊断；专用 home 仍有 SDK 自身日志/SQLite，联调后检查认证值是否落盘。GitHub/控制面 token 不传入 worker。
+
+有工作区时，Hermes 最多 20 次内部迭代、64 次宿主工具请求、单次输出 8192 tokens，时间预算遵守 `worker.timeout`。它可在一次会话内探索、应用修改、观察检查失败并修复。工具已应用最终修改时返回 `changes: []`，宿主要求真实变更证据；也支持直接返回 `changes` 的结构化文件交付。宿主最终仍独立执行配置检查，再创建本地提交并停在 `awaiting_review`。会话外失败修复上限仍由 `max_attempts` 控制，默认 3 轮；每轮保存 execution。聊天无工作区，保持 2 次迭代、4096 tokens。
+
+初始上下文优先保留规则与变更文件，被截断内容列入 omitted。Hermes 可主动读取单文件最多 60000 字节的完整文本；列表分页每页 200 项，搜索每次最多扫描 100 个文件/约 1 MB，返回最多 100 个匹配，并报告截断。宿主只接受同一 PR head 的成功完整读取证据来消除未读变更限制；搜索命中不等于完整读取。尚未读到的变更文件仍阻止批准。
+
+真实工具循环证据与复现命令见 [工具覆盖验证](../../docs/HERMES_TOOLS_VALIDATION.md)。小型合成任务成功不证明任意规模仓库都可完成。requested_model 是请求值，reported_model 是 SDK 响应标识（未观察到时为 null），均不能独立保证供应商底层模型身份。聊天切换见 [聊天手册](../../docs/runbooks/CHAT.md)。

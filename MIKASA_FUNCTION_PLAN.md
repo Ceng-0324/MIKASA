@@ -35,7 +35,7 @@ Mikasa 是与人类成员共同开发的仿生程序员，同时负责工程监�
 | 聊天与模型切换 | CLI、网页和鉴权 HTTP 聊天；自然语言选择当前会话模型，CCH 负责上游路由，候选模型真实验证成功后持久化；切换保留上下文，不影响工程任务 |
 | 任务操作 | CLI、鉴权 HTTP API、成员查询与需求提交、负责人分配、拆解结果转实施任务、交付证据跟进 |
 | 仓库审计 | GitHub Issue、PR 和 CI 读取与风险记录；可配置周期审计；不自动重复创建 Issue |
-| 模型执行 | 固定版本 Hermes SDK 的 JSON 桥接、canonical 与按任务路由的 skill 注入、指纹证据、Responses/Chat 协议适配、工具禁用、专用 home、模型环境变量白名单 |
+| 模型执行 | 固定版本 Hermes SDK 的 JSON 桥接、canonical 与按任务路由的 skill 注入、指纹证据、Responses/Chat 协议适配、按任务授予仓库工具与同会话修复循环、宿主调用证据、专用 home、模型环境变量白名单 |
 | 代码实现 | 独立 clone、受限文件变更、配置化验证、默认最多 3 轮修复、本地 commit；生产检查采用无网络容器 |
 | PR 协作 | 当前 head 与目标基线核对、归属记录、自审限制、正式 Review、Issue 与草稿 PR 发布；不自动合并 |
 | 运行支持 | 健康检查、GitHub 签名 webhook 与重放去重、SQLite 备份、systemd 模板、CI 与隔离集成测试 |

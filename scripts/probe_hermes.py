@@ -83,6 +83,78 @@ def lifecycle(config):
             "task_id": task["id"], "state": finished["state"], "error": finished["error"], "result": result}
 
 
+def tool_loop(config):
+    local = fixture_config(config)
+    source = Path(local.repo("local/synthetic-probe")["source"])
+    (source / "README.md").write_text("Implementation lives in calc.py; bounds live in bounds.py.\n")
+    (source / "bounds.py").write_text("LOWER = 0\nUPPER = 10\n")
+    git(["add", "."], source)
+    git(["-c", "user.name=Mikasa probe", "-c", "user.email=probe@example.invalid", "commit", "-m", "multi-file fixture"], source)
+    local.data["worker"]["max_context_bytes"] = 1
+    local.data["worker"]["timeout"] = 360
+    service = Service(local)
+    task = service.submit({"kind": "implement", "repo": "local/synthetic-probe",
+        "title": "修复 clamp，使它使用 bounds.py 中的边界常量并添加回归测试。",
+        "acceptance": "先用工具列出文件，搜索 clamp 并读取相关源码；先运行预配置检查观察原始失败，再应用修复和标准库 unittest 测试，运行检查确认通过。必须使用宿主工具，不在最终 JSON 重复文件内容。"},
+        local.owner, "live-tool-loop")
+    finished = service.run_once()
+    result = finished.get("result") or {}
+    events = result.get("execution", {}).get("tool_events", [])
+    names = {e["tool"] for e in events if e["ok"]}
+    codes = [c["code"] for e in events for c in e.get("checks", [])]
+    checks = {"awaiting_independent_review": finished["state"] == "awaiting_review",
+        "all_five_tools_used": names == {"mikasa_list_files", "mikasa_read_file", "mikasa_search", "mikasa_apply_changes", "mikasa_run_checks"},
+        "observed_red_then_green": any(c != 0 for c in codes) and bool(codes) and codes[-1] == 0,
+        "host_final_checks_pass": bool(result.get("checks")) and all(c["code"] == 0 for c in result["checks"]),
+        "commit_created": bool(result.get("head")) and result.get("head") != result.get("base")}
+    return {"case": "tool-loop", "passed": all(checks.values()), "checks": checks,
+            "task_id": task["id"], "state": finished["state"], "error": finished["error"], "result": result}
+
+
+def readonly_tools(config, kind):
+    local = fixture_config(config)
+    local.data["worker"]["max_context_bytes"] = 1
+    local.data["worker"]["timeout"] = 360
+    source = Path(local.repo("local/synthetic-probe")["source"])
+    base = git(["rev-parse", "HEAD"], source)
+    head = base
+    if kind == "review":
+        (source / "calc.py").write_text("def clamp(value):\n    return min(value, 10)\n")
+        git(["add", "."], source)
+        git(["-c", "user.name=Human fixture", "-c", "user.email=human@example.invalid", "commit", "-m", "partial clamp fix"], source)
+        head = git(["rev-parse", "HEAD"], source)
+        git(["update-ref", "refs/pull/1/head", head], source)
+        git(["update-ref", "refs/heads/main", base], source)
+
+    class SyntheticGitHub:
+        def pr(self, repo, number):
+            return {"title": "Partial clamp fix", "body": "Clamp to [0, 10]", "user": {"login": "human-fixture"},
+                    "base": {"sha": base, "ref": "main"}, "head": {"sha": head}}
+
+        def checks(self, repo, sha):
+            return {"passed": True, "head": sha, "checks": [{"name": "synthetic-positive-only", "conclusion": "success"}]}
+
+    service = Service(local, github=SyntheticGitHub())
+    payload = {"kind": kind, "repo": "local/synthetic-probe",
+               "title": "审查 clamp 的边界错误" if kind == "review" else "拆解 clamp 闭区间 [0,10] 的修复与测试任务",
+               "acceptance": "必须先使用工具列文件、搜索 clamp 并完整读取 calc.py；负数应为0，大于10应为10，区间内值保持。根据实际源码判断，不修改文件。"}
+    if kind == "review":
+        payload["pr"] = 1
+        service.store.provenance(payload["repo"], 1, head, "human", local.owner)
+    service.submit(payload, local.owner, "live-readonly-tools")
+    finished = service.run_once()
+    result = finished.get("result") or {}
+    execution = result.get("execution", {})
+    events = execution.get("tool_events", [])
+    expected = {"mikasa_list_files", "mikasa_read_file", "mikasa_search"}
+    checks = {"completed": finished["state"] == "done", "readonly_grants": set(execution.get("granted_tools", [])) == expected,
+              "all_read_tools_used": {e["tool"] for e in events if e["ok"]} == expected,
+              "pinned_read": any(e.get("path") == "calc.py" and e.get("revision") == head for e in events),
+              "behavior": result.get("verdict") == "CHANGES_REQUESTED" if kind == "review" else bool(result.get("tasks"))}
+    return {"case": "tool-" + kind, "passed": all(checks.values()), "checks": checks,
+            "state": finished["state"], "error": finished["error"], "result": result}
+
+
 def probes():
     return [
         ("persona", "plan", "请在 summary 用中文介绍你的名字、负责人的账号与日常称呼，并说明你自己实现的 PR 应由谁批准、是否会自动合并。tasks 给出一个不涉及外部写入的下一步。",
@@ -127,7 +199,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
     parser.add_argument("--report", required=True)
-    parser.add_argument("--case", action="append", choices=[p[0] for p in probes()] + ["lifecycle"])
+    parser.add_argument("--case", action="append", choices=[p[0] for p in probes()] + ["lifecycle", "tool-loop", "tool-plan", "tool-review"])
     args = parser.parse_args()
     config = Config.load(args.config)
     worker = Worker(config)
@@ -158,10 +230,17 @@ def main():
         with os.fdopen(descriptor, "w") as file:
             json.dump(report, file, ensure_ascii=False, indent=2)
         print(json.dumps({k: v for k, v in item.items() if k not in {"result", "runtime"}}, ensure_ascii=False), flush=True)
-    if not args.case or "lifecycle" in args.case:
-        print("Running live probe: lifecycle", flush=True)
+    for case in ("lifecycle", "tool-loop", "tool-plan", "tool-review"):
+        if args.case and case not in args.case:
+            continue
+        print(f"Running live probe: {case}", flush=True)
         started = time.monotonic()
-        item = lifecycle(config)
+        if case == "lifecycle":
+            item = lifecycle(config)
+        elif case == "tool-loop":
+            item = tool_loop(config)
+        else:
+            item = readonly_tools(config, case.removeprefix("tool-"))
         item["seconds"] = round(time.monotonic() - started, 3)
         report["cases"].append(item)
         descriptor = os.open(report_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

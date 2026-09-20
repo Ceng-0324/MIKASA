@@ -8,10 +8,11 @@ from pathlib import Path
 from .config import KINDS
 from .errors import Conflict, Forbidden, MikasaError
 from .github import GitHub
-from .process import check_command, clean_env, git
+from .process import clean_env, git
 from .store import Store
 from .worker import Worker
 from .workspace import Workspace
+from .agent_tools import run_checks
 
 
 class Service:
@@ -131,7 +132,7 @@ class Service:
             context["provenance"] = self.store.get_provenance(repo, payload["pr"], workspace.head)
             if pr["user"]["login"].lower() == self.config.bot.lower():
                 context["provenance"] = "mikasa"
-        result = self.worker.execute(task, context, cancelled)
+        result = self.worker.execute(task, context, cancelled, workspace=workspace)
         if getattr(self.worker, "last_runtime", None):
             result["execution"] = self.worker.last_runtime
         result.update({"head": workspace.head, "base": workspace.base, "workspace": str(workspace.path), "observed_at": time.time()})
@@ -146,9 +147,13 @@ class Service:
             if context["provenance"] != "human":
                 result["verdict"] = "INCOMPLETE"
                 result["limitations"].append("自作产出仅提供自检；未知产出归属需要负责人确认")
-            if context["omitted"]:
-                result["limitations"].append("仓库上下文省略文件：" + ", ".join(context["omitted"]))
-            if context["omitted_changed"] or not context["ci"]["passed"]:
+            read_paths = {event["path"] for event in result.get("execution", {}).get("tool_events", [])
+                          if event.get("tool") == "mikasa_read_file" and event.get("ok")
+                          and event.get("revision") == workspace.head}
+            unread = set(context["omitted"]) - read_paths
+            if unread:
+                result["limitations"].append("仓库上下文仍省略文件：" + ", ".join(sorted(unread)))
+            if set(context["omitted_changed"]) - read_paths or not context["ci"]["passed"]:
                 if result["verdict"] == "APPROVED":
                     result["verdict"] = "INCOMPLETE"
                 result["limitations"].append("存在未读取的变更文件或 CI 尚未提供通过证据")
@@ -163,21 +168,16 @@ class Service:
         attempts = self.config.data.get("worker", {}).get("max_attempts", 3)
         history = []
         for attempt in range(attempts):
-            workspace.apply(result.pop("changes", None))
+            changes = result.pop("changes", None)
+            if changes != []:
+                workspace.apply(changes, cancelled=cancelled)
+            elif not git(["diff", "--cached", "--stat"], workspace.path):
+                raise MikasaError("执行者未产生实际变更")
             if not checks:
                 result["summary"] += "；未配置验证命令，变更保留为未验证草稿"
                 return result, "blocked"
-            evidence = []
-            index_before = git(["write-tree"], workspace.path)
-            for command in checks:
-                check = check_command(command, self.config.repo(repo), workspace.path,
-                                      self.config.data.get("worker", {}).get("timeout", 600), cancelled)
-                evidence.append({"command": command, **check})
-                if git(["write-tree"], workspace.path) != index_before or git(["rev-parse", "HEAD"], workspace.path) != workspace.base:
-                    raise MikasaError("验证命令修改了 Git 索引或提交；拒绝交付")
-                if check["code"]:
-                    break
-            history.append({"attempt": attempt + 1, "checks": evidence})
+            evidence = run_checks(workspace, cancelled)
+            history.append({"attempt": attempt + 1, "checks": evidence, "execution": result.get("execution")})
             if all(check["code"] == 0 for check in evidence):
                 break
             if attempt + 1 == attempts:
@@ -186,7 +186,7 @@ class Service:
                 return result, "blocked"
             context["repair"] = {"attempt": attempt + 2, "checks": evidence,
                                  "current_diff": git(["diff", "--no-ext-diff", "HEAD", "--"], workspace.path)}
-            updated = self.worker.execute(task, context, cancelled)
+            updated = self.worker.execute(task, context, cancelled, workspace=workspace)
             result.update({"summary": updated["summary"], "changes": updated["changes"]})
             if getattr(self.worker, "last_runtime", None):
                 result["execution"] = self.worker.last_runtime
@@ -195,6 +195,8 @@ class Service:
             raise MikasaError("验证命令修改了已暂存内容；拒绝提交未经验证的版本")
         result["checks"] = evidence
         result["attempts"] = history
+        if cancelled():
+            raise MikasaError("任务已暂停或取消")
         result["head"] = workspace.commit()
         result["branch"] = f"mikasa/task-{task['id']}"
         result["provenance"] = "mikasa"

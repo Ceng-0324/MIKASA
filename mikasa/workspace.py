@@ -70,7 +70,7 @@ class Workspace:
         return {"base": self.base, "head": self.head, "files": files, "omitted": omitted,
                 "omitted_changed": sorted(changed.intersection(omitted)), "baseline_rules": baseline_rules, "diff": diff}
 
-    def apply(self, changes):
+    def apply(self, changes, cancelled=None):
         if not isinstance(changes, list) or not 1 <= len(changes) <= 100:
             raise MikasaError("实现结果需包含 1–100 项 changes")
         seen = set()
@@ -99,6 +99,8 @@ class Workspace:
             if target.exists() and not target.is_file():
                 raise MikasaError("变更目标不是文件")
             validated.append((target, content))
+        if cancelled and cancelled():
+            raise MikasaError("任务已取消或运行已暂停")
         for target, content in validated:
             if content is None:
                 if target.exists():
@@ -106,9 +108,9 @@ class Workspace:
             else:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(content)
-        git(["add", "--all", "--", *sorted(seen)], self.path)
-        git(["diff", "--cached", "--check"], self.path)
-        if not git(["diff", "--cached", "--stat"], self.path):
+        git(["add", "--all", "--", *sorted(seen)], self.path, cancelled=cancelled)
+        git(["diff", "--cached", "--check"], self.path, cancelled=cancelled)
+        if not git(["diff", "--cached", "--stat"], self.path, cancelled=cancelled):
             raise MikasaError("执行者未产生实际变更")
 
     def commit(self):

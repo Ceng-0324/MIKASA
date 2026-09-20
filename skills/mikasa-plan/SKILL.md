@@ -10,3 +10,5 @@ Start from the supplied acceptance criteria, code snapshot and project rules. Ea
 Declare only real blocking edges. `depends_on` contains zero-based indices of earlier tasks, not ticket numbers, strings or guessed external IDs. Tasks without dependencies can start independently. Internal migrations should update affected callers together when that is the smallest complete change; do not introduce compatibility layers solely to force a split.
 
 Return the worker's JSON `output_contract`. Record missing product decisions in `summary`; do not invent an answer. This worker drafts a plan; the host owns confirmation, dispatch and tracker publication. Do not call another skill, create an Issue, or claim a task was assigned.
+
+When workspace tools are available, actively list, search and read relevant files missing from the initial snapshot. These tools are read-only; review reads the pinned PR head, while baseline_rules remain the authority. Report inaccessible or oversized files as limitations.

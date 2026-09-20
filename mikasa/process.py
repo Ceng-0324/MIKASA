@@ -16,7 +16,7 @@ def clean_env(extra=None):
     return env
 
 
-def run(argv, *, cwd, timeout=120, limit=2_000_000, env=None, stdin=None, cancelled=None):
+def run(argv, *, cwd, timeout=120, limit=2_000_000, env=None, stdin=None, cancelled=None, pass_fds=()):
     """No shell, bounded disk-backed output, terminate the whole process group."""
     if not argv:
         raise MikasaError("执行命令尚未配置")
@@ -26,7 +26,7 @@ def run(argv, *, cwd, timeout=120, limit=2_000_000, env=None, stdin=None, cancel
         inp.seek(0)
         try:
             proc = subprocess.Popen(argv, cwd=cwd, env=env or clean_env(), stdin=inp,
-                                    stdout=out, stderr=err, start_new_session=True)
+                                    stdout=out, stderr=err, start_new_session=True, pass_fds=pass_fds)
         except OSError as exc:
             raise MikasaError("无法启动执行程序；检查 command 和安装路径") from exc
         deadline = time.monotonic() + timeout
@@ -59,11 +59,11 @@ def run(argv, *, cwd, timeout=120, limit=2_000_000, env=None, stdin=None, cancel
                 "stderr": err.read(limit).decode("utf-8", "replace")}
 
 
-def git(args, cwd, **kwargs):
-    result = run(["git", "-c", "core.hooksPath=/dev/null", *args], cwd=cwd, **kwargs)
+def git(args, cwd, *, strip=True, **kwargs):
+    result = run(["git", "--literal-pathspecs", "-c", "core.hooksPath=/dev/null", *args], cwd=cwd, **kwargs)
     if result["code"]:
         raise MikasaError("Git 操作失败：" + args[0] + "；检查仓库、ref 和访问权限")
-    return result["stdout"].strip()
+    return result["stdout"].strip() if strip else result["stdout"]
 
 
 def check_command(command, spec, workspace, timeout, cancelled):

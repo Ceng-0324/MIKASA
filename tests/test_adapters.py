@@ -124,6 +124,37 @@ class AIAgent:
         self.assertEqual(envelope["result"]["changes"][0]["content"], "VALUE = 2\n")
         self.assertEqual(output["stderr"], "")
 
+    def test_bridge_registered_tools_reach_host(self):
+        from mikasa.agent_tools import ToolSession
+        from mikasa.workspace import Workspace
+        self.test_bridge_protocol_and_tool_isolation()
+        plugin = self.path / "hermes_cli/plugins.py"
+        plugin.write_text(plugin.read_text() + "\nregistered = {}\ndef register(self, name, toolset, schema, handler):\n    registered[name] = (schema, handler)\n    return True\nPluginContext.register_tool = register\n")
+        (self.path / "model_tools.py").write_text("def get_tool_definitions(**kwargs):\n    from hermes_cli.plugins import registered\n    return [{'function': s} for s, h in registered.values()]\n")
+        (self.path / "run_agent.py").write_text('''import json
+from hermes_cli.plugins import registered
+class AIAgent:
+    def __init__(self, **kwargs):
+        assert kwargs['enabled_toolsets'] == ['mikasa_workspace']
+        self.tools = [{'function': s} for s, h in registered.values()]
+    def run_conversation(self, **kwargs):
+        result = json.loads(registered['mikasa_read_file'][1]({'path': 'app.py'}))
+        assert 'VALUE = 1' in result['content']
+        return {'final_response': json.dumps({'summary': 'read', 'tasks': [{'title':'change','acceptance':'value 2','depends_on':[]}]})}
+''')
+        workspace = Workspace(self.config, self.submit('plan'), 'adapter').prepare()
+        with ToolSession(workspace, 'plan', lambda: False) as session:
+            env = clean_env({"PYTHONPATH": str(self.path), "HERMES_HOME": str(self.path / "hermes"),
+                             "MIKASA_MODEL": "fixture", "MIKASA_MODEL_BASE_URL": "http://localhost:1234/v1",
+                             "MIKASA_MODEL_API_KEY": "fixture-key", "MIKASA_TOOL_FD": str(session.child.fileno())})
+            result = run([sys.executable, str(ROOT / "workers/hermes/bridge.py")], cwd=self.path, env=env,
+                         pass_fds=(session.child.fileno(),), stdin=json.dumps({"version":1, "rules":"rules", "tools":session.schemas}))
+        self.assertEqual(result['code'], 0, result['stderr'])
+        self.assertTrue(session.events[0]['ok'])
+        envelope = json.loads(result['stdout'])
+        self.assertEqual(len(envelope['runtime']['granted_tools']), 3)
+        self.assertEqual(envelope['runtime']['tool_count'], 3)
+
     def test_docker_check_mounts_git_readonly_and_cleans_up(self):
         from mikasa.process import check_command
         with patch("mikasa.process.run", return_value={"code": 0, "stdout": "", "stderr": ""}) as proc:

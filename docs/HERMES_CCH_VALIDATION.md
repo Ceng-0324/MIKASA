@@ -2,6 +2,8 @@
 
 日期：2026-09-20。Mikasa 基线 `3164e4e`，本轮尚未提交的桥接、skill 和探针变更；macOS arm64，Python 3.12.13。以下是实际执行结果，不使用模拟 SDK 或模拟模型。可提交的脱敏证据见 [hermes-cch-evidence.json](hermes-cch-evidence.json)，原始报告位于本机被 Git 忽略的 `runtime/state/hermes-cch/`。
 
+当前工具能力已扩展，最新范围见 [工具覆盖验证](HERMES_TOOLS_VALIDATION.md)。下文保留首次无工具桥接的历史证据。
+
 ## 连接与依赖
 
 - Hermes 0.21.3，官方源码固定为 `f9524d3f119c672e4a4444f56d582e7475716ba3`，独立虚拟环境及专用 home。
@@ -38,7 +40,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor
 python3.12 scripts/probe_hermes.py --config config/local/hermes-cch.json --report runtime/state/hermes-cch/live-probe.json
 ```
 
-默认执行上述五类探针；可重复传入 `--case persona`、`--case plan`、`--case review`、`--case implement` 或 `--case lifecycle`。报告保存在所选 runtime 内，权限 0600。实现探针只在新建合成仓库中运行本机 Python 检查，环境不继承认证；不具备生产容器的操作系统隔离。脚本不使用配置中的真实仓库，也不发布外部内容。首次四类探针的原始结果已保留，代码执行证据随后补入 engineering-probe.json。
+当前脚本默认执行上述五类及三类工具覆盖探针；可重复传入 `--case persona`、`--case plan`、`--case review`、`--case implement` 、`--case lifecycle`、`--case tool-loop`、`--case tool-plan` 或 `--case tool-review`。报告保存在所选 runtime 内，权限 0600。实现探针只在新建合成仓库中运行本机 Python 检查，环境不继承认证；不具备生产容器的操作系统隔离。脚本不使用配置中的真实仓库，也不发布外部内容。首次四类探针的原始结果已保留，代码执行证据随后补入 engineering-probe.json。
 
 ## 保留的验收边界
 
