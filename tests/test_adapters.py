@@ -155,6 +155,38 @@ class AIAgent:
         self.assertEqual(len(envelope['runtime']['granted_tools']), 3)
         self.assertEqual(envelope['runtime']['tool_count'], 3)
 
+    def test_bridge_failure_hook_and_recovery_discard_private_details(self):
+        from mikasa.worker import Worker
+        from mikasa.model_errors import ModelFailure
+        self.test_bridge_protocol_and_tool_isolation()
+        settings = self.config.data["worker"]
+        settings.update({"command": [sys.executable, str(ROOT / "workers/hermes/bridge.py")],
+                         "hermes_source": str(self.path), "home": str(self.path / "hermes"),
+                         "env_allowlist": ["MIKASA_MODEL", "MIKASA_MODEL_BASE_URL", "MIKASA_MODEL_API_KEY"]})
+        env = {"MIKASA_MODEL": "fixture", "MIKASA_MODEL_BASE_URL": "https://example.invalid/v1", "MIKASA_MODEL_API_KEY": "fixture-key"}
+        for status, reason, expected in [(401, "auth", "auth"), (403, "auth", "access_denied"),
+                                         (403, "upstream_blocked", "upstream_blocked"), (429, "rate_limit", "rate_limit"),
+                                         (503, "overloaded", "unavailable"), (None, "timeout", "timeout")]:
+            source = f'''import json
+class AIAgent:
+    def __init__(self, **kwargs): self.tools = []
+    def run_conversation(self, **kwargs):
+        from hermes_cli.plugins import hooks
+        hooks['api_request_error'](status_code={status!r}, reason={reason!r}, error={{'message':'fixture-key'}}, request={{'Authorization':'fixture-key'}})
+        return {{'failed':True, 'error':'fixture-key'}}
+'''
+            (self.path / "run_agent.py").write_text(source)
+            with patch.dict(os.environ, env), self.assertRaises(ModelFailure) as caught:
+                Worker(self.config).execute({"payload": {"kind": "chat"}}, {}, lambda: False)
+            self.assertEqual(caught.exception.code, expected)
+            self.assertNotIn("fixture-key", str(caught.exception))
+        # Recovery clears the previous API failure; invalid output then has its own cause.
+        (self.path / "run_agent.py").write_text(source.replace("return {'failed':True, 'error':'fixture-key'}",
+            "hooks['post_api_request'](response_model='fixture')\n        return {'final_response':'not json fixture-key'}"))
+        with patch.dict(os.environ, env), self.assertRaises(ModelFailure) as caught:
+            Worker(self.config).execute({"payload": {"kind": "chat"}}, {}, lambda: False)
+        self.assertEqual(caught.exception.code, "invalid_response")
+
     def test_docker_check_mounts_git_readonly_and_cleans_up(self):
         from mikasa.process import check_command
         with patch("mikasa.process.run", return_value={"code": 0, "stdout": "", "stderr": ""}) as proc:

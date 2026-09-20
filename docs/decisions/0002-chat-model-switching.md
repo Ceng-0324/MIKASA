@@ -36,3 +36,5 @@
 提供标准库 CLI 聊天、`/chat` 网页和鉴权 HTTP API，见 [聊天用法](../runbooks/CHAT.md)。网页将回复作为纯文本渲染，令牌不写 localStorage；任何会话读取与写入都核对账号归属。
 
 真实 HTTP → Chat → Hermes → CCH 验收见 [聊天切换验证](../CHAT_VALIDATION.md)。单元测试覆盖失败保留、跨账号拒绝、会话隔离、重放、并发锁、暂停、上下文截断和真实 worker 参数传递。CCH 后台供应商配置及管理端写入没有执行。
+
+后续收口增加统一配置校验、显式连接探针和安全故障反馈，见 [CCH 诊断](../runbooks/CCH.md)。固定 Hermes 的 [api_request_hooks.py](https://github.com/NousResearch/hermes-agent/blob/f9524d3f119c672e4a4444f56d582e7475716ba3/agent/api_request_hooks.py) 公开 `api_request_error`，携带分类 reason/status；bridge 只取结构化分类并映射固定词表，丢弃 message/request。恢复成功时清除此前错误，避免误报。`default` 分组仍需网关侧 Key 配置与路由证据，本地探针通过不把它自动标记为已切换。

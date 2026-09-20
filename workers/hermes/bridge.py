@@ -13,11 +13,16 @@ import socket
 import threading
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from mikasa.model_errors import ModelFailure, classify_failure
+from mikasa.model_settings import validate_environment
+
 
 def main():
     request = json.loads(sys.stdin.read(2_000_001))
     if request.get("version") != 1:
         raise ValueError("unsupported worker protocol")
+    validate_environment(os.environ, required=True)
     for key in ("HERMES_HOME", "MIKASA_MODEL", "MIKASA_MODEL_BASE_URL", "MIKASA_MODEL_API_KEY"):
         if not os.environ.get(key):
             raise ValueError(f"missing {key}")
@@ -50,15 +55,21 @@ def main():
         from hermes_cli.plugins import PluginContext, PluginManifest, get_plugin_manager
 
         observed_models = []
+        failures = []
 
         def observe_response(**fields):
+            failures.clear()  # A recovered API error is not the final failure.
             model = fields.get("response_model")
             if isinstance(model, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/@+-]{0,199}", model):
                 observed_models.append(model)
 
+        def observe_error(**fields):
+            failures[:] = [classify_failure(fields)]
+
         # Public lifecycle registration, scoped to this one-shot worker process.
         observer = PluginContext(PluginManifest(name="mikasa-runtime"), get_plugin_manager())
         observer.register_hook("post_api_request", observe_response)
+        observer.register_hook("api_request_error", observe_error)
 
         definitions = request.get("tools", [])
         channel = None
@@ -104,13 +115,19 @@ def main():
         if granted_names != sorted(t["name"] for t in definitions) or tool_names not in (
                 granted_names, ["tool_call", "tool_describe", "tool_search"] if definitions else []):
             raise RuntimeError("Hermes tool grant mismatch")
-        result = agent.run_conversation(
-            user_message=json.dumps({k: v for k, v in request.items() if k not in {"rules", "skills", "instruction"}}, ensure_ascii=False),
-            system_message=system_message,
-        )
+        try:
+            result = agent.run_conversation(
+                user_message=json.dumps({k: v for k, v in request.items() if k not in {"rules", "skills", "instruction"}}, ensure_ascii=False),
+                system_message=system_message,
+            )
+        except Exception:
+            raise ModelFailure(failures[-1] if failures else "execution_failed") from None
         if result.get("failed") or result.get("interrupted"):
-            raise RuntimeError("Hermes conversation did not complete")
-        output = json.loads(result["final_response"])
+            raise ModelFailure(failures[-1] if failures else "execution_failed")
+        try:
+            output = json.loads(result["final_response"])
+        except (ValueError, TypeError, KeyError):
+            raise ModelFailure(failures[-1] if failures else "invalid_response") from None
     try:
         version = importlib.metadata.version("hermes-agent")
     except importlib.metadata.PackageNotFoundError:
@@ -129,5 +146,6 @@ if __name__ == "__main__":
         main()
     except Exception as exc:
         # SDK exceptions may embed authorization headers or endpoint credentials.
-        print(f"Hermes bridge failed: {type(exc).__name__}", file=sys.stderr)
+        code = exc.code if isinstance(exc, ModelFailure) else "execution_failed"
+        print(json.dumps({"version": 1, "error": {"code": code}}))
         raise SystemExit(1)

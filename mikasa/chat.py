@@ -8,6 +8,7 @@ from contextlib import contextmanager
 
 from .errors import Conflict, MikasaError, NotFound
 from .model_settings import default_model, validate_model
+from .model_errors import ModelFailure
 from .store import Store
 from .worker import Worker
 
@@ -109,9 +110,12 @@ class Chat:
                         _, execution = self.infer(target, "请简短回复：模型连接验证完成。", [])
                         if self.store.paused():
                             raise MikasaError("验证期间运行已暂停")
-                    except MikasaError:
+                    except MikasaError as exc:
                         kind = "switch_failed"
                         reply = f"未能验证 {target}，当前会话仍使用 {model}。请检查模型 ID、CCH 权限和路由后重试。"
+                        if isinstance(exc, ModelFailure):
+                            reply = f"未能验证 {target}，当前会话仍使用 {model}。{exc}。"
+                            execution = {"error_code": exc.code}
                     else:
                         model, changed = target, True
                         reply = f"当前聊天的请求模型已切换为 {model}，后续消息使用此模型；聊天记录已保留。"

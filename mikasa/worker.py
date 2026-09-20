@@ -8,6 +8,7 @@ from .process import clean_env, git, run
 from .model_settings import model_environment
 from .skills import digest, load_skills
 from .model_settings import validate_model
+from .model_errors import ModelFailure
 
 
 OUTPUT_CONTRACT = {
@@ -41,9 +42,10 @@ class Worker:
         emit({"phase": "worker", "status": "started"})
         try:
             result = self._execute(task, context, cancelled, model=model, workspace=workspace, progress=emit)
-        except Exception:
-            # Transport exceptions and model output can contain secrets. Persist only the phase.
-            emit({"phase": "worker", "status": "failed"})
+        except Exception as exc:
+            # Persist only the phase and our closed error code, never SDK text.
+            emit({"phase": "worker", "status": "failed",
+                  **({"error_code": exc.code} if isinstance(exc, ModelFailure) else {})})
             raise
         emit({"phase": "worker", "status": "completed"})
         return result
@@ -79,7 +81,12 @@ class Worker:
             raise MikasaError(session.fatal)
         if result["code"]:
             # stderr may contain provider secrets; never persist raw model transport failures.
-            raise MikasaError("模型执行器失败；检查隔离环境、模型配置与提供商状态")
+            try:
+                failure = json.loads(result["stdout"])
+                code = failure["error"]["code"] if failure["version"] == 1 else None
+            except (ValueError, TypeError, KeyError):
+                code = None
+            raise ModelFailure(code)
         try:
             envelope = json.loads(result["stdout"])
         except ValueError as exc:

@@ -79,6 +79,17 @@ class ChatTests(BaseTest):
         with self.chat.store.connect() as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM events WHERE kind='chat_model_switched'").fetchone()[0], 1)
 
+    def test_structured_switch_failure_is_actionable_and_keeps_state(self):
+        from mikasa.model_errors import ModelFailure
+        with patch.object(self.chat, "infer", side_effect=ModelFailure("upstream_blocked")) as infer:
+            result = self.send("切换为 model-b", "failure")
+            self.assertEqual(self.send("切换为 model-b", "failure"), result)
+            self.assertEqual(infer.call_count, 1)
+        self.assertEqual(result["execution"], {"error_code": "upstream_blocked"})
+        self.assertIn("WAF", result["reply"])
+        self.assertEqual(result["model"], "model-a")
+        self.assertEqual(result["revision"], 0)
+
     def test_other_actor_cannot_read_or_change_session(self):
         with self.assertRaises(NotFound):
             self.chat.send(self.session["id"], "human", "切换为 model-b", "foreign")

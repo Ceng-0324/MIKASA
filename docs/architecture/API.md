@@ -2,6 +2,8 @@
 
 CLI：`python3.12 -m mikasa --config <配置路径> <命令>`。本地 CLI 仅供受信任的操作系统账号使用，按负责人权限执行；不能将 shell 账号交给普通成员来实现多用户鉴权。
 
+`doctor` 包含脱敏的本地模型配置状态，默认不联网。显式 `doctor --probe-model` 发起一次模型验证，失败退出码为 1；不建立聊天或工程任务。诊断字段与限制见 [CCH 手册](../runbooks/CCH.md)。
+
 HTTP 默认监听 `127.0.0.1:8765`。除健康检查、无数据的 `/chat` 静态页面和单独验签的 GitHub webhook 外，均需要 `Authorization: Bearer <token>`。token 通过配置中的账号到环境变量名映射识别，不采信 body 中的自称身份。
 
 | 方法和路径 | 行为 | 权限 |
@@ -52,3 +54,5 @@ POST 请求体最多 1 MB，必须使用 Content-Length；错误分别返回 400
 执行时无需等待最终结果即可读取 `GET /tasks/{id}/events` 或 CLI `events TASK_ID`。`kind=execution` 的 `data` 包含 `phase`（workspace/worker/tool/validation/commit）、`status`（started/completed，worker 还可能 failed）。worker 与其工具事件共享 `invocation`，工具另有 `call` 序号；completed 表示该调用已返回，是否成功看 `ok` 或检查退出码，不代表任务已交付。
 
 宿主记录工具名称、已验证路径、读取版本/摘要/覆盖范围和检查退出码，不写入模型推理、原始工具参数、源码正文或 SDK 错误文本。开始事件先于工具副作用落库；完成事件在返回模型前落库。进程被突然终止时可能只有 started，不能推断副作用未发生，必须核对保留工作区。取消或重试会失效运行令牌，禁止旧执行者追加记录；历史事件继续保留。该机制提供追踪，不实现会话自动续跑。
+
+可识别的模型故障在 `worker/failed` 事件附加固定词表 `error_code`。聊天切换失败时 `execution` 可仅含 `error_code`，不能当作成功的模型运行证据；原模型和 revision 保持不变。

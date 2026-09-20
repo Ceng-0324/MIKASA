@@ -32,6 +32,8 @@ python3.12 -m mikasa doctor
 
 ## 启动和任务流程
 
+上线前使用 `doctor --probe-model` 检查实际 worker → 模型端点调用；普通 `doctor` 不联网。配置、故障分类和 `default` 分组的证据边界见 [CCH 诊断](CCH.md)。
+
 为配置中的每个 HTTP 账号准备不同的至少 32 字符 token。需要 GitHub 功能时设置 `MIKASA_GITHUB_TOKEN`，需要 webhook 时设置 `MIKASA_GITHUB_WEBHOOK_SECRET`。不要将真实值写入版本库、shell 命令示例或聊天。
 
 分别启动两个进程：

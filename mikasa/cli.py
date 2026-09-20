@@ -17,7 +17,8 @@ def parser():
     p = argparse.ArgumentParser(description="Mikasa 工程协作运行时；本地 CLI 使用受信任的操作系统账号")
     p.add_argument("--config", default="config/examples/mikasa.json")
     commands = p.add_subparsers(dest="command", required=True)
-    commands.add_parser("doctor")
+    diagnostic = commands.add_parser("doctor")
+    diagnostic.add_argument("--probe-model", action="store_true", help="经当前 worker 发起一次真实模型调用；会消耗模型额度")
     commands.add_parser("serve")
     chat = commands.add_parser("chat", help="与 Mikasa 聊天，支持：切换为 完整模型ID")
     chat.add_argument("--session", help="继续已有聊天 ID")
@@ -65,15 +66,35 @@ def parser():
     return p
 
 
-def doctor(config):
+def doctor(config, *, probe_model=False):
     from .skills import skill_inventory
+    from .model_settings import model_diagnostics
+    from .model_errors import ModelFailure
+    from .worker import Worker
     command = config.data.get("worker", {}).get("command", [])
+    model = model_diagnostics(config.data.get("worker", {}))
+    if probe_model and model["configuration"] == "valid":
+        worker = Worker(config)
+        try:
+            worker.execute({"payload": {"kind": "chat", "title": "请简短回复：模型连接验证完成。"}}, {},
+                           lambda: False, model=model["requested_model"])
+        except MikasaError as exc:
+            model.update({"connection": "failed", "error": str(exc)})
+            if isinstance(exc, ModelFailure):
+                model["error_code"] = exc.code
+        else:
+            runtime = worker.last_runtime or {}
+            reported = runtime.get("reported_model")
+            model.update({"connection": "passed", "backend": runtime.get("backend"),
+                          "reported_model": reported,
+                          "model_match": "unreported" if not reported else "same" if reported == model["requested_model"] else "different",
+                          "identity_note": "响应标识不能独立证明底层模型身份"})
     return {"python": sys.version.split()[0], "git": bool(shutil.which("git")),
             "rules": "loaded", "skills": skill_inventory(config.root), "repositories": list(config.data.get("repositories", {})),
             "worker_configured": bool(command), "worker_executable": bool(command and shutil.which(command[0])),
             "github_token_present": bool(os.environ.get(config.data.get("github", {}).get("token_env", "MIKASA_GITHUB_TOKEN"))),
-            "publishing_enabled": config.data.get("github", {}).get("publish_enabled", False),
-            "note": "仅检查本地前提，不代表模型、GitHub 权限或 VM 已完成联调"}
+            "publishing_enabled": config.data.get("github", {}).get("publish_enabled", False), "model": model,
+            "note": "默认仅检查本地前提；模型探针不证明 CCH 分组、GitHub 权限或 VM 已完成联调"}
 
 
 def main(argv=None):
@@ -81,7 +102,9 @@ def main(argv=None):
     try:
         config = Config.load(args.config)
         if args.command == "doctor":
-            value = doctor(config)
+            value = doctor(config, probe_model=args.probe_model)
+            print(json.dumps(value, ensure_ascii=False, indent=2))
+            return int(args.probe_model and value["model"]["connection"] != "passed")
         else:
             service = Service(config)
             actor = config.owner
