@@ -42,6 +42,8 @@ HTTP/`--message` 的兼容对象是已存在的 JSON 客户端和幂等回执，
 
 ## 验证与剩余范围
 
+2026-09-21 后续更新：工程持续会话与账号长期记忆继承已实现，见 [0008](0008-engineering-state.md)。下文保留本决定阶段的验证与当时剩余范围。
+
 本阶段全量 `python3.12 -m unittest discover -v` 共 130 项通过，包含原生入口委托、profile 互斥、偏好保留、坏配置保护、路由删除与 SIGTERM 子进程清理。`scripts/check_docs.py`、`git diff --check` 通过；默认 doctor 正确报告示例配置未启用模型，本机 CCH 配置 doctor 报告 configuration=valid、connection=not_checked、provider_group=unverified。
 
 固定 SDK 的 `scripts/probe_native_cli.py` 使用一次性 profile、本地模型目录和合成 Key，验证原生 /model 的两种协议与凭据选择、上下文保留、非法参数保持原路由、/new、/resume、persona、全局默认值重载、正式入口启动和 EOF 退出，扫描 profile 中无合成模型 Key；单独记录 `/new` 自定义 provider 的上游回退行为，不把它当作默认值重置成功。它不读取真实 CCH 认证，不调用真实模型。

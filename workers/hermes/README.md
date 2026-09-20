@@ -52,7 +52,7 @@ bridge 是单次进程：stdin 接收 version=1、rules、instruction、skills�
 
 工程工作区使用 Hermes 原生 `read_file/search_files/write_file/patch/terminal`、MEMORY/USER、SOUL 和 skills.auto_load。bridge 只适配结构化任务交付、模型来源、工具授权与宿主证据；推理和工具循环由官方 AIAgent harness 执行，上游源码不修改。聊天另由原生 Gateway 持久化会话，工程调用不重建聊天上下文。
 
-Mikasa 将当前暂存树（实现/修复）或固定 PR head（计划/审查）的普通 UTF-8 文件导出到隔离快照；不导出凭据、链接、二进制、`.git`、`.hermes` 等执行配置。单文件最多 1 MB，总计最多 5000 文件/50 MB。省略项明确保留为未覆盖范围。原生终端使用 Docker，无网络、只读根目录、资源限制，只挂载快照及 Hermes 受信任 skills；模型认证保留在宿主 SDK。只读任务的快照挂载为 ro，不授权 write_file/patch。
+Mikasa 将当前暂存树（实现/修复）或固定 PR head（计划/审查）的普通 UTF-8 文件导出到隔离快照；不导出凭据、链接、二进制、`.git`、`.hermes` 等执行配置。单文件最多 1 MB，总计最多 5000 文件/50 MB。省略项明确保留为未覆盖范围。原生终端使用 Docker，无网络、只读根目录、资源限制，挂载快照、受信任 skills 及 Hermes 原生的任务附件/缓存目录；不挂载账号记忆、SessionDB 或 profile 配置，模型认证保留在宿主 SDK。只读任务的快照挂载为 ro，不授权 write_file/patch。
 
 默认工程镜像固定为 Python 3.12 slim 的 digest，见 [snapshot 配置](../../mikasa/sandbox.py)。需预先启动 Docker 并拉取镜像；其他语言可在仓库配置 `agent_image`，镜像应预装依赖。它与 `check_image` 分开：前者用于原生探索，后者执行独立验收。离线容器内不能临时联网安装包。
 
@@ -60,7 +60,9 @@ Mikasa 将当前暂存树（实现/修复）或固定 PR head（计划/审查）
 
 原生 `post_tool_call` hook 经专用 FD 将实际工具结果交给宿主。宿主把 read_file 的带行号内容逐行对照固定快照，累积相同 PR head 的完整覆盖证据；仅读尾页、搜索命中或模型宣称读过不能消除审查限制。SQLite 持久化元数据，不保存读取正文、shell 命令或认证值。真实输出协议的失败诊断只记录异常类型和栈位置，不复制 SDK 错误正文。
 
-工程 profile 位于 `runtime/engineering/<task-id>`，原生记忆与 SessionDB 按任务隔离，修复轮沿用任务记忆；不会污染日常聊天账号记忆。SOUL 和任务对应 skills 由 canonical 与受信任 manifest 生成，pre_api_request 验证实际请求内的完整身份、规则与 skill 正文。只准加载本任务的可信 skills，不开放 skill_manage、委派、浏览器、外部消息或发布工具。每次至多 24 次原生迭代、128 个工具证据事件；时间仍由 worker.timeout 限制。
+工程 profile 位于 `runtime/engineering/<task-id>`，SessionDB 按任务隔离；每轮从稳定根会话恢复原生工具历史及压缩后续。memories 目录直接链接提交账号的原生 MEMORY/USER，由 Hermes 负责锁、原子写入与加载；不复制聊天正文。任务 profile 绑定可信 actor、task-id 和 repo，同任务进程互斥。旧任务记忆留在 `memories.legacy`，旧随机会话仍保留在原 SessionDB，均不自动合并。SOUL 和任务对应 skills 由 canonical 与受信任 manifest 生成，pre_api_request 验证实际请求内的完整身份、规则与 skill 正文。只准加载本任务的可信 skills，不开放 skill_manage、委派、浏览器、外部消息或发布工具。每次至多 24 次原生迭代、128 个工具证据事件；时间仍由 worker.timeout 限制。
+
+持久根会话为 `mikasa-task-<task-id>`；每轮随机 `run_id` 单独传给原生工具作为 task_id，容器按该 ID 标记、验收及清理。Python 启动路径保留虚拟环境符号链接，避免切换到缺少 SDK 的基础解释器。续话、记忆、真实 Docker 与固定 SDK 验证见 [0008](../../docs/decisions/0008-engineering-state.md)。
 
 工程返回严格 JSON，原生实现必须通过工具修改快照并返回 `changes: []`。宿主暂保留任务、固定 revision、检查和发布适配；审查分工由 Agent 依据规则与记忆判断，不再由宿主归属分类或指定审批人引擎执行。没有工作区的诊断调用仍为无工具结构化请求，不代表工程执行。
 
@@ -92,4 +94,4 @@ uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/b
 
 `worker.native_python` 可指定 CLI/Gateway 解释器，默认 runtime/cache/hermes-venv/bin/python；`worker.hermes_source` 指向固定源码。配置沿用现有 model_source/model_routes，所有已配置来源须可读取。生成的 Hermes providers 只包含 Key 环境变量名，无实际 Key。`profile_config.py` 在该解释器中解析 YAML/JSON，刷新集成配置并保留 Hermes 原生偏好；格式错误不覆盖文件。当前模型工具只启用 memory 与 skills，plugin 拒绝未授予的工具；本地 CLI 系统命令仍采用原生行为，这不是操作系统沙箱。
 
-`bridge.py` 保留工程结构化协议、原生 harness 配置和交付证据适配；文件、搜索、修改与 shell 已使用官方原生工具。审批引擎已移除，工程 profile 与账号长期记忆的继承仍待迁移。
+`bridge.py` 保留工程结构化协议、原生 harness 配置和交付证据适配；文件、搜索、修改、shell、任务续话与账号长期记忆已使用官方原生能力。审批引擎已移除；外层修复流程和任务队列仍待收窄迁移。

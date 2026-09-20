@@ -32,6 +32,8 @@ HTTP 默认监听 `127.0.0.1:8765`。除健康检查和单独验签的 GitHub we
 
 模型任务结果可包含 `execution`，记录可信 worker 提供的 SDK 版本、请求模型、API 模式、规则和 skill SHA-256 及工具数；这是宿主注入证据，不是模型自述；Hermes 的 post_api_request hook 另提供 reported_model，表示 SDK 观察到的响应标识，仍不独立证明供应商实际模型身份。聊天接口语义和失败处理见 [聊天手册](../runbooks/CHAT.md)。
 
+内置 Hermes 工程执行另返回 `session_owner=hermes`、`root_session_id`、`session_id`（可能为压缩后的后续会话）、`history_messages` 和 `memory_owner`。根会话固定为 `mikasa-task-<task-id>`，记忆归属取自可信任务提交账号，不能由任务 body 指定。重试与修复读取原生 SessionDB，不从任务事件重拼历史；失败不会回滚已经落盘的会话或记忆。旧随机工程会话保留为档案，不自动接入新根会话。详见 [0008](../decisions/0008-engineering-state.md)。
+
 任务示例：
 
 ```json

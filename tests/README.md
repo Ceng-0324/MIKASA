@@ -9,3 +9,5 @@
 命令/会话测试覆盖 `/new` 原子创建与重放、暂停回滚、跨账号隔离、控制回执不进入模型历史、命令进程不读或继承凭据。普通 Chat 测试使用明确的命令回执夹具；真实 Hermes 参数语义由 `scripts/probe_commands.py` 单独验收，不用夹具替代官方兼容证据。
 
 以上 Chat 回执测试对应暂留的 HTTP/`--message` API。终端入口另验证直接启动原生 CLI、不创建业务服务、TTY 与凭据隔离、profile 互斥、SIGTERM 清理、配置偏好保留与坏文件保护。`scripts/probe_native_cli.py` 通过真实固定 SDK 和本地模型目录验证原生命令、跨协议解析及会话恢复，不消耗模型额度，不代替真实 CCH 可用性验收。
+
+工程 profile 测试覆盖账号绑定、共享原生记忆但隔离会话、旧数据留档、同任务互斥与异常释放、链接及路径越界拒绝。`scripts/probe_engineering_state.py` 独立验证固定 SDK 与真实 Docker 的续话、压缩链和跨进程记忆，不以模拟 SDK 替代依赖兼容证据，详见 [0008](../docs/decisions/0008-engineering-state.md)。

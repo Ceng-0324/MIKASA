@@ -40,6 +40,11 @@ def provider_id(source):
     return "cch-" + hashlib.sha256(json.dumps(source, sort_keys=True).encode()).hexdigest()[:16]
 
 
+def profile_home(config, actor):
+    config.authorize(actor)
+    return config.runtime / "native" / hashlib.sha256(actor.encode()).hexdigest()[:24]
+
+
 def verify_source(source):
     if (source / ".git").exists():
         revision = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"],
@@ -59,8 +64,7 @@ def verify_source(source):
 
 def prepare_profile(config, actor):
     """Regenerate immutable inputs only. Never overwrite native memories or sessions."""
-    config.authorize(actor)
-    home = config.runtime / "native" / hashlib.sha256(actor.encode()).hexdigest()[:24]
+    home = profile_home(config, actor)
     home.mkdir(parents=True, exist_ok=True, mode=0o700)
     settings = config.data.get("worker", {})
     source = (config.root / settings.get("hermes_source", "runtime/cache/hermes-source")).resolve()
@@ -128,7 +132,7 @@ def prepare_profile(config, actor):
 def interactive(config, session=None):
     """TTY is owned by Hermes. No Mikasa command parser or conversation loop."""
     actor = config.owner
-    home = config.runtime / "native" / hashlib.sha256(actor.encode()).hexdigest()[:24]
+    home = profile_home(config, actor)
     home.mkdir(parents=True, exist_ok=True, mode=0o700)
     with (home / "mikasa.lock").open("a") as lock:
         try:
@@ -182,7 +186,7 @@ class NativeGateway:
         self.config, self.actor = config, actor
         self.process = None
         self._lock = None
-        self.home = config.runtime / "native" / hashlib.sha256(actor.encode()).hexdigest()[:24]
+        self.home = profile_home(config, actor)
         self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
         self._lock = (self.home / "mikasa.lock").open("a")
         try:

@@ -15,3 +15,5 @@
 `probe_native_sandbox.py --report runtime/state/hermes-cch/native-sandbox-proof.json` 使用真实 Docker 验证原生文件/终端与网络、密钥、资源和清理边界。`probe_hermes.py` 的 lifecycle、tool-loop、tool-plan、tool-review、paged-context 现使用原生工程路径，不再验证旧自研工具。
 
 `probe_native_engineering_offline.py --report runtime/state/hermes-cch/native-engineering-offline-proof.json` 不调用模型，验证原生只读文件/shell、真实读取证据和杀死 SDK 进程后的容器回收。工程联调的宿主独立检查也使用真实 Docker check_image。
+
+`python3.12 scripts/probe_engineering_state.py` 使用固定 SDK、真实 Docker、临时仓库和本地 HTTP 模型夹具，验证 Worker→bridge→AIAgent 的续话、工具历史去重、失败后恢复、压缩后续、账号记忆双向可见、并发原生记忆写入、身份/skills 注入及容器 ID/清理。需要本机固定 SDK 环境和已缓存工程镜像，不读取真实模型认证、不调用 CCH，也不证明真实模型一定遵循记忆约定。

@@ -1,6 +1,6 @@
 # 原生 Hermes 迁移验收
 
-> 下文为此前原生迁移的验证记录。后续协作治理收窄与规则更新见 [0006](decisions/0006-hermes-native-mikasa.md)；旧审批门禁证据不代表当前实现。
+> 下文为此前原生迁移的验证记录。后续协作治理收窄与规则更新见 [0006](decisions/0006-hermes-native-mikasa.md)，工程续话与账号记忆共享见 [0008](decisions/0008-engineering-state.md)；旧审批门禁和按任务隔离长期记忆的描述不代表当前实现。
 
 2026-09-20，固定 Hermes `f9524d3f119c672e4a4444f56d582e7475716ba3`。不修改上游源码。
 

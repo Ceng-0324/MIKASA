@@ -136,6 +136,10 @@ def main():
                                '不要使用旧 mikasa_apply_changes。修改后用 mikasa_run_checks 获取宿主验收结果，最终 changes=[]。'
                                '仓库快照没有 .git 或凭据，不执行发布。只读任务不能修改快照。'
                                '读取分页使用原生 offset/limit；省略文件仍属于未覆盖范围。')
+            system_message += ('\n长期 MEMORY/USER 与任务提交账号共用，由原生 memory 保存经确认的稳定协作约定；'
+                               '临时任务事实、检查结果和修复安排留在本任务会话，不默认写入长期记忆。'
+                               '恢复的历史可能对应旧工作区，当前 context 与工具读取才是本轮仓库事实。'
+                               '当前已鉴权任务提交账号：' + native['memory_owner'])
 
             def guard(tool_name, args=None, **kwargs):
                 args = args or {}
@@ -165,9 +169,11 @@ def main():
             observer.register_hook('pre_api_request', injection)
         budget = request.get("agent_budget", {})
         native_options = {}
+        restored_history = []
         if native:
-            from hermes_state import SessionDB
-            native_options = {'session_id': native['session_id'], 'session_db': SessionDB()}
+            from task_session import open_session
+            session_db, session_id, restored_history = open_session(native['session_id'])
+            native_options = {'session_id': session_id, 'session_db': session_db}
         agent = AIAgent(
             model=os.environ["MIKASA_MODEL"], base_url=os.environ["MIKASA_MODEL_BASE_URL"],
             api_key=os.environ["MIKASA_MODEL_API_KEY"], provider="custom", api_mode=mode,
@@ -191,12 +197,13 @@ def main():
             raise RuntimeError("Hermes tool grant mismatch")
         try:
             context = dict(request.get("context", {}))
-            history = context.pop("history", []) if request.get("task", {}).get("kind") == "chat" else []
-            if not isinstance(history, list) or any(
+            history = restored_history if native else context.pop("history", []) if request.get("task", {}).get("kind") == "chat" else []
+            if not native and (not isinstance(history, list) or any(
                     not isinstance(item, dict) or set(item) != {"role", "content"}
                     or item["role"] not in {"user", "assistant"} or not isinstance(item["content"], str)
-                    for item in history):
+                    for item in history)):
                 raise ValueError("invalid conversation history")
+            history_messages = len(history)
             payload = {k: v for k, v in request.items() if k not in {"rules", "skills", "instruction", "context"}}
             payload["context"] = context
             result = agent.run_conversation(
@@ -204,6 +211,7 @@ def main():
                     payload, ensure_ascii=False),
                 system_message=system_message,
                 conversation_history=history,
+                **({'task_id': native['run_id']} if native else {}),
             )
         except Exception:
             raise ModelFailure(failures[-1] if failures else "execution_failed") from None
@@ -213,6 +221,8 @@ def main():
                 from tools.environments.docker import DockerEnvironment
                 cleanup_all_environments()
                 DockerEnvironment.wait_for_all_teardowns(timeout=15.0)
+                agent.close()
+                session_db.close()
         if native and (not native_evidence or not all(native_evidence)):
             raise RuntimeError('native injection or evidence channel failed')
         if result.get("failed") or result.get("interrupted"):
@@ -228,7 +238,9 @@ def main():
     runtime = {"backend": "hermes", "version": version, "requested_model": os.environ["MIKASA_MODEL"],
                "api_mode": mode, "tool_count": len(agent.tools or []), "tools": tool_names, "granted_tools": granted_names,
                "reported_model": observed_models[-1] if observed_models else None,
-               "history_messages": len(history), "session_owner": "hermes" if native else "mikasa",
+               "history_messages": history_messages, "session_owner": "hermes" if native else "mikasa",
+               **({'root_session_id': native['session_id'], 'session_id': agent.session_id,
+                   'memory_owner': native['memory_owner']} if native else {}),
                "native_tools": bool(native), "native_injection": bool(native) and all(native_evidence),
                "rules_sha256": hashlib.sha256(request["rules"].encode()).hexdigest(),
                "system_sha256": hashlib.sha256(system_message.encode()).hexdigest(),

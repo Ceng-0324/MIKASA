@@ -1,11 +1,13 @@
 import json
 import os
 import uuid
+from contextlib import ExitStack
 
 from .errors import MikasaError
 from .agent_tools import ToolSession
 from .native_tools import NativeToolSession
-from .native import private_write, verify_source
+from .native import verify_source
+from .engineering import engineering_profile
 from .sandbox import IMAGE
 from .process import clean_env, git, run
 from .model_settings import model_environment
@@ -109,31 +111,26 @@ class Worker:
             # Native runs use an isolated cwd; keep configured relative program
             # paths anchored to the project root, as in the public v1 contract.
             if '/' in command[0]:
-                command[0] = str((self.config.root / command[0]).resolve())
+                # Keep a virtualenv's executable path: resolving its symlink
+                # would silently run the base interpreter without SDK packages.
+                command[0] = str((self.config.root / command[0]).absolute())
             for index, argument in enumerate(command[1:], 1):
                 if (self.config.root / argument).resolve() == self.config.root / 'workers/hermes/bridge.py':
                     command[index] = str(self.config.root / 'workers/hermes/bridge.py')
         session_type = NativeToolSession if native else ToolSession
         if native:
+            self.config.authorize(task['actor'])
             verify_source((self.config.root / settings.get('hermes_source', 'runtime/cache/hermes-source')).resolve())
-        with session_type(workspace, kind, cancelled, progress=progress) as session:
+        with ExitStack() as stack:
+            session = stack.enter_context(session_type(workspace, kind, cancelled, progress=progress))
             request["tools"] = session.schemas
             if native:
-                home = self.config.runtime / 'engineering' / task['id']
-                home.mkdir(parents=True, exist_ok=True, mode=0o700)
-                if (home / '.env').exists():
-                    raise MikasaError('原生工程 profile 不允许额外 .env 注入')
-                (home / 'workspace').mkdir(exist_ok=True)
-                private_write(home / 'SOUL.md', (self.config.root / 'identity.md').read_text())
-                native_config = {'terminal': session.snapshot.terminal_config(workspace.spec.get('agent_image', IMAGE)),
-                                 'skills': {'external_dirs': [str(self.config.root / 'skills')],
-                                            'auto_load': [s['name'] for s in request['skills']]},
-                                 'memory': {'memory_enabled': True, 'user_profile_enabled': True},
-                                 'plugins': {'enabled': []}}
-                private_write(home / 'config.yaml', json.dumps(native_config))
+                home = stack.enter_context(engineering_profile(self.config, task, request['skills'],
+                    session.snapshot.terminal_config(workspace.spec.get('agent_image', IMAGE))))
                 extra['HERMES_HOME'] = str(home)
                 extra['HERMES_ENABLE_PROJECT_PLUGINS'] = '0'
-                request['native'] = {'session_id': session.native_id, 'grants': session.native_grants,
+                request['native'] = {'session_id': 'mikasa-task-' + task['id'], 'run_id': session.native_id,
+                                     'memory_owner': task['actor'], 'grants': session.native_grants,
                                      'omitted': session.snapshot.omitted}
             request["agent_budget"] = {"iterations": 24 if native else (20 if session.schemas else 2),
                                        "seconds": settings.get("timeout", 600)}
@@ -178,6 +175,9 @@ class Worker:
                 raise MikasaError("Hermes 规则、skill 注入证据或工具隔离不匹配")
             if native and (runtime.get('native_tools') is not True or runtime.get('native_injection') is not True):
                 raise MikasaError('原生工程工具或实际注入证据缺失')
+            if native and (runtime.get('root_session_id') != request['native']['session_id']
+                           or runtime.get('memory_owner') != task['actor']):
+                raise MikasaError('原生工程会话或记忆归属证据不匹配')
             if model is not None and runtime.get("requested_model") != model:
                 raise MikasaError("Hermes 请求模型与会话选择不一致")
             if runtime.get("api_mode") != extra.get("MIKASA_MODEL_API_MODE", "chat_completions"):
