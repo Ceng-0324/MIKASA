@@ -1,24 +1,33 @@
 # 本体开发验证记录
 
-日期：2026-09-20。对象：基线 `06a8715` 加本轮跨协议 /model 变更，Python 3.12.13。本记录不证明后续变更。
+日期：2026-09-20。对象：基线 `4e2fa78` 加本轮 Hermes 命令复用与原生历史变更，Python 3.12.13。本记录不证明后续变更。
 
 ## 已执行
 
 | 检查 | 结果 |
 | --- | --- |
-| `python3.12 -m unittest discover -q` | 105 项通过，55.695 秒 |
+| `python3.12 -m unittest discover -q` | 112 项通过，57.671 秒 |
 | `python3.12 scripts/check_docs.py` | 相对链接、空白和 canonical 顺序通过 |
 | `python3.12 -m compileall -q mikasa workers/hermes tests scripts` | 通过 |
-| 原生协议与安装依赖 | 官方 Hermes 0.21.3、Anthropic 0.87.0；uv pip check 通过，未改官方源码 |
+| 原生协议与安装依赖 | 沿用已锁定的 Hermes 0.21.3、Anthropic 0.87.0；本轮未更改依赖和上游源码 |
 | `git diff --check` 与 Git 可纳入文本逐文件空白检查 | 通过，覆盖未跟踪文件 |
-| 真实 HTTP 系统命令切换 | gpt-6-astra Responses → /model claude-opus-4-6 Messages → /model default，10 项全部通过；见 [跨协议证据](cross-protocol-evidence.json) |
-| 网页脚本 | Node --check 通过；HTTP 入口和菜单数据回归通过，未运行真实浏览器视觉/点击验收 |
-| 真实认证值字节扫描 | Git 可纳入文件和 runtime/state 未发现实际 Key 匹配；本地配置及两份联调报告权限 0600 |
-| 人格与工程 skill | GPT/Claude 真实聊天加载 persona，宿主指纹核对通过；诊断使用官方 pre_api_request 确认 canonical 全文进入 Claude 请求；工程任务路由由隔离回归验证 |
+| 官方命令兼容探针 | `probe_commands.py` 在真实固定 Hermes 上 17 项通过；无模型请求，覆盖别名、Unicode 参数、冲突与未开放参数 |
+| 真实 HTTP 系统命令与会话 | GPT Responses → Claude Messages → GPT、原生历史、/v、/init 延后、/reset 新会话与幂等，17 项全部通过；见 [本轮证据](hermes-commands-evidence.json) |
+| `python3.12 -m mikasa doctor` | 规则和 skill 路由加载；默认示例未配置模型符合预期。本机真实配置另检查为 valid，worker 可执行；不以此证明外部权限 |
+| 网页脚本 | Node --check 通过；CLI/HTTP 新会话 ID 跟随回归通过，未运行真实浏览器视觉/点击验收 |
+| 真实认证值字节扫描 | Git 可纳入文件和 runtime/state 未发现实际 Key 匹配；本地配置及本轮真实报告权限 0600 |
+| 人格与工程 skill | GPT/Claude 真实聊天加载 persona，宿主规则/skill 指纹核对通过；工程任务路由由 doctor 和隔离回归验证，本轮未重复真实工程任务 |
 
 历史执行进度、分页及工程工具验证见 [工具覆盖记录](HERMES_TOOLS_VALIDATION.md)，本轮未重复这些真实工程场景。历史验证另保留：[首次 Hermes/CCH 联调](HERMES_CCH_VALIDATION.md)、[聊天模型切换](CHAT_VALIDATION.md)。
 
-本轮真实聊天复现：`python3.12 scripts/probe_chat.py --config config/local/hermes-cch.json --target claude-opus-4-6 --slash --report runtime/state/hermes-cch/cross-protocol-chat.json`。原始本地报告不提交，脱敏摘要及原报告 SHA-256 保存在上述路由证据中。上轮诊断和同协议联调保留在 [路由证据](cch-routing-evidence.json)。
+本轮可复现命令：
+
+```sh
+python3.12 scripts/probe_commands.py --config config/local/hermes-cch.json
+python3.12 scripts/probe_chat.py --config config/local/hermes-cch.json --target claude-opus-4-6 --slash --commands --report runtime/state/hermes-cch/native-commands-chat.json
+```
+
+原始本地报告不提交，脱敏摘要及原报告 SHA-256 见 [本轮证据](hermes-commands-evidence.json)。此前跨协议验证见 [历史证据](cross-protocol-evidence.json)，诊断和同协议联调见 [路由证据](cch-routing-evidence.json)。
 
 ## 证据范围
 
@@ -26,7 +35,9 @@
 
 Hermes 适配测试使用 SDK 夹具检查 system 参数、skill 指纹、官方插件注册接口、工具授权、Responses 模式与日志隔离。额外真实联调使用固定官方 Hermes、CCH Responses 和宿主工具执行，因此不把夹具通过当作真实工具兼容的唯一证据。GitHub REST、正式 Review 与外部发布仍模拟；Docker 测试仅验证启动参数和清理路径。
 
-本轮新增：只读 Claude 配置来源、完整模型/最长前缀路由、缺失来源禁止回退凭据、跨协议并发不混用认证、/model 候选与真实子进程切换、未接入斜杠命令禁止进入模型、Anthropic bridge 参数/指纹核验、仅接受完整 JSON 或单个完整 JSON 代码围栏。真实验收中先遇到缺少 Anthropic 依赖及 Claude 返回非契约格式，均按失败处理；补齐官方依赖和输出封装兼容后，最终跨协议验收通过。真实 CCH 不注入失败、不修改后台配置；default 分组仍缺网关侧证据。
+本轮新增：官方 registry/alias 与 model parser 调用、未开放命令参数拒绝、无凭据命令进程、错误响应失败关闭；`/new` 原子创建、幂等、暂停回滚、跨账号隔离、CLI/HTTP 跟随新 ID；模型历史经原生 conversation_history 传递，控制回执排除。普通聊天测试的命令回复是夹具，官方语义另由真实命令探针验证。真实 GPT/Claude 往返后仍能复述同一随机代号；新会话 history_messages=0 且未带回该代号，旧聊天仍可读取。
+
+先前跨协议配置、来源隔离、协议检查、输出 JSON 围栏兼容与失败处理回归继续通过。真实 CCH 未注入失败或修改后台配置；default 分组仍缺网关侧证据。
 
 既有执行进度回归：运行中进度可查询、模型失败/超时后的证据持久化、取消后旧进度拒绝写入、重试令牌隔离、runner 恢复保留阶段、写入失败先于工具副作用中止、验证和提交阶段记录。
 

@@ -118,7 +118,7 @@ def main(argv=None):
                     value = chat.send(session["id"], actor, args.message, uuid.uuid4().hex)
                     print(json.dumps(value, ensure_ascii=False, indent=2))
                     return 0
-                print(f"Mikasa · 会话 {session['id']} · 请求模型 {session['model']}\n输入 /model 查看候选，/model 完整模型ID 切换，/exit 退出。")
+                print(f"Mikasa · 会话 {session['id']} · 请求模型 {session['model']}\n输入 /model 查看候选，/model 完整模型ID 切换，/new 新聊天，/help 帮助，/exit 退出。")
                 while True:
                     try:
                         message = input("你：").strip()
@@ -129,7 +129,9 @@ def main(argv=None):
                     if not message:
                         continue
                     try:
-                        print("Mikasa：" + chat.send(session["id"], actor, message, uuid.uuid4().hex)["reply"])
+                        result = chat.send(session["id"], actor, message, uuid.uuid4().hex)
+                        session.update(id=result["chat_id"], model=result["model"])
+                        print("Mikasa：" + result["reply"])
                     except MikasaError as exc:
                         print(str(exc), file=sys.stderr)
             if cmd == "serve":

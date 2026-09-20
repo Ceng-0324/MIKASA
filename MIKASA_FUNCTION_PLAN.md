@@ -20,6 +20,7 @@ Mikasa 是与人类成员共同开发的仿生程序员，同时负责工程监�
 负责人已调整优先级：先搭好底层与接入，再部署 VM；聊天工程任务与试点仓库一起放在最后。
 
 1. **Hermes 底层 agent**：完善主动检索、分段上下文、实现/检查/修复循环、运行证据、取消与失败恢复；扩大合成任务验收，明确资源上限。直接采用官方 Hermes harness 负责推理、上下文管理和工具调度，Mikasa 宿主负责权限、任务事实与副作用校验。后续扩展以协作开发、质量监督和交付推进为判断依据；优先官方扩展点，不因能力可用而自动扩大范围。
+   命令入口已收敛到官方 registry、model 参数解析及 version executor；聊天采用原生 conversation_history。Mikasa 唯一持久化会话，/new 与 /reset 创建新 ID 并由 CLI/网页跟随；/init 随最后的工程接入落地。此范围不等于开放全部 Hermes CLI/Gateway 命令，详见 [命令与会话归属](docs/decisions/0003-hermes-commands-sessions.md)。
 2. **CCH 模型路由**：继续采用 CCH 提供模型路由，收口模型配置、故障行为和路由验证。`default` 是网关 Key 的 provider 分组，不是模型名；当前分组尚未取得网关侧证据，不能标记为已切换。不新增重复路由网关。
 
    本地已补齐 Codex/Claude/环境来源的统一校验、`doctor --probe-model --model MODEL_ID` 连接诊断与 Hermes 官方错误钩子的固定故障反馈；`/model` 作为宿主系统命令按受信任路由同步选择模型、协议和凭据，GPT Responses ↔ Claude Messages 已完成真实会话切换与上下文保留验收。连接成功、响应标识与分组证据分开报告。剩余为网关侧 `default` 分组确认，具体见 [CCH 诊断](docs/runbooks/CCH.md)。后续可继续外部身份/权限接入的独立准备。
@@ -49,7 +50,7 @@ Mikasa 是与人类成员共同开发的仿生程序员，同时负责工程监�
 | 聊天与模型切换 | CLI、网页和鉴权 HTTP 聊天；自然语言选择当前会话模型，CCH 负责上游路由，候选模型真实验证成功后持久化；切换保留上下文，不影响工程任务 |
 | 任务操作 | CLI、鉴权 HTTP API、成员查询与需求提交、负责人分配、拆解结果转实施任务、交付证据跟进 |
 | 仓库审计 | GitHub Issue、PR 和 CI 读取与风险记录；可配置周期审计；不自动重复创建 Issue |
-| 模型执行 | 固定版本 Hermes SDK 的 JSON 桥接、canonical 与按任务路由的 skill 注入、指纹证据、Responses/Chat 协议适配、按任务授予仓库工具与同会话修复循环、宿主调用证据、专用 home、模型环境变量白名单 |
+| 模型执行 | 固定版本 Hermes SDK 的 JSON 桥接、canonical 与按任务路由的 skill 注入、指纹证据、Responses/Chat/Messages 协议适配、按任务授予仓库工具与同会话修复循环、宿主调用证据、专用 home、模型环境变量白名单 |
 | 代码实现 | 独立 clone、受限文件变更、配置化验证、默认最多 3 轮修复、本地 commit；生产检查采用无网络容器 |
 | PR 协作 | 当前 head 与目标基线核对、归属记录、自审限制、正式 Review、Issue 与草稿 PR 发布；不自动合并 |
 | 运行支持 | 健康检查、GitHub 签名 webhook 与重放去重、SQLite 备份、systemd 模板、CI 与隔离集成测试 |

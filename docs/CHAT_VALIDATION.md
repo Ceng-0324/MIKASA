@@ -41,3 +41,5 @@ python3.12 scripts/probe_chat.py --config config/local/hermes-cch.json --target 
 自动化测试覆盖未知/错误模型导致验证失败时保留原配置、会话隔离、跨账号拒绝、命令歧义、重复请求、并发锁、暂停期间不提交、上下文截断，以及 bridge 传递模型和记录 response_model。失败场景使用确定性夹具；未向 CCH 反复发送无效模型请求。
 
 网页静态入口、HTTP 鉴权与状态流已经自动化验证，内嵌 JavaScript 通过 Node 语法检查；未运行真实浏览器视觉验收。原工程工作流通过完整回归；模型切换目前仅作用于聊天。飞书入口、其他模型家族的协议兼容和网关后台热更新传播没有执行真实验收。
+
+后续命令复用与原生对话历史已完成新的 GPT→Claude→GPT 验收，包含 `/reset` 新会话、幂等和旧记录保留；见 [当前验证](VALIDATION.md) 与 [命令会话证据](hermes-commands-evidence.json)。本页原记录仍仅对应其标注版本。

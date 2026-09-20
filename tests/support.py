@@ -13,6 +13,20 @@ REPO = "Ceng-0324/TestFixture"
 SHA = "a" * 40
 
 
+def command_reply(text, cancelled=lambda: False):
+    """Canned command RPC replies; real upstream semantics use probe_commands.py."""
+    from mikasa.chat import HELP
+    replies = {"/model": ("model", "status", None), "/model default": ("model", "reset", None),
+               "/new": ("new", "new", None), "/reset": ("new", "new", None),
+               "/init": ("init", "deferred_command", None), "/help": ("help", "help", None),
+               "/version": ("version", "version", None)}
+    for model in ("model-b", "model-c", "nonexistent", "claude-test"):
+        replies["/model " + model] = ("model", "switch", model)
+    name, kind, target = replies.get(text, (None, "unsupported_command", None))
+    return {"name": name, "kind": kind, "target": target,
+            "reply": HELP if kind == "help" else "fixture" if kind in {"version", "deferred_command"} else None}
+
+
 class FakeGitHub:
     def __init__(self):
         self.current = {"number": 1, "title": "Test PR", "body": "Test", "user": {"login": "human"},

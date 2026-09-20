@@ -8,12 +8,15 @@ from mikasa.cli import doctor
 from mikasa.errors import MikasaError
 from mikasa.model_settings import model_environment, select_source, validate_routes
 from mikasa.worker import Worker
-from tests.support import BaseTest
+from tests.support import BaseTest, command_reply
 
 
 class ModelRouteTests(BaseTest):
     def setUp(self):
         super().setUp()
+        adapter = patch.object(Worker, "command", side_effect=command_reply)
+        adapter.start()
+        self.addCleanup(adapter.stop)
         self.codex = self.path / 'codex.toml'
         self.auth = self.path / 'auth.json'
         self.claude = self.path / 'claude.json'
@@ -117,7 +120,7 @@ print(json.dumps({'version':1, 'result':{'summary':'ok'}, 'runtime':{
         chat = Chat(self.config)
         session = chat.create(self.config.owner)
         with patch.object(Worker, 'execute') as call:
-            for message in ['/init', '/new', '/unknown value']:
+            for message in ['/init', '/unknown value']:
                 result = chat.send(session['id'], self.config.owner, message, message)
-                self.assertEqual(result['kind'], 'unsupported_command')
+                self.assertEqual(result['kind'], 'deferred_command' if message == '/init' else 'unsupported_command')
             call.assert_not_called()

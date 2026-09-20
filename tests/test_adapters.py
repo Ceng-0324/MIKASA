@@ -105,12 +105,14 @@ class AIAgent:
         self.tools = []
         print('SDK log must not pollute stdout')
         print('fixture-key must not escape stderr', file=sys.stderr)
-    def run_conversation(self, user_message, system_message):
+    def run_conversation(self, user_message, system_message, conversation_history):
         from hermes_cli.plugins import hooks
         hooks['post_api_request'](response_model='fixture-reported')
         assert system_message.startswith('canonical-rules')
         assert 'rules' not in json.loads(user_message.split('\\n', 1)[1])
         assert 'skills' not in json.loads(user_message.split('\\n', 1)[1])
+        assert 'history' not in json.loads(user_message.split('\\n', 1)[1])['context']
+        assert conversation_history == [{'role': 'user', 'content': 'earlier'}, {'role': 'assistant', 'content': 'reply'}]
         assert 'host instruction' in system_message
         assert '<project-skill name="mikasa-persona">' in system_message
         assert '<project-skill name="mikasa-implement">' in system_message
@@ -122,7 +124,8 @@ class AIAgent:
                          "MIKASA_MODEL_API_KEY": "fixture-key", "MIKASA_MODEL_API_MODE": "codex_responses"})
         skills = load_skills(ROOT, "implement")
         output = run([sys.executable, str(ROOT / "workers/hermes/bridge.py")], cwd=self.path, env=env,
-                     stdin=json.dumps({"version": 1, "rules": "canonical-rules", "task": {},
+                     stdin=json.dumps({"version": 1, "rules": "canonical-rules", "task": {"kind": "chat"},
+                                       "context": {"history": [{"role": "user", "content": "earlier"}, {"role": "assistant", "content": "reply"}]},
                                        "skills": skills, "instruction": "host instruction"}))
         self.assertEqual(output["code"], 0)
         envelope = json.loads(output["stdout"])
@@ -130,6 +133,8 @@ class AIAgent:
         self.assertEqual(envelope["runtime"]["tool_count"], 0)
         self.assertEqual(envelope["runtime"]["api_mode"], "codex_responses")
         self.assertEqual(envelope["runtime"]["reported_model"], "fixture-reported")
+        self.assertEqual(envelope["runtime"]["history_messages"], 2)
+        self.assertEqual(envelope["runtime"]["session_owner"], "mikasa")
         self.assertEqual(envelope["runtime"]["skills"], [{k: s[k] for k in ("name", "sha256", "source")} for s in skills])
         self.assertEqual(envelope["result"]["changes"][0]["content"], "VALUE = 2\n")
         self.assertEqual(output["stderr"], "")
@@ -181,7 +186,9 @@ class AIAgent:
         # Preserve the strict engineering contract and host attestation on the new wire.
         with patch.dict(os.environ, env), patch.object(Worker, 'request', return_value={
                 'version': 1, 'rules': 'canonical-rules', 'instruction': 'host instruction',
-                'skills': load_skills(ROOT, 'implement'), 'output_contract': {'summary': 'text', 'changes': []}}):
+                'skills': load_skills(ROOT, 'implement'), 'task': {'kind': 'chat'},
+                'context': {'history': [{'role': 'user', 'content': 'earlier'}, {'role': 'assistant', 'content': 'reply'}]},
+                'output_contract': {'summary': 'text', 'changes': []}}):
             worker = Worker(self.config)
             worker.execute({'payload': {'kind': 'implement'}}, {}, lambda: False, model='claude-test')
         self.assertEqual(worker.last_runtime['api_mode'], 'anthropic_messages')

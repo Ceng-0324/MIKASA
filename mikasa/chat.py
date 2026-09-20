@@ -7,7 +7,7 @@ import uuid
 from contextlib import contextmanager
 
 from .errors import Conflict, MikasaError, NotFound
-from .model_settings import default_model, model_choices, validate_model
+from .model_settings import default_model, model_choices
 from .model_errors import ModelFailure
 from .store import Store
 from .worker import Worker
@@ -20,29 +20,28 @@ SWITCH = re.compile(
     r"(?:(?:把|将)(?:当前|这次|本次)?(?:聊天|会话)?(?:的)?模型)?\s*"
     r"(?:切换|换|改)(?:一下)?(?:模型)?(?:为|成|到|用)\s*(?:模型\s*)?"
     r"([A-Za-z0-9][A-Za-z0-9_.:/@+-]{0,199})(?:\s*模型)?[。！!\s]*", re.IGNORECASE)
-STATUS = {"当前模型", "现在用的什么模型", "现在用的什么模型？", "你现在用什么模型", "你现在用什么模型？", "/model"}
+STATUS = {"当前模型", "现在用的什么模型", "现在用的什么模型？", "你现在用什么模型", "你现在用什么模型？"}
 MODELS = {"可用模型", "有哪些模型", "有哪些模型？", "/models"}
-RESET = {"恢复默认模型", "切换为默认模型", "/model default"}
-HELP = "输入 /model 完整模型ID 或说“切换为 完整模型ID”即可切换 GPT、Claude 等已接入模型；/model 查看当前模型和配置候选，/model default 恢复默认。切换仅影响当前聊天；工程任务仍使用运行配置。"
+RESET = {"恢复默认模型", "切换为默认模型"}
+HELP = "输入 /model 完整模型ID 或说“切换为 完整模型ID”即可切换 GPT、Claude 等已接入模型；/model 查看当前模型和配置候选，/model default 恢复默认。/new（或 /reset）新建聊天并保留当前模型，旧记录可恢复；/version 查看 Hermes 版本，/help 查看帮助。切换仅影响当前聊天；工程任务仍使用运行配置。"
 
 
-def command(message):
+def command(message, resolve):
     text = message.strip()
     if text in STATUS:
-        return "status", None
+        text = "/model"
     if text in MODELS:
-        return "models", None
+        text = "/model"
     if text in RESET:
-        return "reset", None
-    match = SWITCH.fullmatch(text) or re.fullmatch(r"/model\s+([A-Za-z0-9][A-Za-z0-9_.:/@+-]{0,199})", text)
+        text = "/model default"
+    match = SWITCH.fullmatch(text)
     if match:
-        # Chinese sentence full-stop is not part of a model ID; ASCII dots can be.
-        return "switch", validate_model(match.group(1))
-    if re.match(r"^(?:(?:Mikasa|三笠)[，,：:\s]*)?(?:请|帮我|请帮我)?\s*(?:切换|换成|换为|把模型|将模型|/model\b)", text, re.I):
-        return "help", None
-    if re.match(r"^/[A-Za-z][A-Za-z0-9_-]*(?:\s|$)", text):
-        return "unsupported_command", None
-    return "chat", None
+        text = "/model " + match.group(1)
+    if text.startswith("/"):
+        return resolve(text)
+    if re.match(r"^(?:(?:Mikasa|三笠)[，,：:\s]*)?(?:请|帮我|请帮我)?\s*(?:切换|换成|换为|把模型|将模型)", text, re.I):
+        return {"kind": "help", "target": None, "reply": None, "name": None}
+    return {"kind": "chat", "target": None, "reply": None, "name": None}
 
 
 class Chat:
@@ -98,10 +97,12 @@ class Chat:
                 return json.loads(previous["response"])
             if self.store.paused():
                 raise Conflict("运行已暂停")
-            kind, target = command(message)
+            parsed = command(message, lambda text: Worker(self.config).command(text, self.store.paused))
+            kind, target = parsed["kind"], parsed["target"]
             model = current["model"]
             execution = None
             changed = False
+            next_id = uuid.uuid4().hex if kind == "new" else chat_id
             if kind == "reset":
                 target = default_model(self.config)
             if kind in {"switch", "reset"}:
@@ -128,26 +129,31 @@ class Chat:
                             reply += " 网关未提供可记录的模型标识，实际路由以 CCH 为准。"
             elif kind == "status":
                 reply = f"当前聊天的请求模型是 {model}。实际上游由 CCH 路由，其他聊天与工程任务不受本会话选择影响。"
-                if message.strip() == "/model":
-                    reply += "\n" + self.model_menu()
-            elif kind == "models":
-                reply = f"当前请求模型：{model}。\n" + self.model_menu()
+                reply += "\n" + self.model_menu()
             elif kind == "help":
-                reply = HELP
+                reply = (parsed["reply"] + "\n" if parsed["reply"] else "") + HELP
+            elif kind == "new":
+                reply = f"已开始新聊天 {next_id}，继续使用 {model}；后续消息不带入旧上下文，旧聊天 {chat_id} 可通过 ID 恢复。"
+            elif kind in {"version", "deferred_command"}:
+                reply = parsed["reply"]
             elif kind == "unsupported_command":
                 reply = "这个系统命令尚未接入 Mikasa，未执行任何操作。" + HELP
             else:
                 result, execution = self.infer(model, message, current["turns"], current["history_truncated"])
                 reply = result["summary"]
-            response = {"chat_id": chat_id, "kind": kind, "reply": reply, "model": model,
-                        "revision": current["revision"] + int(changed), "execution": execution}
-            if kind == "models" or (kind == "status" and message.strip() == "/model"):
+            response = {"chat_id": next_id, "kind": kind, "reply": reply, "model": model,
+                        "revision": 0 if kind == "new" else current["revision"] + int(changed), "execution": execution}
+            if kind == "status":
                 response["model_options"] = model_choices(self.config.data.get("worker", {}))
             with self.store.connect() as db:
                 db.execute("BEGIN IMMEDIATE")
                 paused = db.execute("SELECT value FROM settings WHERE key='paused'").fetchone()
                 if paused and paused[0] == "true":
                     raise Conflict("运行已暂停，本条回复和模型变更未保存")
+                if kind == "new":
+                    db.execute("INSERT INTO chats(id,actor,model,created) VALUES(?,?,?,?)", (next_id, actor, model, time.time()))
+                    self.store.event(db, None, "chat_session_created", actor,
+                                     {"from": chat_id, "to": next_id, "request_key": key})
                 if changed:
                     db.execute("UPDATE chats SET model=?,revision=revision+1 WHERE id=?", (model, chat_id))
                     self.store.event(db, None, "chat_model_switched", actor,
@@ -172,6 +178,8 @@ class Chat:
         if used > cap:
             raise MikasaError("消息超出配置的上下文上限")
         for turn in reversed(turns):
+            if turn["response"]["kind"] != "chat":
+                continue  # Control receipts are not model conversation messages.
             pair = [{"role": "user", "content": turn["message"]},
                     {"role": "assistant", "content": turn["response"]["reply"]}]
             size = len(json.dumps(pair, ensure_ascii=False).encode())
@@ -181,6 +189,6 @@ class Chat:
             used += size
         task = {"payload": {"kind": "chat", "title": message,
                             "acceptance": "按当前 Mikasa 身份直接回复用户。聊天不执行仓库、审批或配置操作；模型选择以宿主 model_selection 为准，不根据自我介绍猜测模型。"}}
-        result = worker.execute(task, {"history": history, "history_truncated": history_truncated or len(history) < 2 * len(turns),
+        result = worker.execute(task, {"history": history, "history_truncated": history_truncated or len(history) < 2 * sum(t["response"]["kind"] == "chat" for t in turns),
                                        "model_selection": {"requested_model": model}}, self.store.paused, model=model)
         return result, worker.last_runtime or {}

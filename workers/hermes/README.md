@@ -61,3 +61,11 @@ Hermes 通过官方 `PluginContext.register_tool` 加载宿主提供的工具。
 初始上下文优先保留规则与变更文件，被截断内容列入 omitted。Hermes 可分段读取最多 1000000 字节的 UTF-8 文件，每页最多 16000 个 Unicode 字符，按 `next_offset` 继续；内容 SHA-256 与已读区间由宿主记录，`complete=true` 表示同一内容已完整覆盖。列表每页 200 项；搜索每次最多扫描 100 个文件/约 1 MB，返回最多 100 个匹配，按宿主生成的 `next_cursor` 可继续到后续文件或同一文件的后续匹配。游标绑定查询与仓库版本，应用变更后失效；跳过的文件明确报告。宿主只接受同一 PR head 的成功完整读取证据来消除未读变更限制；搜索命中不等于完整读取。尚未读到的变更文件仍阻止批准。
 
 真实工具循环证据与复现命令见 [工具覆盖验证](../../docs/HERMES_TOOLS_VALIDATION.md)。小型合成任务成功不证明任意规模仓库都可完成。requested_model 是请求值，reported_model 是 SDK 响应标识（未观察到时为 null），均不能独立保证供应商底层模型身份。聊天切换见 [聊天手册](../../docs/runbooks/CHAT.md)。
+
+## 命令与会话接口
+
+现有进程协议另支持 `{"version":1,"operation":"command","text":"/model ..."}`，返回 `version` 与 `result`（name、kind、target、reply）。宿主只提供专用 home 和源码位置，不读取模型配置、不注入任何模型/平台认证。bridge 在模型环境校验之前调用官方命令注册表、model 参数解析器及 version 执行器；错误仍返回固定错误信封，不转交模型。
+
+模型聊天使用 `AIAgent.run_conversation(conversation_history=...)` 传入原生 user/assistant 历史，context 中不再重复携带 history。运行证据记录 `history_messages` 和 `session_owner=mikasa`。SQLite 的聊天归属、模型和幂等记录由 Mikasa 唯一管理，agent 显式 `session_db=None`；命令回执不进入模型历史。`/new` 的事务和客户端切换在宿主适配，未声称调用依赖完整 Gateway 的重置处理器。依据见 [命令与会话决定](../../docs/decisions/0003-hermes-commands-sessions.md)。
+
+不耗模型额度的兼容探针：`python3.12 scripts/probe_commands.py --config config/local/hermes-cch.json`。真实跨协议与新会话验收使用 `probe_chat.py --slash --commands`，其余参数见 [验证记录](../../docs/VALIDATION.md)。

@@ -23,7 +23,11 @@ python3.12 -m mikasa --config config/local/hermes-cch.json chat
 
 切换前会检查连接，成功后对当前聊天生效；保留聊天记录，其他会话及工程任务不受影响。模型名称使用 CCH 支持的完整 ID，不知道名称时查 CCH 配置；`/models` 提供使用说明，不伪造可用模型列表。首次切换会额外消耗一次小型验证调用。
 
-GPT/Claude 跨协议切换需要配置 [模型来源路由](CCH.md)，本机已接入现有 Codex/CCH 和 Claude Code/CCH 配置。裸 `/model` 与 `/models` 显示本地配置候选，网页可以点击候选按钮；菜单不是 CCH 实时目录。仍可直接输入未列入菜单但符合配置前缀的完整模型 ID。切换与查询由宿主直接处理，无须模型理解命令；尚未接入的 `/new`、`/init` 会明确返回未执行。
+GPT/Claude 跨协议切换需要配置 [模型来源路由](CCH.md)，本机已接入现有 Codex/CCH 和 Claude Code/CCH 配置。裸 `/model` 与 `/models` 显示本地配置候选，网页可以点击候选按钮；菜单不是 CCH 实时目录。仍可直接输入未列入菜单但符合配置前缀的完整模型 ID。Hermes 官方组件解析命令与参数，Mikasa 验证权限、连接和持久化范围，无须模型理解命令。
+
+支持 `/model ID --session`；全局切换、单轮覆盖、provider/reasoning 和目录刷新参数尚未开放，会明确拒绝。`/help` 显示已接入的命令，`/version`（别名 `/v`）执行 Hermes 官方版本查询。查询和命令解析不调用模型、不读取模型密钥；实际切换验证会调用目标模型。
+
+`/new`（别名 `/reset`）创建新聊天并保留当前模型，旧聊天记录保留，可通过旧 ID 恢复。网页和 CLI 自动改用新 ID，下一条消息从空上下文开始。`/init` 会生成或修改仓库规则，当前返回 `deferred_command`；它随最后的聊天工程任务与试点接入，当前不执行文件写入。
 
 终端会打印会话 ID，可跨进程继续：
 
@@ -53,6 +57,8 @@ python3.12 -m mikasa --config config/local/hermes-cch.json serve
 - `POST /chats/{id}/messages`：body `{"message":"切换为 gpt-5.6-luna"}`，必须提供 `Idempotency-Key`。
 
 沿用 Bearer 鉴权；不能在 body 指定 actor、端点或凭据。回复包含 `reply`、`model`、`kind`、`revision` 和本次 `execution`；切换验证失败时 kind 为 `switch_failed`，model 仍为原值。非本人会话返回 404，同会话并发/暂停返回 409。所有已配置成员可切换自己的聊天，不具备修改网关全局路由或他人聊天的权限。
+
+客户端必须将回复的 `chat_id` 作为下一条请求的目标；`kind=new` 返回新 ID、revision=0。若网络响应丢失，使用原会话 ID、原命令和同一幂等键重试，即可取回同一个新 ID，不会重复新建。旧会话继续可读可用；`/model default` 是恢复默认模型，`/reset` 是新建会话，两者不同。
 
 运行中修改 CCH 后台映射仍可能使相同请求名对应不同上游。`execution.requested_model` 是请求名称，`execution.reported_model` 是 SDK 从响应中观察到的标识，不能作为底层模型身份的独立证明。
 

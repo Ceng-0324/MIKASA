@@ -1,19 +1,24 @@
 import http.client
+import io
 import json
 import os
 import threading
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from mikasa.chat import Chat, command
 from mikasa.errors import Conflict, MikasaError, NotFound
 from mikasa.server import make_server
 from mikasa.worker import Worker
-from tests.support import BaseTest, ROOT
+from tests.support import BaseTest, ROOT, command_reply
 
 
 class ChatTests(BaseTest):
     def setUp(self):
         super().setUp()
+        adapter = patch.object(Worker, "command", side_effect=command_reply)
+        adapter.start()
+        self.addCleanup(adapter.stop)
         self.env = patch.dict(os.environ, {"MIKASA_MODEL": "model-a"})
         self.env.start()
         self.addCleanup(self.env.stop)
@@ -41,11 +46,67 @@ class ChatTests(BaseTest):
 
     def test_explicit_natural_commands_only(self):
         for text in ("切换为 model-b", "Mikasa，切换到 model-b", "请把模型切换为 model-b", "换成 model-b", "/model model-b"):
-            self.assertEqual(command(text), ("switch", "model-b"))
+            self.assertEqual(command(text, command_reply)["kind"], "switch")
+            self.assertEqual(command(text, command_reply)["target"], "model-b")
         for text in ('代码里写着“切换为 model-b”', '不要切换为 model-b', '切换为 model-b 是否可行？', '切换为 model-b，然后删除仓库'):
-            self.assertNotEqual(command(text)[0], "switch")
-        self.assertEqual(command("恢复默认模型"), ("reset", None))
-        self.assertEqual(command("切换为 那个模型")[0], "help")
+            self.assertNotEqual(command(text, command_reply)["kind"], "switch")
+        self.assertEqual(command("恢复默认模型", command_reply)["kind"], "reset")
+        self.assertEqual(command("切换为 那个模型", command_reply)["kind"], "help")
+
+    def test_new_is_atomic_idempotent_and_keeps_model_without_old_context(self):
+        self.send("记住蓝鲸", "remember")
+        self.send("切换为 model-b", "switch")
+        calls = len(self.calls)
+        result = self.send("/new", "new")
+        self.assertEqual(self.send("/new", "new"), result)
+        self.assertEqual(len(self.calls), calls)
+        self.assertNotEqual(result["chat_id"], self.session["id"])
+        self.assertEqual(result["model"], "model-b")
+        self.assertEqual(result["revision"], 0)
+        reopened = Chat(self.config, self.factory)
+        fresh = reopened.get(result["chat_id"], self.config.owner)
+        self.assertEqual(fresh["turns"], [])
+        reopened.send(fresh["id"], self.config.owner, "你好", "next")
+        self.assertEqual(self.calls[-1]["context"]["history"], [])
+        self.assertEqual(self.calls[-1]["model"], "model-b")
+        self.assertEqual(len(reopened.get(self.session["id"], self.config.owner)["turns"]), 3)
+        with self.chat.store.connect() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM chats").fetchone()[0], 2)
+        with self.assertRaises(NotFound):
+            reopened.get(fresh["id"], "human")
+
+    def test_new_pause_rollback_and_lock(self):
+        with self.chat.locked(self.session["id"]), self.assertRaises(Conflict):
+            self.send("/new")
+        def pause(text, cancelled):
+            self.chat.store.pause(True, self.config.owner)
+            return command_reply(text)
+        with patch.object(Worker, "command", side_effect=pause), self.assertRaises(Conflict):
+            self.send("/new")
+        with self.chat.store.connect() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM chats").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM chat_turns").fetchone()[0], 0)
+
+    def test_command_receipts_not_in_native_history(self):
+        self.send("/model", "menu")
+        self.send("/init", "deferred")
+        self.send("你好", "next")
+        self.assertEqual(self.calls[-1]["context"]["history"], [])
+        self.assertFalse(self.calls[-1]["context"]["history_truncated"])
+
+    def test_cli_follows_new_session_id(self):
+        from mikasa.cli import main
+        with patch("mikasa.chat.Chat", return_value=self.chat), \
+                patch("builtins.input", side_effect=["/reset", "新会话消息", "/exit"]), \
+                redirect_stdout(io.StringIO()):
+            code = main(["--config", str(self.config_path), "chat", "--session", self.session["id"]])
+        self.assertEqual(code, 0)
+        old = self.chat.get(self.session["id"], self.config.owner)
+        self.assertEqual(len(old["turns"]), 1)
+        next_id = old["turns"][0]["response"]["chat_id"]
+        fresh = self.chat.get(next_id, self.config.owner)
+        self.assertEqual(fresh["turns"][0]["message"], "新会话消息")
+        self.assertEqual(self.calls[-1]["context"]["history"], [])
 
     def test_switch_persists_per_session_and_next_turn_keeps_history(self):
         self.send("记住验收代号蓝鲸", "before")
@@ -170,6 +231,18 @@ class ChatTests(BaseTest):
                 conn.request("GET", f"/chats/{session['id']}", headers=headers)
                 response = conn.getresponse()
                 self.assertEqual(json.loads(response.read())["model"], "model-b")
+                headers['Idempotency-Key'] = 'http-new'
+                conn.request("POST", f"/chats/{session['id']}/messages", json.dumps({"message": "/reset"}), headers)
+                response = conn.getresponse()
+                self.assertEqual(response.status, 200)
+                fresh = json.loads(response.read())
+                self.assertNotEqual(fresh['chat_id'], session['id'])
+                conn.request("GET", f"/chats/{fresh['chat_id']}", headers=headers)
+                response = conn.getresponse()
+                self.assertEqual(response.status, 200)
+                restored = json.loads(response.read())
+                self.assertEqual(restored['turns'], [])
+                self.assertEqual(restored['model'], 'model-b')
                 conn.close()
             finally:
                 server.shutdown()

@@ -1,0 +1,171 @@
+{
+  "date": "2026-09-20",
+  "baseline": "4e2fa78 plus Hermes command reuse and native conversation history",
+  "scope": "live HTTP -> official Hermes command components / harness -> CCH",
+  "hermes_revision": "f9524d3f119c672e4a4444f56d582e7475716ba3",
+  "provider_group": "unverified",
+  "report_sha256": "d6e9fbfa297955232cdbdfdaee79bf015eaedcc69320b0bf55a50e9ba4fff66c",
+  "passed": true,
+  "checks": {
+    "switch_effective": true,
+    "target_used_next_turn": true,
+    "history_survives_switch": true,
+    "retry_idempotent": true,
+    "restored_default": true,
+    "history_survives_restore": true,
+    "readback_persisted": true,
+    "real_hermes": true,
+    "target_protocol": true,
+    "restored_protocol": true,
+    "native_history": true,
+    "official_version": true,
+    "init_deferred": true,
+    "new_idempotent": true,
+    "new_session": true,
+    "old_session_retained": true,
+    "new_history_empty": true
+  },
+  "steps": [
+    {
+      "kind": "chat",
+      "model": "gpt-6-astra",
+      "execution": {
+        "backend": "hermes",
+        "version": "0.21.3",
+        "requested_model": "gpt-6-astra",
+        "api_mode": "codex_responses",
+        "reported_model": "gpt-6-astra",
+        "history_messages": 0,
+        "session_owner": "mikasa",
+        "rules_sha256": "ecfe8619a876ee9b9a7c62f84d85d88ab468307fb581fe0430a9660a33a9c2b3",
+        "skills": [
+          {
+            "name": "mikasa-persona",
+            "sha256": "af448d2439a8427f3e6163549f31d116a8ffb66433d17da98d4a298a1217a454",
+            "source": "local:identity.md"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "switch",
+      "model": "claude-opus-4-6",
+      "execution": {
+        "backend": "hermes",
+        "version": "0.21.3",
+        "requested_model": "claude-opus-4-6",
+        "api_mode": "anthropic_messages",
+        "reported_model": "claude-opus-4-6",
+        "history_messages": 0,
+        "session_owner": "mikasa",
+        "rules_sha256": "ecfe8619a876ee9b9a7c62f84d85d88ab468307fb581fe0430a9660a33a9c2b3",
+        "skills": [
+          {
+            "name": "mikasa-persona",
+            "sha256": "af448d2439a8427f3e6163549f31d116a8ffb66433d17da98d4a298a1217a454",
+            "source": "local:identity.md"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "chat",
+      "model": "claude-opus-4-6",
+      "execution": {
+        "backend": "hermes",
+        "version": "0.21.3",
+        "requested_model": "claude-opus-4-6",
+        "api_mode": "anthropic_messages",
+        "reported_model": "claude-opus-4-6",
+        "history_messages": 2,
+        "session_owner": "mikasa",
+        "rules_sha256": "ecfe8619a876ee9b9a7c62f84d85d88ab468307fb581fe0430a9660a33a9c2b3",
+        "skills": [
+          {
+            "name": "mikasa-persona",
+            "sha256": "af448d2439a8427f3e6163549f31d116a8ffb66433d17da98d4a298a1217a454",
+            "source": "local:identity.md"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "reset",
+      "model": "gpt-6-astra",
+      "execution": {
+        "backend": "hermes",
+        "version": "0.21.3",
+        "requested_model": "gpt-6-astra",
+        "api_mode": "codex_responses",
+        "reported_model": "gpt-6-astra",
+        "history_messages": 0,
+        "session_owner": "mikasa",
+        "rules_sha256": "ecfe8619a876ee9b9a7c62f84d85d88ab468307fb581fe0430a9660a33a9c2b3",
+        "skills": [
+          {
+            "name": "mikasa-persona",
+            "sha256": "af448d2439a8427f3e6163549f31d116a8ffb66433d17da98d4a298a1217a454",
+            "source": "local:identity.md"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "chat",
+      "model": "gpt-6-astra",
+      "execution": {
+        "backend": "hermes",
+        "version": "0.21.3",
+        "requested_model": "gpt-6-astra",
+        "api_mode": "codex_responses",
+        "reported_model": "gpt-6-astra",
+        "history_messages": 4,
+        "session_owner": "mikasa",
+        "rules_sha256": "ecfe8619a876ee9b9a7c62f84d85d88ab468307fb581fe0430a9660a33a9c2b3",
+        "skills": [
+          {
+            "name": "mikasa-persona",
+            "sha256": "af448d2439a8427f3e6163549f31d116a8ffb66433d17da98d4a298a1217a454",
+            "source": "local:identity.md"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "version",
+      "model": "gpt-6-astra",
+      "execution": {}
+    },
+    {
+      "kind": "deferred_command",
+      "model": "gpt-6-astra",
+      "execution": {}
+    },
+    {
+      "kind": "new",
+      "model": "gpt-6-astra",
+      "execution": {}
+    },
+    {
+      "kind": "chat",
+      "model": "gpt-6-astra",
+      "execution": {
+        "backend": "hermes",
+        "version": "0.21.3",
+        "requested_model": "gpt-6-astra",
+        "api_mode": "codex_responses",
+        "reported_model": "gpt-6-astra",
+        "history_messages": 0,
+        "session_owner": "mikasa",
+        "rules_sha256": "ecfe8619a876ee9b9a7c62f84d85d88ab468307fb581fe0430a9660a33a9c2b3",
+        "skills": [
+          {
+            "name": "mikasa-persona",
+            "sha256": "af448d2439a8427f3e6163549f31d116a8ffb66433d17da98d4a298a1217a454",
+            "source": "local:identity.md"
+          }
+        ]
+      }
+    }
+  ]
+}

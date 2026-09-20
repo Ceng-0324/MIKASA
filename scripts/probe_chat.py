@@ -24,6 +24,7 @@ def main():
     parser.add_argument('--target', required=True)
     parser.add_argument('--report', required=True)
     parser.add_argument('--slash', action='store_true', help='使用 /model 系统命令完成切换与恢复')
+    parser.add_argument('--commands', action='store_true', help='同时验证 Hermes 命令与 /new 会话边界')
     args = parser.parse_args()
     config = Config.load(args.config)
     validate_model(args.target)
@@ -90,6 +91,23 @@ def main():
         default_mode = model_environment(config.data['worker'], session['model']).get('MIKASA_MODEL_API_MODE', 'chat_completions')
         report['checks']['target_protocol'] = all(r['execution'].get('api_mode') == target_mode for r in [switched, after])
         report['checks']['restored_protocol'] = all(r['execution'].get('api_mode') == default_mode for r in [reset, after_reset])
+        if args.commands:
+            report['checks']['native_history'] = all(r['execution'].get('history_messages', 0) > 0
+                                                     and r['execution'].get('session_owner') == 'mikasa'
+                                                     for r in [after, after_reset])
+            version = send('/v')
+            deferred = send('/init')
+            new = send('/reset', 'new-session')
+            replay_new = request('POST', route+'/messages', {'message': '/reset'}, 'new-session')
+            fresh = request('GET', '/chats/'+new['chat_id'])
+            report['checks']['official_version'] = version['kind'] == 'version' and 'Hermes' in version['reply']
+            report['checks']['init_deferred'] = deferred['kind'] == 'deferred_command' and deferred['execution'] is None
+            report['checks']['new_idempotent'] = new == replay_new
+            report['checks']['new_session'] = new['chat_id'] != session['id'] and fresh['turns'] == [] and fresh['model'] == current['model']
+            report['checks']['old_session_retained'] = len(request('GET', route)['turns']) == 8
+            route = '/chats/'+new['chat_id']
+            clean = send('如果当前上下文中没有验收代号，请回答“未提供”；否则给出代号。')
+            report['checks']['new_history_empty'] = clean['execution'].get('history_messages') == 0 and marker not in clean['reply']
         report['passed']=all(report['checks'].values())
         print(json.dumps({'passed':report['passed'],'checks':report['checks']},ensure_ascii=False),flush=True)
     finally:

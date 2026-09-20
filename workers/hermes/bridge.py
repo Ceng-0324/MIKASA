@@ -32,8 +32,7 @@ def main():
     request = json.loads(sys.stdin.read(2_000_001))
     if request.get("version") != 1:
         raise ValueError("unsupported worker protocol")
-    validate_environment(os.environ, required=True)
-    for key in ("HERMES_HOME", "MIKASA_MODEL", "MIKASA_MODEL_BASE_URL", "MIKASA_MODEL_API_KEY"):
+    for key in ("HERMES_HOME",):
         if not os.environ.get(key):
             raise ValueError(f"missing {key}")
     if not Path(os.environ["HERMES_HOME"]).is_absolute():
@@ -48,6 +47,14 @@ def main():
         if not (source / "run_agent.py").is_file():
             raise ValueError("Hermes source is incomplete")
         sys.path.insert(0, str(source))
+    if request.get("operation") == "command":
+        # No model credentials, AIAgent, discovery or config persistence on this path.
+        with tempfile.TemporaryFile(mode="w+") as diagnostics, contextlib.redirect_stdout(diagnostics), contextlib.redirect_stderr(diagnostics):
+            from command_adapter import dispatch
+            result = dispatch(request["text"])
+        print(json.dumps({"version": 1, "result": result}, ensure_ascii=False))
+        return
+    validate_environment(os.environ, required=True)
     mode = os.environ.get("MIKASA_MODEL_API_MODE", "chat_completions")
     if mode not in API_MODES:
         raise ValueError("unsupported model API mode")
@@ -120,7 +127,7 @@ def main():
             api_key=os.environ["MIKASA_MODEL_API_KEY"], provider="custom", api_mode=mode,
             enabled_toolsets=["mikasa_workspace"] if definitions else [], max_iterations=budget.get("iterations", 2), quiet_mode=True,
             skip_context_files=True, skip_memory=True, skip_background_review=True,
-            save_trajectories=False, load_soul_identity=False,
+            save_trajectories=False, load_soul_identity=False, session_db=None,
             max_tokens=8192 if definitions else 4096, run_budget_seconds=budget.get("seconds", 120),
         )
         tool_names = sorted(t["function"]["name"] for t in (agent.tools or []))
@@ -133,10 +140,20 @@ def main():
                 granted_names, ["tool_call", "tool_describe", "tool_search"] if definitions else []):
             raise RuntimeError("Hermes tool grant mismatch")
         try:
+            context = dict(request.get("context", {}))
+            history = context.pop("history", []) if request.get("task", {}).get("kind") == "chat" else []
+            if not isinstance(history, list) or any(
+                    not isinstance(item, dict) or set(item) != {"role", "content"}
+                    or item["role"] not in {"user", "assistant"} or not isinstance(item["content"], str)
+                    for item in history):
+                raise ValueError("invalid conversation history")
+            payload = {k: v for k, v in request.items() if k not in {"rules", "skills", "instruction", "context"}}
+            payload["context"] = context
             result = agent.run_conversation(
                 user_message="按 output_contract 返回一个 JSON 对象，将回复放入 summary 字段；不要附代码围栏。以下是任务数据：\n" + json.dumps(
-                    {k: v for k, v in request.items() if k not in {"rules", "skills", "instruction"}}, ensure_ascii=False),
+                    payload, ensure_ascii=False),
                 system_message=system_message,
+                conversation_history=history,
             )
         except Exception:
             raise ModelFailure(failures[-1] if failures else "execution_failed") from None
@@ -153,6 +170,7 @@ def main():
     runtime = {"backend": "hermes", "version": version, "requested_model": os.environ["MIKASA_MODEL"],
                "api_mode": mode, "tool_count": len(agent.tools or []), "tools": tool_names, "granted_tools": granted_names,
                "reported_model": observed_models[-1] if observed_models else None,
+               "history_messages": len(history), "session_owner": "mikasa",
                "rules_sha256": hashlib.sha256(request["rules"].encode()).hexdigest(),
                "system_sha256": hashlib.sha256(system_message.encode()).hexdigest(),
                "skills": [{k: s[k] for k in ("name", "sha256", "source")} for s in skills]}
