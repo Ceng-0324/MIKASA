@@ -2,7 +2,7 @@
 
 Mikasa 是基于原生 Hermes 运行、通过 CCH 使用模型、拥有持续身份和协作记忆的仿生程序员。身份、工程 skills 和记忆承载协作约定，不另建强制审批业务引擎。
 
-当前包含人格与工程规则 1.1 和 Python 运行时 0.1。专属审批引擎已移除；终端聊天直接使用原生 Hermes CLI，HTTP 聊天使用原生 Gateway，工程使用原生 Docker harness。工程已接入原生持续会话，并与提交账号共用长期记忆，见 [工程会话决定](docs/decisions/0008-engineering-state.md)；宿主外层修复循环已移除，检查与修复由 Hermes 工具循环完成，见 [原生修复决定](docs/decisions/0009-native-repair-loop.md)。任务事实源、依赖与认领已接入 Hermes Kanban 原生 dispatcher，旧 API 及同步工程执行由适配层承接，见 [Kanban 决定](docs/decisions/0010-native-kanban.md)。周期唤醒、Cron、事件与完整备份继续迁移。此前 Hermes 0.21.3/CCH 已完成合成任务真实联调；GitHub、飞书和 VM 尚未完成运行验收。
+当前包含人格与工程规则 1.1 和 Python 运行时 0.1。专属审批引擎已移除；终端聊天直接使用原生 Hermes CLI，HTTP 聊天使用原生 Gateway，工程使用原生 Docker harness。工程已接入原生持续会话，并与提交账号共用长期记忆，见 [工程会话决定](docs/decisions/0008-engineering-state.md)；宿主外层修复循环已移除，检查与修复由 Hermes 工具循环完成，见 [原生修复决定](docs/decisions/0009-native-repair-loop.md)。任务事实源、依赖与认领已接入 Hermes Kanban 原生 dispatcher，旧 API 及同步工程执行由适配层承接，见 [Kanban 决定](docs/decisions/0010-native-kanban.md)。周期审计已迁至 Hermes Cron，见 [Cron 决定](docs/decisions/0011-native-cron.md)；宿主仍负责唤醒，事件与完整备份继续迁移。此前 Hermes 0.21.3/CCH 已完成合成任务真实联调；GitHub、飞书和 VM 尚未完成运行验收。
 
 ## 本地运行
 

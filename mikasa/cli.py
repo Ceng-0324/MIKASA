@@ -80,6 +80,8 @@ def doctor(config, *, probe_model=False, selected_model=None):
                           "identity_note": "响应标识不能独立证明底层模型身份"})
     return {"python": sys.version.split()[0], "git": bool(shutil.which("git")),
             "rules": "loaded", "tasks": Kanban(config).diagnostics(), "skills": skill_inventory(config.root), "repositories": list(config.data.get("repositories", {})),
+            "schedules": {"backend": "hermes_cron", "connection": "not_checked",
+                          "audit_interval_seconds": config.data.get('schedules', {}).get('audit_interval_seconds', 0)},
             "worker_configured": bool(command), "worker_executable": bool(command and shutil.which(command[0])),
             "github_token_present": bool(os.environ.get(config.data.get("github", {}).get("token_env", "MIKASA_GITHUB_TOKEN"))),
             "publishing_enabled": config.data.get("github", {}).get("publish_enabled", False), "model": model,

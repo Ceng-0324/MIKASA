@@ -254,6 +254,21 @@ class Board:
         if operation == 'list':
             return [self.view(r[0]) for r in self.db.execute('''SELECT t.id FROM tasks t
                 JOIN mikasa_ids m ON m.native_id=t.id ORDER BY t.created_at DESC,t.rowid DESC LIMIT 500''')]
+        if operation == 'audit_occurrence':
+            # The adapter lock serializes this check and all creates. Use all
+            # active tasks, not the public API's most recent 500 rows.
+            with sqlite3.connect(self.runtime / 'mikasa.sqlite3') as old:
+                paused = old.execute("SELECT value FROM settings WHERE key='paused'").fetchone()
+            if paused and paused[0] == 'true':
+                return []
+            active = {self.view(r[0])['payload']['repo'] for r in self.db.execute('''
+                SELECT t.id FROM tasks t JOIN mikasa_ids m ON m.native_id=t.id
+                WHERE t.status IN ('todo','ready','running')
+                AND json_extract(m.request_json,'$.payload.kind')='audit' ''')}
+            return [self.create({'kind': 'audit', 'repo': repo, 'title': '定期仓库审计',
+                                 'acceptance': '记录当前 Issue、PR、CI 与可定位的交付风险'},
+                                values['actor'], self.bot, values['key'] + ':' + repo)
+                    for repo in values['repos'] if repo not in active]
         if operation == 'dispatch':
             return self.dispatch(**values)
         if operation == 'recover':

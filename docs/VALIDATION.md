@@ -1,6 +1,12 @@
 # 本体开发验证记录
 
-最新 Kanban 迁移验收见 [0010](decisions/0010-native-kanban.md)：2026-09-21，基线 `f4c930f` 加本阶段变更，`python3.12 -m unittest discover -v` **154 项通过（215.819 秒）**，其中 13 项直接使用固定 Hermes SDK 验证任务迁移、唯一认领、依赖、取消、过期租约、心跳、旧 runner 互斥、数据库配对与双库备份恢复。真实 SDK/Docker/本地模型夹具 `probe_engineering_state.py` **47 项全部通过**，覆盖 Kanban 认领后的工程修复、最终验收、身份/skills、账号记忆与原生续话。HTTP 已验证新原生 ID 的查询与取消，旧 ID 映射保持可读。
+最新 Cron 迁移验收见 [0011](decisions/0011-native-cron.md)：2026-09-21，基线 `56ebb51` 加本阶段变更，`python3.12 -m unittest discover -v` **160 项通过（237.020 秒）**。其中 7 项直接运行固定 Hermes SDK 的 Cron job API、tick、no_agent 脚本子进程、execution 账本与 Kanban 入板，覆盖首次等待与 90 秒间隔、重启时间保持、同次触发重放、活跃审计去重、宿主/原生暂停、配置停启、原生编辑、竞争锁、凭据隔离、脚本失败和派发前退出后的 pending slot 恢复。另用临时干净 venv 仅安装 `requirements-kanban.txt`，同样 **7 项通过（26.902 秒）**，现有 CI 控制面依赖无需增加。
+
+本阶段文档链接/canonical 顺序检查、变更 Python 语法、`python3.12 -m mikasa doctor` 和 `git diff --check` 通过。doctor 新增 schedules.backend=hermes_cron，并明确 connection=not_checked；不读取或迁移实际调度状态。宿主时间槽算法已删除，但单任务 runner 唤醒和同步工程交接仍在；长任务可延迟周期审计。首次启用现在等待一个间隔，重启保持原生下次时间。
+
+本轮使用临时 runtime、固定未修改的 SDK 和本地 GitHub 响应夹具，没有调用真实模型、GitHub/飞书或 FluxCore，没有修改/重启正式 profile，也未运行远端 Linux/Python 3.13 CI。没有重跑上轮 Docker/模型夹具探针，其证据仍属于上一阶段。身份/skills/记忆相关代码未修改，现有回归通过不代表新的真实模型遵循性验证。下一步原生运行事件→完整原生状态备份→GitHub/飞书→VM→聊天工程任务与 FluxCore。现有 backup 仍仅含任务与回执，manifest 已明确排除 scheduler。
+
+上一阶段 Kanban 迁移验收见 [0010](decisions/0010-native-kanban.md)：2026-09-21，基线 `f4c930f` 加本阶段变更，`python3.12 -m unittest discover -v` **154 项通过（215.819 秒）**，其中 13 项直接使用固定 Hermes SDK 验证任务迁移、唯一认领、依赖、取消、过期租约、心跳、旧 runner 互斥、数据库配对与双库备份恢复。真实 SDK/Docker/本地模型夹具 `probe_engineering_state.py` **47 项全部通过**，覆盖 Kanban 认领后的工程修复、最终验收、身份/skills、账号记忆与原生续话。HTTP 已验证新原生 ID 的查询与取消，旧 ID 映射保持可读。
 
 本阶段 `python3.12 scripts/check_docs.py`、`python3.12 -m mikasa doctor`、变更 Python 语法与 `git diff --check` 通过。doctor 报告 Kanban 源码/Python 存在，connection=not_checked、migration=not_run；默认示例模型未配置符合预期。CI 已改为安装固定上游源码及控制面依赖，尚未运行远端 Linux/Python 3.13 矩阵。本次未调用真实 CCH、未写入 GitHub/飞书、未迁移或重启正式 profile；VM、CCH default 分组证据与 FluxCore 联合验收仍未完成。当前仅迁移任务事实源和认领调度，宿主周期唤醒、Cron/事件及完整原生备份继续推进。
 

@@ -59,21 +59,6 @@ class RecoveryTests(BaseTest):
         self.write_config()
         self.assertIn('max_attempts', doctor(self.config)['deprecated_settings'][0])
 
-    def test_periodic_audit_is_idempotent_and_pauses(self):
-        self.data["schedules"] = {"audit_interval_seconds": 60}
-        self.write_config()
-        service = Service(self.config, github=self.github)
-        with patch("mikasa.service.time.time", return_value=120):
-            service.schedule()
-            service.schedule()
-            self.assertEqual(len(service.tasks.list()), 1)
-            self.assertEqual(service.run_once()["state"], "done")
-            self.assertIsNone(service.run_once())
-        service.store.pause(True, self.config.owner)
-        with patch("mikasa.service.time.time", return_value=180):
-            service.schedule()
-        self.assertEqual(len(service.tasks.list()), 1)
-
     def test_publication_recovery_validates_marker(self):
         task = self.submit("plan")
         self.service.run_once()

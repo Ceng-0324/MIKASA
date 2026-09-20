@@ -10,6 +10,7 @@ from .github import GitHub
 from .process import clean_env, git
 from .store import Store
 from .kanban import Kanban
+from .cron import Cron
 from .worker import Worker
 from .workspace import Workspace
 from .agent_tools import run_checks
@@ -101,17 +102,10 @@ class Service:
             return self.tasks.get(task["id"])
 
     def schedule(self):
-        interval = self.config.data.get("schedules", {}).get("audit_interval_seconds", 0)
-        if not interval or self.store.paused():
-            return
-        slot = int(time.time() // interval)
-        active = {t["payload"]["repo"] for t in self.tasks.list()
-                  if t["payload"]["kind"] == "audit" and t["state"] in {"queued", "running"}}
-        for repo in self.config.data["repositories"]:
-            if repo not in active:
-                self.submit({"kind": "audit", "repo": repo, "title": "定期仓库审计",
-                             "acceptance": "记录当前 Issue、PR、CI 与可定位的交付风险"},
-                            self.config.owner, f"audit:{repo}:{slot}")
+        if not self.config.data.get('schedules', {}).get('audit_interval_seconds', 0) and not (self.config.runtime / 'scheduler').exists():
+            return {'executed': 0, 'job': None}
+        self.tasks.call('prepare')
+        return Cron(self.config, self.tasks).tick(paused=self.store.paused())
 
     def execute(self, task, token, lease_lost=None):
         payload = task["payload"]

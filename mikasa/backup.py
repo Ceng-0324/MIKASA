@@ -29,7 +29,7 @@ def backup_tasks(service, destination):
                 output.chmod(0o600)
             manifest = {'version': 1, 'scope': 'tasks-and-receipts',
                         'files': ['mikasa.sqlite3', 'kanban/kanban.db'],
-                        'excluded': ['native', 'engineering', 'workspaces', 'credentials']}
+                        'excluded': ['native', 'engineering', 'scheduler', 'workspaces', 'credentials']}
             marker = target / 'manifest.json'
             marker.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
             marker.chmod(0o600)

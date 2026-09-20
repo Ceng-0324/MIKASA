@@ -46,6 +46,8 @@ python3.12 -m mikasa --config config/local/mikasa.json serve
 python3.12 -m mikasa --config config/local/mikasa.json run
 ```
 
+周期审计由同一个 runner 唤醒 Hermes Cron。设置 `schedules.audit_interval_seconds` 后，首次等待一个间隔才入板；0 关闭。原生 job、下次时间、失败与 execution 保存在配置 runtime 下的 `scheduler/cron/`，暂停和重启语义见 [0011](../decisions/0011-native-cron.md)。不要为该专用 home 再启动另一个原生 ticker。它只生成审计任务，不调用模型或对外投递消息。
+
 在另外的终端提交任务，`owner/repository` 替换成配置允许的仓库：
 
 ```sh
@@ -85,7 +87,7 @@ python3.12 -m mikasa --config config/local/mikasa.json events TASK_ID
 python3.12 -m mikasa --config config/local/mikasa.json backup /secure/backups/mikasa-tasks
 ```
 
-目标目录必须不存在，目录 0700、文件 0600；含 mikasa.sqlite3、kanban/kanban.db 和 manifest.json。manifest 缺失表示不完整；任务运行时拒绝备份。这里只覆盖任务与回执，原生账号/工程 profile 的会话、记忆及工作区须按相同访问级别另行备份。恢复前停止 API 和 runner，同时恢复两份数据库及相应 profile/工作区；不要在服务活跃时覆盖 WAL 数据库。保留当前数据库副本用于回滚。恢复后先运行 doctor，检查中断任务和发布回执，再 resume。
+目标目录必须不存在，目录 0700、文件 0600；含 mikasa.sqlite3、kanban/kanban.db 和 manifest.json。manifest 缺失表示不完整；任务运行时拒绝备份。这里只覆盖任务与回执，scheduler 的原生 Cron 状态、原生账号/工程 profile 的会话、记忆及工作区须按相同访问级别另行备份。恢复前停止 API 和 runner，同时恢复两份数据库及相应 profile/工作区；不要在服务活跃时覆盖 WAL 数据库。保留当前数据库副本用于回滚。恢复后先运行 doctor，检查中断任务和发布回执，再 resume。
 
 ## VM 部署
 

@@ -4,6 +4,8 @@
 
 当前使用版本化 JSON 配置：[examples/mikasa.json](examples/mikasa.json)。结构与权限校验由 `mikasa/config.py` 实现；未知顶层字段和非法身份会被拒绝。默认不启用仓库、模型命令、周期审计或外部发布。
 
+`schedules.audit_interval_seconds` 由 Hermes Cron 实现：0 关闭，60–604800 秒启用，支持非整分钟间隔；首次启用等待一个间隔。重启不重置下次执行时间，未改宿主间隔时保留原生暂停/周期编辑。关闭保留 job 和历史，改间隔后启用新周期。专用 `runtime/scheduler` home 只做无模型的审计入板，详见 [Cron 决定](../docs/decisions/0011-native-cron.md)。
+
 当前分层：
 
 - `examples/`：不含密钥的示例，`version=1`；
