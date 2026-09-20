@@ -45,23 +45,11 @@ def parser():
     complete = commands.add_parser("complete")
     complete.add_argument("task")
     complete.add_argument("--evidence", required=True)
-    reconcile = commands.add_parser("reconcile")
-    reconcile.add_argument("task")
-    reconcile.add_argument("pr", type=int)
     resolve = commands.add_parser("resolve-publication")
     resolve.add_argument("task")
     resolve.add_argument("external_id", type=int)
     commands.add_parser("pause")
     commands.add_parser("resume")
-    provenance = commands.add_parser("provenance")
-    provenance.add_argument("repo")
-    provenance.add_argument("pr", type=int)
-    provenance.add_argument("head")
-    provenance.add_argument("value", choices=["human", "mikasa"])
-    gate = commands.add_parser("gate")
-    gate.add_argument("repo")
-    gate.add_argument("pr", type=int)
-    gate.add_argument("--publish", action="store_true", help="显式发布 mikasa/approval commit status；需启用发布")
     backup = commands.add_parser("backup")
     backup.add_argument("destination")
     return p
@@ -180,14 +168,6 @@ def main(argv=None):
             elif cmd in {"pause", "resume"}:
                 service.store.pause(cmd == "pause", actor)
                 value = {"paused": service.store.paused()}
-            elif cmd == "provenance":
-                value = service.record_provenance(args.repo, args.pr, args.head, args.value, actor)
-            elif cmd == "gate":
-                if args.publish and service.store.paused():
-                    raise MikasaError("运行已暂停，不能发布门禁状态")
-                value = (service.github.publish_gate if args.publish else service.github.gate)(args.repo, args.pr, service.store)
-            elif cmd == "reconcile":
-                value = service.reconcile(args.task, args.pr, actor)
             elif cmd == "resolve-publication":
                 value = service.resolve_publication(args.task, args.external_id, actor)
             elif cmd == "backup":

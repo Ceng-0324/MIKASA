@@ -54,8 +54,7 @@ class GitHub:
         statuses = self.paginate(f"/repos/{repo}/commits/{sha}/statuses")
         latest = {}
         for status in statuses:  # GitHub returns newest status first.
-            if status["context"] != "mikasa/approval":
-                latest.setdefault(status["context"], status)
+            latest.setdefault(status["context"], status)
         ok = bool(checks or latest) and all(
             c.get("status") == "completed" and c.get("conclusion") in {"success", "neutral", "skipped"} for c in checks)
         if any(s["state"] != "success" for s in latest.values()):
@@ -87,43 +86,3 @@ class GitHub:
     def review(self, repo, number, sha, verdict, body):
         return self.request("POST", f"/repos/{repo}/pulls/{number}/reviews", {
             "commit_id": sha, "event": {"APPROVED": "APPROVE", "CHANGES_REQUESTED": "REQUEST_CHANGES", "INCOMPLETE": "COMMENT"}[verdict], "body": body})
-
-    def gate(self, repo, number, store):
-        pr = self.pr(repo, number)
-        head = pr["head"]["sha"]
-        provenance = store.get_provenance(repo, number, head)
-        author = pr["user"]["login"]
-        if author.lower() == self.config.bot.lower():
-            provenance = "mikasa"
-        expected = self.config.owner if provenance == "mikasa" else self.config.bot
-        reasons = []
-        if provenance == "unknown":
-            reasons.append("当前 head 的产出归属未确认")
-        if author.lower() == expected.lower():
-            reasons.append("指定审批人与 PR 作者相同")
-        latest = {}
-        for review in self.paginate(f"/repos/{repo}/pulls/{number}/reviews"):
-            if review["state"] in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}:
-                latest[review["user"]["login"].lower()] = review
-        review = latest.get(expected.lower(), {})
-        if review.get("state") != "APPROVED" or review.get("commit_id") != head:
-            reasons.append("指定审批人尚未批准当前 head")
-        ci = self.checks(repo, head)
-        if not ci["passed"]:
-            reasons.append("CI 未确认通过")
-        if pr["state"] != "open" or pr.get("draft"):
-            reasons.append("PR 未开放或仍为草稿")
-        if self.pr(repo, number)["head"]["sha"] != head:
-            reasons.append("检查期间 head 变化")
-        return {"allowed": not reasons, "head": head, "provenance": provenance, "required_reviewer": expected,
-                "reasons": reasons, "ci": ci, "note": "此结果不自动配置 GitHub 分支保护，也不执行合并"}
-
-    def publish_gate(self, repo, number, store):
-        self.verify_publisher()
-        result = self.gate(repo, number, store)
-        if self.pr(repo, number)["head"]["sha"] != result["head"]:
-            raise MikasaError("发布门禁前 head 变化；需要重新检查")
-        self.request("POST", f"/repos/{repo}/statuses/{result['head']}", {
-            "state": "success" if result["allowed"] else "failure", "context": "mikasa/approval",
-            "description": "Current-head independent approval and CI verified" if result["allowed"] else "Independent approval or CI evidence missing"})
-        return result

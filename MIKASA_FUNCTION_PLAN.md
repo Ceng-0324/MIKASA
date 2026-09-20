@@ -1,6 +1,6 @@
 # Mikasa 功能规划（MVP）
 
-更新日期：2026-09-20。本文区分已确认方向、本地实现和外部验收。人格与工程规则 1.0 已形成，Mikasa 运行时 0.1 已实现下述核心工作流，已通过隔离测试和 Hermes/CCH 合成任务真实联调；账号权限和 VM 运行尚未验收。证据见 [验证记录](docs/VALIDATION.md)。
+更新日期：2026-09-20。本文区分已确认方向、本地实现和外部验收。人格与工程规则 1.1 已形成，Mikasa 运行时 0.1 已实现下述核心工作流，已通过隔离测试和 Hermes/CCH 合成任务真实联调；账号权限和 VM 运行尚未验收。证据见 [验证记录](docs/VALIDATION.md)。
 
 ## 已确认的目标
 
@@ -46,13 +46,13 @@ Mikasa 是基于原生 Hermes、通过 CCH 使用模型、拥有持续身份和�
 
 | 范围 | 本地产物与行为 |
 | --- | --- |
-| 任务事实源 | SQLite 保存任务、依赖、负责人、状态、事件、产出归属及发布回执；幂等提交、单 runner 锁、取消、暂停与中断恢复；执行阶段和工具证据实时入库，失败与超时后保留，旧执行令牌不能污染新任务运行 |
+| 任务事实源 | SQLite 保存任务、依赖、负责人、状态、事件及发布回执；幂等提交、单 runner 锁、取消、暂停与中断恢复；执行阶段和工具证据实时入库，失败与超时后保留，旧执行令牌不能污染新任务运行 |
 | 聊天与模型切换 | CLI 和鉴权 HTTP 聊天；自然语言选择当前会话模型，CCH 负责上游路由，候选模型真实验证成功后持久化；切换保留上下文，不影响工程任务 |
 | 任务操作 | CLI、鉴权 HTTP API、成员查询与需求提交、负责人分配、拆解结果转实施任务、交付证据跟进 |
 | 仓库审计 | GitHub Issue、PR 和 CI 读取与风险记录；可配置周期审计；不自动重复创建 Issue |
 | 模型执行 | 固定版本 Hermes SDK 的 JSON 桥接、canonical 与按任务路由的 skill 注入、指纹证据、Responses/Chat/Messages 协议适配、按任务授予仓库工具与同会话修复循环、宿主调用证据、专用 home、模型环境变量白名单 |
 | 代码实现 | 独立 clone、受限文件变更、配置化验证、默认最多 3 轮修复、本地 commit；生产检查采用无网络容器 |
-| PR 协作 | 当前 head 与目标基线核对、归属记录、自审限制、正式 Review、Issue 与草稿 PR 发布；不自动合并 |
+| PR 协作 | 当前 head、目标基线与 CI 证据核对、Agent 审查结论、正式 Review、Issue 与草稿 PR 发布；不自动合并 |
 | 运行支持 | 健康检查、GitHub 签名 webhook 与重放去重、SQLite 备份、systemd 模板、CI 与隔离集成测试 |
 
 实现设计见 [运行时决定](docs/decisions/0001-runtime.md)，用法见 [操作手册](docs/runbooks/OPERATIONS.md)。源码中的实现不意味着相关外部账号、模型、服务已经接通。
@@ -77,7 +77,7 @@ Mikasa 是基于原生 Hermes、通过 CCH 使用模型、拥有持续身份和�
 - **工程 skills**：已从固定版本 mattpocock/skills 适配拆解、实现/TDD 和审查方法，并加入人格路由 skill；来源、MIT 许可和差异见 [skills/SOURCES.md](skills/SOURCES.md)。真实调用已验证注入与代表性行为，不等同于安装并执行完整上游工具工作流。
 - **模型执行**：Hermes 0.21.3 与 CCH Responses 已完成真实联调，可显式只读选用本地 Codex provider 配置，认证仅在内存传递。请求模型名与服务端返回标识存在差异，见 [联调记录](docs/HERMES_CCH_VALIDATION.md)。Codex/Claude 执行器仍为可选项。
 - **GitHub 身份与协作**：Mikasa 的 GitHub 账号已创建为 [`Mikasa-0910`](https://github.com/Mikasa-0910)；其仓库权限、token 管理、是否需要 GitHub App、正式 Review 能力待验收；不要求专属审批 status 或强制仓库保护。
-- **事实源与记忆**：任务与审批使用 SQLite；聊天已迁移原生 Hermes SessionDB、MEMORY/USER，按账号隔离，旧对话一次性导入。未接入 Hermes Kanban 或其他外部看板。人格变化、权限变化及非任务长期记忆仍遵守 canonical 边界。
+- **事实源与记忆**：任务使用 SQLite；旧审批归属表仅为档案，不再读写；聊天已迁移原生 Hermes SessionDB、MEMORY/USER，按账号隔离，旧对话一次性导入。经确认的长期协作安排可更新记忆；未接入 Hermes Kanban 或其他外部看板。
 - **成员协作**：实现了负责人派发和成员查询；成员名单与真实 token 绑定需配置。周期审计默认关闭，消息提醒与升级节奏仍待决定。
 - **VM 运行**：已提供 Linux systemd、隔离验证和操作手册；目标 VM、模型服务、预装检查镜像、TLS 和平台权限尚未部署验收。
 - **飞书接入**：负责人真实账号绑定、机器人形式、消息权限与事件处理安排在 VM 部署前；聊天工程任务转换安排在最后验收。

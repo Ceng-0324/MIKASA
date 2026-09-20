@@ -53,15 +53,42 @@ def main():
         output = execute([str(python),'-c', '''import os,sys,json
 from pathlib import Path
 sys.path.insert(0,os.environ['MIKASA_HERMES_SOURCE'])
-from hermes_cli.plugins import discover_plugins,get_plugin_manager,get_pre_tool_call_directive
+from hermes_cli.plugins import discover_plugins,get_plugin_manager,get_pre_tool_call_directive,render_system_prompt_sections
 from agent.skill_commands import build_auto_load_prompt
+from tools.memory_tool import memory_tool,load_on_disk_store
 discover_plugins()
 p = next(p for p in get_plugin_manager().list_plugins() if p['name']=='mikasa')
-prompt,loaded,missing=build_auto_load_prompt(home_override=Path(os.environ['HERMES_HOME']))
+home=Path(os.environ['HERMES_HOME'])
+prompt,loaded,missing=build_auto_load_prompt(home_override=home)
+sections=''.join(s.content for s in render_system_prompt_sections({}))
+engineering=[]
+for kind in ('plan','implement','review'):
+ names=['mikasa-persona','mikasa-'+kind]
+ body,found,absent=build_auto_load_prompt(user_config={'skills':{'auto_load':names}},home_override=home)
+ engineering.append(found==names and not absent and all((home/'policy'/name).read_text() in sections for name in ('engineering-contract.md','engineering-workflow.md')))
+store=load_on_disk_store()
+old='Offline fixture: Shawn prefers a short weekly report.'
+new='Offline fixture: Shawn confirmed a detailed weekly report; replaces the earlier short format.'
+added=json.loads(memory_tool(action='add',target='memory',content=old,store=store))
+replaced=json.loads(memory_tool(action='replace',target='memory',old_text=old,content=new,store=store))
+user=json.loads(memory_tool(action='add',target='user',content='Offline fixture: address the user as Shawn.',store=store))
 print(json.dumps({'plugin_loaded':p['enabled'] and not p['error'],
  'native_persona_auto_load':'mikasa-persona' in loaded and not missing and 'do not reconstruct personality' in prompt,
+ 'native_engineering_skills_and_canonical_sections':all(engineering),
+ 'native_memory_convention_update':all(r.get('success') and not r.get('staged') for r in (added,replaced,user)),
  'tool_policy_blocks_side_effects':all(get_pre_tool_call_directive(n,{})[0]=='block' for n in ['terminal','write_file','skill_manage','send_message']),
  'native_memory_and_readonly_skills_allowed':all(get_pre_tool_call_directive(n,{})[0] is None for n in ['memory','skill_view','skills_list'])}))'''])
+        checks.update(json.loads(output))
+        # A fresh SDK process loads updated native memory; no Mikasa shadow store.
+        output = execute([str(python), '-c', '''import os,sys,json
+sys.path.insert(0,os.environ['MIKASA_HERMES_SOURCE'])
+from tools.memory_tool import load_on_disk_store
+store=load_on_disk_store()
+memory=store.format_for_system_prompt('memory') or ''
+user=store.format_for_system_prompt('user') or ''
+print(json.dumps({'native_memory_update_survives_restart':
+ 'Shawn confirmed a detailed weekly report' in memory and 'Shawn prefers a short weekly report' not in memory,
+ 'native_user_profile_survives_restart':'address the user as Shawn' in user}))'''])
         checks.update(json.loads(output))
         report={'hermes_revision':HERMES_REVISION,'checks':checks,'passed':all(checks.values())}
         print(json.dumps(report,ensure_ascii=False,indent=2))

@@ -102,7 +102,6 @@ print(json.dumps({'version':1,'runtime':{'backend':'fixture', 'tool_events':['fo
         git(['update-ref', 'refs/heads/main', base], self.repo)
         self.github.current['base']['sha'] = base
         self.github.current['head']['sha'] = head
-        self.service.store.provenance(REPO, 1, head, 'human', self.config.owner)
         script = self.path / 'reviewer.py'
         script.write_text('''import json, os, socket, sys
 request = json.load(sys.stdin)
@@ -225,7 +224,7 @@ print(json.dumps({'version':1,'runtime':{'backend':'fixture'},'result':{'summary
             (w.path / 'app.py').write_bytes(raw)
             self.assertIn('error', session.call('mikasa_read_file', {'path': 'app.py'}))
 
-    def test_partial_review_read_does_not_unlock_approval(self):
+    def test_partial_review_read_is_evidence_not_approval_policy(self):
         from unittest.mock import patch
         from mikasa.worker import Worker
         self.config.data['worker']['max_context_bytes'] = 1
@@ -237,7 +236,6 @@ print(json.dumps({'version':1,'runtime':{'backend':'fixture'},'result':{'summary
         git(['update-ref', 'refs/pull/1/head', head], self.repo)
         git(['update-ref', 'refs/heads/main', base], self.repo)
         self.github.current['base']['sha'], self.github.current['head']['sha'] = base, head
-        self.service.store.provenance(REPO, 1, head, 'human', self.config.owner)
         for full in [False, True]:
             def execute(worker, task, context, cancelled, *, workspace=None, progress=None):
                 session = ToolSession(workspace, 'review', cancelled)
@@ -253,4 +251,5 @@ print(json.dumps({'version':1,'runtime':{'backend':'fixture'},'result':{'summary
                 self.submit('review', key=f'coverage-{full}', pr=1)
                 task = self.service.run_once()
                 self.assertEqual(task['state'], 'done', task.get('error'))
-                self.assertEqual(task['result']['verdict'], 'APPROVED' if full else 'INCOMPLETE')
+                self.assertEqual(task['result']['verdict'], 'APPROVED')
+                self.assertEqual(any('未读取' in text for text in task['result']['limitations']), not full)

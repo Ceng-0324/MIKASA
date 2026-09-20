@@ -20,8 +20,11 @@ class RuntimeTests(BaseTest):
         self.assertNotEqual(result["result"]["head"], result["result"]["base"])
         self.assertEqual((self.repo / "app.py").read_text(), "VALUE = 1\n")
         self.assertEqual(self.github.writes, [])
-        with self.assertRaises(Conflict):
-            self.service.action(task["id"], "complete", self.config.owner, {"evidence": "I said so"})
+        completed = self.service.action(task["id"], "complete", self.config.owner,
+                                        {"evidence": "本次验收只要求本地提交与测试，已完成"})
+        self.assertEqual(completed["state"], "done")
+        self.assertFalse(self.github.current["merged"])
+        self.assertEqual(self.github.reviews, [])
 
     def test_failed_checks_block_delivery(self):
         self.data["repositories"][REPO]["checks"] = [[sys.executable, "-c", "raise SystemExit(2)"]]
@@ -122,7 +125,7 @@ class RuntimeTests(BaseTest):
             ws.apply([{"path": "new.py", "content": "x"}, {"path": "../bad", "content": "y"}])
         self.assertFalse((ws.path / "new.py").exists())
 
-    def test_review_rechecks_head_and_self_authorship(self):
+    def test_review_keeps_agent_judgment_without_authorship_gate(self):
         base = git(["rev-parse", "HEAD"], self.repo)
         git(["update-ref", "refs/pull/1/head", base], self.repo)
         self.github.current["head"]["sha"] = base
@@ -131,8 +134,10 @@ class RuntimeTests(BaseTest):
         self.submit("review", pr=1)
         task = self.service.run_once()
         self.assertEqual(task["state"], "done")
-        self.assertEqual(task["result"]["verdict"], "INCOMPLETE")
-        self.assertEqual(task["result"]["provenance"], "mikasa")
+        self.assertEqual(task["result"]["verdict"], "APPROVED")
+        self.assertNotIn("provenance", task["result"])
+        self.service.publish(task["id"], self.config.owner)
+        self.assertEqual(self.github.writes[-1][2]["verdict"], "APPROVED")
 
     def test_publish_plan_deduplicates(self):
         task = self.submit("plan")
@@ -142,7 +147,7 @@ class RuntimeTests(BaseTest):
             self.service.publish(task["id"], self.config.owner)
         self.assertEqual(len(self.github.writes), 1)
 
-    def test_review_missing_changed_file_prevents_approval(self):
+    def test_review_missing_files_reported_without_rewriting_judgment(self):
         base = git(["rev-parse", "HEAD"], self.repo)
         (self.repo / "large.txt").write_text("x" * 70000)
         git(["add", "large.txt"], self.repo)
@@ -153,22 +158,40 @@ class RuntimeTests(BaseTest):
         git(["update-ref", "refs/heads/main", base], self.repo)
         self.github.current["head"]["sha"] = head
         self.github.current["base"]["sha"] = base
-        self.service.store.provenance(REPO, 1, head, "human", self.config.owner)
         self.submit("review", pr=1)
         task = self.service.run_once()
         self.assertEqual(task["state"], "done")
-        self.assertEqual(task["result"]["verdict"], "INCOMPLETE")
+        self.assertEqual(task["result"]["verdict"], "APPROVED")
+        self.assertTrue(any("未读取" in text for text in task["result"]["limitations"]))
 
     def test_review_complete_human_change_can_approve(self):
         base = git(["rev-parse", "HEAD"], self.repo)
         git(["update-ref", "refs/pull/1/head", base], self.repo)
         self.github.current["head"]["sha"] = base
         self.github.current["base"]["sha"] = base
-        self.service.store.provenance(REPO, 1, base, "human", self.config.owner)
         self.submit("review", pr=1)
         task = self.service.run_once()
         self.assertEqual(task["state"], "done")
         self.assertEqual(task["result"]["verdict"], "APPROVED")
+
+    def test_review_ci_evidence_does_not_choose_verdict_but_cannot_go_stale(self):
+        base = git(["rev-parse", "HEAD"], self.repo)
+        git(["update-ref", "refs/pull/1/head", base], self.repo)
+        self.github.current["head"]["sha"] = base
+        self.github.current["base"]["sha"] = base
+        self.github.passed = False
+        self.submit("review", pr=1)
+        task = self.service.run_once()
+        self.assertEqual(task["result"]["verdict"], "APPROVED")
+        self.assertFalse(task["result"]["ci"]["passed"])
+        self.assertTrue(task["result"]["limitations"])
+        self.github.passed = True
+        with self.assertRaisesRegex(Conflict, "CI 证据已变化"):
+            self.service.publish(task["id"], self.config.owner)
+        self.assertEqual(self.github.writes, [])
+        self.github.passed = False
+        self.service.publish(task["id"], self.config.owner)
+        self.assertEqual(self.github.writes[-1][2]["verdict"], "APPROVED")
 
     def test_uncertain_publication_not_retried(self):
         task = self.submit("plan")

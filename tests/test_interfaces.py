@@ -9,7 +9,7 @@ from unittest.mock import patch
 from mikasa.errors import Conflict, Forbidden, MikasaError
 from mikasa.github import GitHub
 from mikasa.server import authenticate, make_server, webhook
-from tests.support import BaseTest, FakeGitHub, REPO, SHA
+from tests.support import BaseTest, REPO, SHA
 
 
 class InterfaceTests(BaseTest):
@@ -62,38 +62,16 @@ class InterfaceTests(BaseTest):
                 response = connection.getresponse()
                 self.assertEqual(response.status, 400)
                 response.read()
+                for path in ("/provenance", f"/tasks/{task['id']}/reconcile"):
+                    connection.request("POST", path, "{}", headers)
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, 404)
+                    response.read()
                 connection.close()
             finally:
                 server.shutdown()
                 server.server_close()
                 thread.join(timeout=3)
-
-    def test_gate_requires_correct_reviewer_and_current_sha(self):
-        adapter = self.github
-        self.service.store.provenance(REPO, 1, SHA, "human", self.config.owner)
-        adapter.reviews = [{"user": {"login": self.config.bot}, "state": "APPROVED", "commit_id": "c" * 40}]
-        gate = GitHub.gate(adapter_with_config(adapter, self.config), REPO, 1, self.service.store)
-        self.assertFalse(gate["allowed"])
-        adapter.reviews[0]["commit_id"] = SHA
-        self.assertTrue(GitHub.gate(adapter, REPO, 1, self.service.store)["allowed"])
-        adapter.reviews.append({"user": {"login": self.config.bot}, "state": "CHANGES_REQUESTED", "commit_id": SHA})
-        self.assertFalse(GitHub.gate(adapter, REPO, 1, self.service.store)["allowed"])
-
-    def test_gate_unknown_authorship_and_bot_self_approval(self):
-        adapter = adapter_with_config(self.github, self.config)
-        adapter.reviews = [{"user": {"login": self.config.bot}, "state": "APPROVED", "commit_id": SHA}]
-        self.assertFalse(GitHub.gate(adapter, REPO, 1, self.service.store)["allowed"])
-        adapter.current["user"]["login"] = self.config.bot
-        gate = GitHub.gate(adapter, REPO, 1, self.service.store)
-        self.assertFalse(gate["allowed"])
-        self.assertEqual(gate["required_reviewer"], self.config.owner)
-        adapter.reviews.append({"user": {"login": self.config.owner}, "state": "APPROVED", "commit_id": SHA})
-        self.assertTrue(GitHub.gate(adapter, REPO, 1, self.service.store)["allowed"])
-
-    def test_cannot_record_bot_pr_as_human(self):
-        self.github.current["user"]["login"] = self.config.bot
-        with self.assertRaises(Forbidden):
-            self.service.record_provenance(REPO, 1, SHA, "human", self.config.owner)
 
     def test_publish_rejects_stale_review(self):
         task = self.submit("review", pr=1)
@@ -110,8 +88,3 @@ class InterfaceTests(BaseTest):
                 GitHub(self.config).request("GET", "/user")
         with self.assertRaises(Forbidden):
             GitHub(self.config).verify_publisher()
-
-
-def adapter_with_config(adapter, config):
-    adapter.config = config
-    return adapter

@@ -10,6 +10,6 @@
 
 [0004：原生 Hermes Gateway](0004-native-hermes-runtime.md) 取代 0003 中的会话归属；当前聊天使用原生 SessionDB、记忆、skills 和运行取消。
 
-[0005：原生工程工具](0005-native-engineering-tools.md) 将工程文件、搜索、修改与终端交给 Hermes Docker 工具，保留 Mikasa 快照验收和独立审批。
+[0005：原生工程工具](0005-native-engineering-tools.md) 将工程文件、搜索、修改与终端交给 Hermes Docker 工具，保留 Mikasa 快照验收；当时的独立审批引擎现已由 0006 替代。
 
 [0006：原生 Hermes 与 Mikasa 身份配置](0006-hermes-native-mikasa.md) 是当前目标架构，记录自研收窄清单、规则与记忆的职责及逐步迁移验收。

@@ -11,4 +11,4 @@ Deliver one complete vertical change, including necessary regression tests. When
 
 When `context.repair` is present, use its actual failed command, output and current diff to identify the failure before changing code. Preserve previous valid work and make the smallest complete correction. Missing context is a limitation to report, not permission to invent files or APIs.
 
-The host owns filesystem validation, test execution, repair limits, commit and PR publication. Never write approval rules, credentials or tool configuration, and never claim independent approval of your own output.
+The host owns filesystem validation, test execution, repair limits, commit and PR publication. Respect the configured workspace/tool boundaries, never write credentials, and report self-checks accurately. Follow the latest confirmed review arrangement from the conversation and persistent memory; the host does not enforce a designated reviewer.

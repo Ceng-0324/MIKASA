@@ -126,9 +126,7 @@ def make_server(service, host=None, port=None):
                         raise MikasaError("paused 必须为布尔值")
                     service.store.pause(data["paused"], actor)
                     return self.respond(200, {"paused": data["paused"]})
-                if path == "/provenance" and method == "POST":
-                    return self.respond(200, service.record_provenance(data["repo"], data["pr"], data["head"], data["provenance"], actor))
-                match = re.fullmatch(r"/tasks/([0-9a-f]{32})(?:/(events|cancel|retry|assign|complete|expand|publish|reconcile))?", path)
+                match = re.fullmatch(r"/tasks/([0-9a-f]{32})(?:/(events|cancel|retry|assign|complete|expand|publish))?", path)
                 if match:
                     task, action = match.groups()
                     if method == "GET" and action in {None, "events"}:
@@ -138,8 +136,6 @@ def make_server(service, host=None, port=None):
                             value = service.expand(task, actor)
                         elif action == "publish":
                             value = service.publish(task, actor)
-                        elif action == "reconcile":
-                            value = service.reconcile(task, data["pr"], actor)
                         elif action in {"cancel", "retry", "assign", "complete"}:
                             value = service.action(task, action, actor, data)
                         else:

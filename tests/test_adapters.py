@@ -33,8 +33,8 @@ class AdapterTests(BaseTest):
                     {"context": "build", "state": "success"}, {"context": "build", "state": "failure"}]
         with patch.object(github, "request", side_effect=request):
             result = github.checks(REPO, SHA)
-        self.assertTrue(result["passed"])
-        self.assertEqual(len(result["statuses"]), 1)
+        self.assertFalse(result["passed"])
+        self.assertEqual(len(result["statuses"]), 2)
         with patch.object(github, "request", return_value=list(range(100))) as call:
             with self.assertRaisesRegex(MikasaError, "2000"):
                 github.paginate("/example")
@@ -44,20 +44,6 @@ class AdapterTests(BaseTest):
         github = GitHub(self.config)
         with patch.object(github, "paginate", return_value=[]):
             self.assertFalse(github.checks(REPO, SHA)["passed"])
-
-    def test_gate_publication_binds_current_head(self):
-        github = GitHub(self.config)
-        verdict = {"allowed": True, "head": SHA}
-        with patch.object(github, "verify_publisher"), patch.object(github, "gate", return_value=verdict), \
-                patch.object(github, "pr", return_value={"head": {"sha": SHA}}), patch.object(github, "request") as request:
-            github.publish_gate(REPO, 1, self.service.store)
-            self.assertEqual(request.call_args.args[1], f"/repos/{REPO}/statuses/{SHA}")
-            self.assertEqual(request.call_args.args[2]["context"], "mikasa/approval")
-        with patch.object(github, "verify_publisher"), patch.object(github, "gate", return_value=verdict), \
-                patch.object(github, "pr", return_value={"head": {"sha": "b" * 40}}), patch.object(github, "request") as request:
-            with self.assertRaises(MikasaError):
-                github.publish_gate(REPO, 1, self.service.store)
-            request.assert_not_called()
 
     def test_http_request_never_redirects_credentials(self):
         github = GitHub(self.config)

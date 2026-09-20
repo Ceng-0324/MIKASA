@@ -1,7 +1,6 @@
 import base64
 import fcntl
 import json
-import re
 import time
 from pathlib import Path
 
@@ -55,9 +54,6 @@ class Service:
             if data.get("assignee") not in {self.config.bot, self.config.owner, *self.config.data.get("members", [])}:
                 raise MikasaError("执行者未配置")
         if action == "complete":
-            task = self.store.get(task_id)
-            if task["payload"]["kind"] == "implement" and task["assignee"] == self.config.bot:
-                raise Conflict("Mikasa 实现任务必须由 reconcile 验证 PR 审批与合并，不能手动标记完成")
             if not isinstance(data.get("evidence"), str) or not data["evidence"].strip():
                 raise MikasaError("完成任务必须记录证据")
         return self.store.transition(task_id, action, actor, assignee=data.get("assignee"), evidence=data.get("evidence"))
@@ -132,9 +128,6 @@ class Service:
         if pr:
             context["pr"] = {"number": payload["pr"], "title": pr["title"], "body": pr.get("body"), "author": pr["user"]["login"]}
             context["ci"] = self.github.checks(repo, workspace.head)
-            context["provenance"] = self.store.get_provenance(repo, payload["pr"], workspace.head)
-            if pr["user"]["login"].lower() == self.config.bot.lower():
-                context["provenance"] = "mikasa"
         result = self.worker.execute(task, context, cancelled, workspace=workspace, progress=progress)
         if getattr(self.worker, "last_runtime", None):
             result["execution"] = self.worker.last_runtime
@@ -146,10 +139,6 @@ class Service:
         if kind == "review":
             current = self.github.pr(repo, payload["pr"])
             result["ci"] = context["ci"]
-            result["provenance"] = context["provenance"]
-            if context["provenance"] != "human":
-                result["verdict"] = "INCOMPLETE"
-                result["limitations"].append("自作产出仅提供自检；未知产出归属需要负责人确认")
             read_paths = {event["path"] for event in result.get("execution", {}).get("tool_events", [])
                           if event.get("tool") in {"mikasa_read_file", "read_file"} and event.get("ok") and event.get("complete") is True
                           and event.get("revision") == workspace.head}
@@ -157,8 +146,6 @@ class Service:
             if unread:
                 result["limitations"].append("仓库上下文仍省略文件：" + ", ".join(sorted(unread)))
             if set(context["omitted_changed"]) - read_paths or not context["ci"]["passed"]:
-                if result["verdict"] == "APPROVED":
-                    result["verdict"] = "INCOMPLETE"
                 result["limitations"].append("存在未读取的变更文件或 CI 尚未提供通过证据")
             if current["head"]["sha"] != workspace.head or current["base"]["sha"] != workspace.base:
                 raise MikasaError("审查期间 PR head 或目标分支发生变化")
@@ -207,7 +194,6 @@ class Service:
         result["head"] = workspace.commit()
         progress({"phase": "commit", "status": "completed", "head": result["head"]})
         result["branch"] = f"mikasa/task-{task['id']}"
-        result["provenance"] = "mikasa"
         return result, "awaiting_review"
 
     def publish(self, task_id, actor):
@@ -226,11 +212,9 @@ class Service:
             current = self.github.pr(repo, payload["pr"])
             if current["head"]["sha"] != result["head"] or current["base"]["sha"] != result["base"]:
                 raise Conflict("PR 已变化，必须重新审查")
-            provenance = self.store.get_provenance(repo, payload["pr"], result["head"])
-            if result["verdict"] != "INCOMPLETE" and (provenance != "human" or current["user"]["login"].lower() == self.config.bot.lower()):
-                raise Forbidden("禁止对自作或归属未知的产出发出审查决定")
-            if result["verdict"] == "APPROVED" and not self.github.checks(repo, result["head"])["passed"]:
-                raise Conflict("CI 状态已变化，不能发布批准")
+            current_ci = self.github.checks(repo, result["head"])
+            if current_ci != result["ci"]:
+                raise Conflict("CI 证据已变化，必须重新审查")
         self.store.reserve_publication(task_id)
         try:
             marker = f"<!-- mikasa-task:{task_id} -->"
@@ -254,8 +238,7 @@ class Service:
                 git(["push", f"https://github.com/{repo}.git", f"{result['head']}:refs/heads/{result['branch']}"], path, env=env)
                 published = self.github.request("POST", f"/repos/{repo}/pulls", {"title": payload["title"], "head": result["branch"],
                     "base": self.config.repo(repo)["base"], "draft": True,
-                    "body": result["summary"] + "\n\n自检说明，等待 Ceng-0324 审批。\n\n验证：\n```json\n" + json.dumps(result["checks"], ensure_ascii=False) + "\n```\n\n" + marker})
-                self.store.provenance(repo, published["number"], result["head"], "mikasa", actor)
+                    "body": result["summary"] + "\n\n实现与验证说明；后续审查按当前协作约定进行。\n\n验证：\n```json\n" + json.dumps(result["checks"], ensure_ascii=False) + "\n```\n\n" + marker})
             receipt = {k: published[k] for k in ("id", "number", "html_url") if k in published}
             self.store.publication(task_id, "sent", receipt)
             return receipt
@@ -284,7 +267,6 @@ class Service:
         if kind == "implement":
             if record["head"]["sha"] != task["result"]["head"]:
                 raise Conflict("PR 产出版本不匹配")
-            self.store.provenance(repo, external_id, task["result"]["head"], "mikasa", actor)
         if kind == "review" and record.get("commit_id") != task["result"]["head"]:
             raise Conflict("Review 版本不匹配")
         receipt = {k: record[k] for k in ("id", "number", "html_url") if k in record}
@@ -297,33 +279,3 @@ class Service:
                             "依据：\n" + "\n".join(result["basis"]), "发现：\n" + "\n".join(result["findings"]),
                             "验证：\n```json\n" + json.dumps(result["ci"], ensure_ascii=False) + "\n```",
                             "限制：\n" + "\n".join(result["limitations"])))
-
-    def record_provenance(self, repo, number, head, value, actor):
-        self.config.authorize(actor, owner=True)
-        self.config.repo(repo)
-        if not re.fullmatch(r"[0-9a-f]{40}", head):
-            raise MikasaError("head 必须为完整 SHA")
-        pr = self.github.pr(repo, number)
-        if pr["head"]["sha"] != head:
-            raise Conflict("PR head 已变化")
-        if value == "human" and pr["user"]["login"].lower() == self.config.bot.lower():
-            raise Forbidden("Mikasa 创建的 PR 不得标为人类产出")
-        self.store.provenance(repo, number, head, value, actor)
-        return {"repo": repo, "pr": number, "head": head, "provenance": value}
-
-    def reconcile(self, task_id, number, actor):
-        self.config.authorize(actor, owner=True)
-        task = self.store.get(task_id)
-        if task["state"] != "awaiting_review" or task["payload"]["kind"] != "implement":
-            raise Conflict("任务未处于实现待审阶段")
-        repo, head = task["payload"]["repo"], task["result"]["head"]
-        pr = self.github.pr(repo, number)
-        if pr["head"]["sha"] != head or pr["user"]["login"].lower() != self.config.bot.lower():
-            raise Conflict("PR 与本任务产出不匹配")
-        reviews = self.github.paginate(f"/repos/{repo}/pulls/{number}/reviews")
-        decisions = [r for r in reviews if r["user"]["login"].lower() == self.config.owner.lower() and r["state"] in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}]
-        if not decisions or decisions[-1]["state"] != "APPROVED" or decisions[-1]["commit_id"] != head:
-            raise Conflict("负责人尚未批准当前产出")
-        if not pr.get("merged") or not self.github.checks(repo, head)["passed"]:
-            raise Conflict("PR 尚未合并或 CI 未通过")
-        return self.store.transition(task_id, "complete", actor, evidence=pr["html_url"])

@@ -49,17 +49,13 @@ class Store:
                     UNIQUE(chat_id, request_key)
                 );
                 CREATE TABLE IF NOT EXISTS deliveries (id TEXT PRIMARY KEY, received REAL NOT NULL);
-                CREATE TABLE IF NOT EXISTS reviews (
-                    repo TEXT NOT NULL, number INTEGER NOT NULL, head TEXT NOT NULL,
-                    provenance TEXT NOT NULL, actor TEXT NOT NULL, updated REAL NOT NULL,
-                    PRIMARY KEY(repo, number)
-                );
                 CREATE TABLE IF NOT EXISTS publications (
                     task_id TEXT PRIMARY KEY, state TEXT NOT NULL, result TEXT, updated REAL NOT NULL
                 );
                 PRAGMA user_version=1;
             """)
-            # Additive upgrade of the early native migration; old transcripts remain archives.
+            # Old reviews tables and transcripts remain archives; no governance reads/writes.
+            # Additive upgrade of the early native migration.
             columns = {r[1] for r in db.execute("PRAGMA table_info(chat_requests)")}
             for name, kind in (("request_model", "TEXT"), ("request_revision", "INTEGER"), ("active_run", "TEXT")):
                 if name not in columns:
@@ -218,22 +214,6 @@ class Store:
             if inserted:
                 self.event(db, None, "github_event", "github", data)
             return bool(inserted)
-
-    def provenance(self, repo, number, head, value, actor):
-        if value not in {"human", "mikasa"}:
-            raise MikasaError("产出归属只能为 human 或 mikasa")
-        with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            previous = db.execute("SELECT provenance FROM reviews WHERE repo=? AND number=?", (repo, number)).fetchone()
-            if previous and previous[0] == "mikasa" and value != "mikasa":
-                raise Conflict("已经由 Mikasa 参与实现的 PR 不能重新归类为纯人类产出")
-            db.execute("INSERT OR REPLACE INTO reviews VALUES(?,?,?,?,?,?)", (repo, number, head, value, actor, time.time()))
-            self.event(db, None, "provenance", actor, {"repo": repo, "number": number, "head": head, "value": value})
-
-    def get_provenance(self, repo, number, head):
-        with self.connect() as db:
-            row = db.execute("SELECT provenance,head FROM reviews WHERE repo=? AND number=?", (repo, number)).fetchone()
-            return row[0] if row and (row[0] == "mikasa" or row[1] == head) else "unknown"
 
     def reserve_publication(self, task):
         with self.connect() as db:

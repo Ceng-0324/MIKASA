@@ -22,11 +22,9 @@ HTTP 默认监听 `127.0.0.1:8765`。除健康检查和单独验签的 GitHub we
 | `POST /tasks/{id}/cancel` | 取消，失效运行令牌 | 负责人 |
 | `POST /tasks/{id}/retry` | 重试失败、阻塞或取消任务 | 负责人 |
 | `POST /tasks/{id}/assign` | `{"assignee":"账号"}` | 负责人 |
-| `POST /tasks/{id}/complete` | 人工任务附 `evidence` 完成 | 负责人；不能跳过 Mikasa 实现的审批 |
+| `POST /tasks/{id}/complete` | 附 `evidence` 完成任务，包含本地实现交付 | 负责人 |
 | `POST /tasks/{id}/expand` | 拆解结果转实施任务，保留依赖 | 负责人 |
 | `POST /tasks/{id}/publish` | 发布 Issue、草稿 PR 或正式 Review | 负责人；需额外启用发布配置 |
-| `POST /tasks/{id}/reconcile` | `{"pr":123}` 核对实现的审批、CI 和合并 | 负责人 |
-| `POST /provenance` | `repo`、`pr`、`head`、`provenance` | 负责人 |
 | `POST /control` | `{"paused":true}` 或 `false` | 负责人 |
 | `POST /webhooks/github` | HMAC SHA-256 签名校验和 delivery 去重 | GitHub webhook secret |
 
@@ -51,7 +49,7 @@ POST 请求体最多 1 MB，必须使用 Content-Length；错误分别返回 400
 
 `server.auto_review=true` 时，PR opened/reopened/synchronize/ready_for_review 事件创建只读审查任务，结果先留为本地草稿。webhook 文本不会自动触发代码实施或发布。定期审计由 `schedules.audit_interval_seconds` 控制，默认 0 关闭。
 
-发布歧义恢复仅提供本地 CLI `resolve-publication TASK EXTERNAL_ID`，读取外部记录并核对作者、任务标记和提交，不盲目重发。`gate REPO PR` 输出当前审批政策检查结果，加 `--publish` 才发布 `mikasa/approval` commit status，仍需显式启用外部发布；`backup PATH` 使用 SQLite 一致性备份。
+发布歧义恢复仅提供本地 CLI `resolve-publication TASK EXTERNAL_ID`，读取外部记录并核对作者、任务标记和提交，不盲目重发。`gate`、`provenance`、`reconcile` 及对应 HTTP 接口已移除；旧接口返回 404，旧归属数据仅保留为档案。`backup PATH` 使用 SQLite 一致性备份。
 
 执行时无需等待最终结果即可读取 `GET /tasks/{id}/events` 或 CLI `events TASK_ID`。`kind=execution` 的 `data` 包含 `phase`（workspace/worker/tool/validation/commit）、`status`（started/completed，worker 还可能 failed）。worker 与其工具事件共享 `invocation`，工具另有 `call` 序号；completed 表示该调用已返回，是否成功看 `ok` 或检查退出码，不代表任务已交付。
 

@@ -12,6 +12,22 @@ from tests.support import BaseTest, REPO, SHA
 
 
 class RecoveryTests(BaseTest):
+    def test_old_approval_archive_survives_without_affecting_new_tasks(self):
+        from mikasa.store import Store
+        with self.service.store.connect() as db:
+            self.assertIsNone(db.execute("SELECT name FROM sqlite_master WHERE name='reviews'").fetchone())
+            db.execute("CREATE TABLE reviews (repo,number,head,provenance,actor,updated)")
+            db.execute("INSERT INTO reviews VALUES(?,?,?,?,?,?)", (REPO, 1, SHA, "mikasa", self.config.owner, 0))
+        restored = Store(self.config.runtime)
+        with restored.connect() as db:
+            self.assertEqual(tuple(db.execute("SELECT * FROM reviews").fetchone()),
+                             (REPO, 1, SHA, "mikasa", self.config.owner, 0))
+        task = self.submit()
+        self.service.run_once()
+        completed = self.service.action(task["id"], "complete", self.config.owner, {"evidence": "本地验收完成"})
+        self.assertEqual(completed["state"], "done")
+        self.assertEqual(self.github.writes, [])
+
     def test_repair_uses_failed_check_evidence(self):
         calls = []
 
@@ -28,12 +44,6 @@ class RecoveryTests(BaseTest):
         self.assertNotEqual(calls[1]["repair"]["checks"][0]["code"], 0)
         self.assertEqual(len(result["result"]["attempts"]), 2)
 
-    def test_provenance_cannot_be_laundered_by_new_head(self):
-        self.service.store.provenance(REPO, 1, SHA, "mikasa", self.config.owner)
-        self.assertEqual(self.service.store.get_provenance(REPO, 1, "b" * 40), "mikasa")
-        with self.assertRaises(Conflict):
-            self.service.store.provenance(REPO, 1, "b" * 40, "human", self.config.owner)
-
     def test_periodic_audit_is_idempotent_and_pauses(self):
         self.data["schedules"] = {"audit_interval_seconds": 60}
         self.write_config()
@@ -48,19 +58,6 @@ class RecoveryTests(BaseTest):
         with patch("mikasa.service.time.time", return_value=180):
             service.schedule()
         self.assertEqual(len(service.store.list()), 1)
-
-    def test_reconcile_requires_independent_approval_and_merge(self):
-        task = self.submit()
-        result = self.service.run_once()["result"]
-        self.github.current["head"]["sha"] = result["head"]
-        self.github.current["user"]["login"] = self.config.bot
-        with self.assertRaises(Conflict):
-            self.service.reconcile(task["id"], 1, self.config.owner)
-        self.github.reviews = [{"user": {"login": self.config.owner}, "state": "APPROVED", "commit_id": result["head"]}]
-        with self.assertRaises(Conflict):
-            self.service.reconcile(task["id"], 1, self.config.owner)
-        self.github.current["merged"] = True
-        self.assertEqual(self.service.reconcile(task["id"], 1, self.config.owner)["state"], "done")
 
     def test_publication_recovery_validates_marker(self):
         task = self.submit("plan")

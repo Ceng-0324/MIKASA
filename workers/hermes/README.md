@@ -62,7 +62,7 @@ Mikasa 将当前暂存树（实现/修复）或固定 PR head（计划/审查）
 
 工程 profile 位于 `runtime/engineering/<task-id>`，原生记忆与 SessionDB 按任务隔离，修复轮沿用任务记忆；不会污染日常聊天账号记忆。SOUL 和任务对应 skills 由 canonical 与受信任 manifest 生成，pre_api_request 验证实际请求内的完整身份、规则与 skill 正文。只准加载本任务的可信 skills，不开放 skill_manage、委派、浏览器、外部消息或发布工具。每次至多 24 次原生迭代、128 个工具证据事件；时间仍由 worker.timeout 限制。
 
-工程返回严格 JSON，原生实现必须通过工具修改快照并返回 `changes: []`。宿主保留任务、固定 revision、检查、产出归属、独立审批和发布责任；不会自动批准或合并自己的产出。没有工作区的诊断调用仍为无工具结构化请求，不代表工程执行。
+工程返回严格 JSON，原生实现必须通过工具修改快照并返回 `changes: []`。宿主暂保留任务、固定 revision、检查和发布适配；审查分工由 Agent 依据规则与记忆判断，不再由宿主归属分类或指定审批人引擎执行。没有工作区的诊断调用仍为无工具结构化请求，不代表工程执行。
 
 可配置的第三方 worker 暂保留 version=1 的宿主 RPC 协议（旧 mikasa_list/read/search/apply）；它是已公开进程协议的兼容对象，内置 Hermes 工程路径不使用它。待第三方协议升级、调用方与协议测试一起迁移后删除该兼容实现，不提供 Hermes 新旧后端切换开关。
 

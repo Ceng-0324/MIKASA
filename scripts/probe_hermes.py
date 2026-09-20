@@ -145,7 +145,6 @@ def readonly_tools(config, kind):
                "acceptance": "必须先使用工具列文件、搜索 clamp 并完整读取 calc.py；负数应为0，大于10应为10，区间内值保持。根据实际源码判断，不修改文件。"}
     if kind == "review":
         payload["pr"] = 1
-        service.store.provenance(payload["repo"], 1, head, "human", local.owner)
     task = service.submit(payload, local.owner, "live-readonly-tools")
     finished = service.run_once()
     result = finished.get("result") or {}
@@ -202,7 +201,7 @@ def probes():
              "files": {"README.md": "程序已有 ledger list，条目含 date、amount、note；导出必须保留金额精度。"}}),
         ("review", "review", "审查平均值函数变更，测试虽绿也需要核对空输入的验收条件。",
          "mean([]) 应返回 0；非空数组返回算术平均值。", {
-             "base": "a" * 40, "head": "b" * 40, "provenance": "human",
+             "base": "a" * 40, "head": "b" * 40,
              "baseline_rules": {"AGENTS.md": "公共函数必须满足已声明的边界输入行为。"},
              "files": {"calc.py": "def mean(values):\n    return sum(values) / len(values)\n"},
              "diff": "+def mean(values):\n+    return sum(values) / len(values)\n",

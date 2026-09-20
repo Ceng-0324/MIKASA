@@ -57,19 +57,19 @@ python3.12 -m mikasa --config config/local/mikasa.json events TASK_ID
 
 运行期间可重复查询 `events TASK_ID`，读取 `kind=execution` 的阶段与工具记录，不必等待任务结束。worker/tool 的 `invocation` 区分每次模型调用；tool 的 `call` 配对 started/completed。completed 只表示调用返回，检查是否成功看退出码。失败、超时、进程中断后已记录事件继续保留；最后只有 started 时，副作用状态未知，应核对工作区后再重试。
 
-拆解完成后 `expand TASK_ID` 生成具有依赖关系的实施任务。`assign TASK_ID ACCOUNT` 明确移交；交给人类的任务不会被 runner 自动接管。分析报告的 `done` 表示报告完成，代码任务的 `awaiting_review` 表示已生成并验证本地提交，尚未完成独立审批和交付。
+拆解完成后 `expand TASK_ID` 生成具有依赖关系的实施任务。`assign TASK_ID ACCOUNT` 明确移交；交给人类的任务不会被 runner 自动接管。分析报告的 `done` 表示报告完成，代码任务的 `awaiting_review` 表示已生成并验证本地提交、等待后续协作处理。它是过渡任务状态，不是指定审批人的硬门禁；可按本次验收约定执行 `complete TASK_ID --evidence '实际交付依据'`，无需绑定 PR 合并。
 
 ## 发布与审批
 
 默认 `github.publish_enabled=false`。在获得外部写入授权并配置 `Mikasa-0910` 账号 token 后才启用。`publish TASK_ID` 需要负责人 CLI 或 API 身份；首次发布前核验 token 的 GitHub login。
 
 - plan 发布为包含完整拆解的单个 Issue；不会一次创建大量未确认的子 Issue。
-- implement 推送 `mikasa/task-<任务ID>` 分支并创建草稿 PR，记录 Mikasa 产出；不会合并。
-- review 发布正式 Review 及可阅读的结论。纯人类实现需先通过 `provenance REPO PR HEAD human` 确认当前 head 归属；任何 Mikasa 参与实现的 PR 保留为 Mikasa 产出。
+- implement 推送 `mikasa/task-<任务ID>` 分支并创建草稿 PR，提供实现与验证说明；不会合并。
+- review 发布 Agent 给出的正式 Review 及可阅读结论，不要求先登记产出归属。默认审查安排由工程规则、skills 和已确认的记忆指导；GitHub 自身权限与 Review 限制仍生效。
 
-发布前核对当前版本，head 或目标基线变化就重新审查。`gate REPO PR` 仅输出政策检查，`gate REPO PR --publish` 显式发布 `mikasa/approval` commit status；均不配置平台保护。门禁的 CI 判定排除自身 status，避免循环依赖。部署时需要将该 context 配为 required、绑定可信发布来源并要求分支更新，同时在 PR/Review/CI 变化后重新检查；这些平台设置需负责人另行授权和验证，不能用文档或 CLI 结果声称已强制执行。
+发布前核对 head、目标基线及 CI 证据；发生变化需重新审查，避免发布过期报告。宿主附上缺失文件/CI 证据的限制说明，但不改写 Agent 的结论，也不选择必须批准的人。审查结论不再保证经过 Mikasa 专属机器政策校验。
 
-Mikasa 实现的 PR 由 `Ceng-0324` 正式批准、有权限的人手动合并后，执行 `reconcile TASK_ID PR_NUMBER`。运行时核对 head、PR 作者、负责人当前审批、CI 和合并事实后才把任务置为 done。
+`gate`、`provenance`、`reconcile` 已删除，不再发布 `mikasa/approval` status。已有数据库的 reviews 表只保留历史内容，不再读写。若某个外部仓库曾手工要求该 status，需要仓库管理员另行调整平台配置；本次没有读取或修改远端保护规则。现有 CI status 统一按实际状态报告，不隐去旧审批 status。
 
 ## 暂停、失败和恢复
 
@@ -93,4 +93,4 @@ python3.12 -m mikasa --config config/local/mikasa.json backup /secure/backups/mi
 
 模板包含只读系统目录、PrivateTmp、NoNewPrivileges、0077 umask 和进程组终止。模板尚未在目标 Linux VM 验证；部署时运行 `systemd-analyze verify`，确认 Python 路径、Docker 访问、可写目录、网络和 TLS 后再安装启用。停止服务由 systemd 杀死完整控制组；容器异常残留需按 `mikasa-check-` 前缀检查清理。
 
-本体本地测试通过后再将 FluxCore 加入运行配置，执行只读审计和无破坏性任务验收。真实模型响应、GitHub 写权限、独立审批、仓库强制门禁和 VM 恢复分别验收，不以夹具结果替代。
+本体本地测试通过后再将 FluxCore 加入运行配置，执行只读审计和无破坏性任务验收。真实模型响应、GitHub 写权限、协作审查流程和 VM 恢复分别验收，不以夹具结果替代。

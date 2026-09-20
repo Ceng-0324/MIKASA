@@ -1,6 +1,8 @@
 # Mikasa
 
-Mikasa 是基于原生 Hermes 运行、通过 CCH 使用模型、拥有持续身份和协作记忆的仿生程序员。身份、工程 skills 和记忆承载协作约定，不另建强制审批业务引擎。当前正从自研控制面收窄为原生运行配置与必要适配，迁移范围见 [收窄决定与清单](docs/decisions/0006-hermes-native-mikasa.md)。本目录包含人格与工程规则 1.0，以及 Python 运行时 0.1：任务持久化、审计、拆解、实现验证、PR 审查、进度查询、CLI 和 HTTP API。Hermes 0.21.3/CCH 已完成合成任务真实联调，人格与三类工程 skill 已验证加载，Hermes 可主动检索源码并通过受限工具修改、检查和修复；GitHub 账号和 VM 尚未完成运行验收。
+Mikasa 是基于原生 Hermes 运行、通过 CCH 使用模型、拥有持续身份和协作记忆的仿生程序员。身份、工程 skills 和记忆承载协作约定，不另建强制审批业务引擎。
+
+当前包含人格与工程规则 1.1 和 Python 运行时 0.1。专属审批引擎已移除；聊天使用原生 Gateway，工程使用原生 Docker harness，任务调度与部分入口仍在迁移。保留、迁移、删除清单及本次验证见 [收窄决定](docs/decisions/0006-hermes-native-mikasa.md)。此前 Hermes 0.21.3/CCH 已完成合成任务真实联调；GitHub、飞书和 VM 尚未完成运行验收。
 
 ## 本地运行
 
