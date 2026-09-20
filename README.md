@@ -1,6 +1,6 @@
 # Mikasa
 
-Mikasa 是与人类成员共同开发、监督工程质量并推进交付的仿生程序员。本目录包含人格与工程规则 1.0，以及 Python 运行时 0.1：任务持久化、审计、拆解、实现验证、PR 审查、进度查询、CLI 和 HTTP API。真实 Hermes 模型、GitHub 账号与 VM 尚未完成联调或部署。
+Mikasa 是与人类成员共同开发、监督工程质量并推进交付的仿生程序员。本目录包含人格与工程规则 1.0，以及 Python 运行时 0.1：任务持久化、审计、拆解、实现验证、PR 审查、进度查询、CLI 和 HTTP API。Hermes 0.21.3/CCH 已完成合成任务真实联调，人格与三类工程 skill 已验证加载；GitHub 账号和 VM 尚未完成运行验收。
 
 ## 本地运行
 
@@ -22,7 +22,15 @@ python3.12 -m mikasa --config config/local/mikasa.json run
 
 API 和 runner 分别运行。默认示例不启用仓库、模型、定期审计或外部发布；`doctor` 会明确显示缺少的运行条件。完整说明见 [运行手册](docs/runbooks/OPERATIONS.md)、[API 契约](docs/architecture/API.md) 和 [架构决定](docs/decisions/0001-runtime.md)。
 
-当前本地 46 项测试通过，真实执行与模拟范围见 [验证记录](docs/VALIDATION.md)。
+本地回归检查见 [验证记录](docs/VALIDATION.md)，模型、skill 与完整任务链的真实证据见 [Hermes/CCH 联调记录](docs/HERMES_CCH_VALIDATION.md)。
+
+## 聊天与模型切换
+
+```sh
+python3.12 -m mikasa --config config/local/hermes-cch.json chat
+```
+
+直接说“切换为 gpt-5.6-luna”或“恢复默认模型”。切换经真实调用验证后对当前聊天生效，保留上下文；原工程任务仍使用运行配置。也可启动 API 后访问 `/chat` 网页。配置、会话恢复和鉴权见 [聊天用法](docs/runbooks/CHAT.md)，调研依据见 [CCH 路由决定](docs/decisions/0002-chat-model-switching.md)，真实结果见 [聊天验证](docs/CHAT_VALIDATION.md)。
 
 ## 规则文件
 
@@ -57,7 +65,7 @@ scripts/         可重复的检查和运行辅助脚本
 
 在本目录工作时，从 `AGENTS.md` 按顺序读取身份、工程契约和工程工作流。所有引用使用相对路径；目录可以整体迁移，不依赖主机全局 canonical 路径。
 
-不同工具是否自动加载入口，需在各自会话中核实。运行时按 canonical 顺序读取规则，并通过 [Hermes 桥接](workers/hermes/README.md) 注入会话；真实 SDK 环境和模型端点仍需联调。
+不同工具是否自动加载入口，需在各自会话中核实。运行时按 canonical 顺序读取规则，并通过 [Hermes 桥接](workers/hermes/README.md) 注入会话；规则和任务对应 skill 已在真实 SDK/CCH 调用中验证；其他工具的自动加载机制不由此证明。
 
 角色风格集中在身份文件，工程权限和质量标准集中在契约，操作步骤集中在工作流。修改时同步直接受影响的入口和文档，避免复制多份正文。官方事实与本地判断分别注明来源。
 
@@ -69,10 +77,10 @@ GitHub 主人为 `Ceng-0324`，Mikasa 称其为 `Shawn` 或 `Ceng`，`origin` �
 
 人类 PR 需要 Mikasa 审查批准；Mikasa 及受委派执行者实现的 PR 需要负责人批准。审查留下结论 comment，Mikasa 不自动合并。
 
-试点仓库 [Ceng-0324/FluxCore](https://github.com/Ceng-0324/FluxCore) 仅用于 Mikasa 开发完成后的运行验收，不作为先行开发对象。当前先完成 Mikasa 本体，见 [功能规划](MIKASA_FUNCTION_PLAN.md)。任务事实源采用本地 SQLite；账号权限、平台强制门禁、真实模型联调、VM 部署及飞书原生接入仍需外部配置或后续决定。
+试点仓库 [Ceng-0324/FluxCore](https://github.com/Ceng-0324/FluxCore) 仅用于 Mikasa 开发完成后的运行验收，不作为先行开发对象。当前先完成 Mikasa 本体，见 [功能规划](MIKASA_FUNCTION_PLAN.md)。任务事实源采用本地 SQLite；账号权限、平台强制门禁、VM 部署及飞书原生接入仍需外部配置或后续决定。CCH 返回模型标识与请求名的差异见联调记录。
 
 ## Git 工程状态
 
-本目录默认分支为 `main`，远端为 `git@github.com:Ceng-0324/MIKASA.git`。Shawn/Ceng 已授权创建本地首次提交，包含身份与工程规则、运行时实现和验证支持；推送由 Shawn/Ceng 执行，推送后继续后续开发与联调。
+本目录默认分支为 `main`，远端为 `git@github.com:Ceng-0324/MIKASA.git`。Shawn/Ceng 已授权后续每轮任务完成后自动创建本地提交，禁止自动推送；远端推送由 Shawn/Ceng 执行。提交范围与验证约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 提交前阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，并使用 [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) 记录变更目的、实际验证、安全边界和未完成事项。

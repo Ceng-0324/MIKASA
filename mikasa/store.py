@@ -29,6 +29,15 @@ class Store:
                     created REAL NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS chats (
+                    id TEXT PRIMARY KEY, actor TEXT NOT NULL, model TEXT NOT NULL,
+                    revision INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS chat_turns (
+                    seq INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT NOT NULL,
+                    request_key TEXT NOT NULL, message TEXT NOT NULL, response TEXT NOT NULL,
+                    created REAL NOT NULL, UNIQUE(chat_id, request_key)
+                );
                 CREATE TABLE IF NOT EXISTS deliveries (id TEXT PRIMARY KEY, received REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS reviews (
                     repo TEXT NOT NULL, number INTEGER NOT NULL, head TEXT NOT NULL,

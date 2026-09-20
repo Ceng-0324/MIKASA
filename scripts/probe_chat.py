@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""Live HTTP chat/CCH acceptance with an ephemeral local API token; no external writes."""
+import argparse
+import http.client
+import json
+import os
+import secrets
+import sys
+import threading
+import time
+import uuid
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from mikasa.config import Config
+from mikasa.model_settings import default_model, validate_model
+from mikasa.server import make_server
+from mikasa.service import Service
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--config', required=True)
+    parser.add_argument('--target', required=True)
+    parser.add_argument('--report', required=True)
+    args = parser.parse_args()
+    config = Config.load(args.config)
+    validate_model(args.target)
+    if args.target == default_model(config):
+        raise SystemExit('请选择与默认模型不同的目标，以验证切换和恢复')
+    path = Path(args.report).resolve()
+    if not path.is_relative_to(config.runtime):
+        raise SystemExit('报告必须位于 runtime 下')
+    # Fresh local server; token never written to config, report or stdout.
+    token_variable = 'MIKASA_CHAT_PROBE_TOKEN'
+    old_token = os.environ.get(token_variable)
+    os.environ[token_variable] = secrets.token_urlsafe(40)
+    data = json.loads(json.dumps(config.data))
+    data['server']['tokens'] = {config.owner: token_variable}
+    probe_config = Config(config.root, data)
+    server = make_server(Service(probe_config), '127.0.0.1', 0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    report = {'created': time.time(), 'target': args.target, 'steps': [], 'checks': {}}
+    def request(method, route, payload=None, key=None):
+        conn = http.client.HTTPConnection('127.0.0.1', server.server_port, timeout=300)
+        try:
+            conn.request(method, route, None if payload is None else json.dumps(payload),
+                         {'Authorization': 'Bearer '+os.environ[token_variable], 'Idempotency-Key': key or uuid.uuid4().hex})
+            response = conn.getresponse()
+            value = json.loads(response.read())
+            if response.status >= 400:
+                raise RuntimeError(f'local HTTP {response.status}')
+            return value
+        finally:
+            conn.close()
+    try:
+        session = request('POST', '/chats', {})
+        report['chat_id'] = session['id']
+        route = '/chats/'+session['id']
+        def send(message, key=None):
+            print('Live chat:', message, flush=True)
+            result = request('POST', route+'/messages', {'message':message}, key)
+            report['steps'].append({'message':message,'response':result})
+            with os.fdopen(os.open(path, os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600),'w') as f:
+                json.dump(report,f,ensure_ascii=False,indent=2)
+            return result
+        marker = '蓝鲸-'+secrets.token_hex(3)
+        before = send('请记住本次验收代号 '+marker+'，只需简短确认。')
+        switched = send('切换为 '+args.target, 'switch-target')
+        replay = request('POST', route+'/messages', {'message':'切换为 '+args.target}, 'switch-target')
+        after = send('刚才的验收代号是什么？请原样回答。')
+        reset = send('恢复默认模型')
+        after_reset = send('再复述一次本次验收代号。')
+        current = request('GET',route)
+        report['checks'] = {
+            'switch_effective':switched['model']==args.target and switched['kind']=='switch',
+            'target_used_next_turn':after['execution']['requested_model']==args.target,
+            'history_survives_switch':marker in after['reply'],
+            'retry_idempotent':replay==switched,
+            'restored_default':reset['model']==session['model'],
+            'history_survives_restore':marker in after_reset['reply'],
+            'readback_persisted':current['model']==session['model'] and len(current['turns'])==5,
+            'real_hermes':all(r['execution']['backend']=='hermes' for r in [before,switched,after,reset,after_reset]),
+        }
+        report['passed']=all(report['checks'].values())
+        print(json.dumps({'passed':report['passed'],'checks':report['checks']},ensure_ascii=False),flush=True)
+    finally:
+        with os.fdopen(os.open(path, os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600),'w') as f:
+            json.dump(report,f,ensure_ascii=False,indent=2)
+        server.shutdown()
+        server.server_close()
+        thread.join(3)
+        if old_token is None:
+            os.environ.pop(token_variable,None)
+        else:
+            os.environ[token_variable]=old_token
+    return 0 if report.get('passed') else 1
+
+if __name__=='__main__':
+    raise SystemExit(main())

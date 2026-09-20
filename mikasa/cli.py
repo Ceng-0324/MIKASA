@@ -19,6 +19,9 @@ def parser():
     commands = p.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor")
     commands.add_parser("serve")
+    chat = commands.add_parser("chat", help="与 Mikasa 聊天，支持：切换为 完整模型ID")
+    chat.add_argument("--session", help="继续已有聊天 ID")
+    chat.add_argument("--message", help="发送单条消息并输出 JSON；省略则交互聊天")
     worker = commands.add_parser("run")
     worker.add_argument("--once", action="store_true")
     create = commands.add_parser("submit")
@@ -63,9 +66,10 @@ def parser():
 
 
 def doctor(config):
+    from .skills import skill_inventory
     command = config.data.get("worker", {}).get("command", [])
     return {"python": sys.version.split()[0], "git": bool(shutil.which("git")),
-            "rules": "loaded", "repositories": list(config.data.get("repositories", {})),
+            "rules": "loaded", "skills": skill_inventory(config.root), "repositories": list(config.data.get("repositories", {})),
             "worker_configured": bool(command), "worker_executable": bool(command and shutil.which(command[0])),
             "github_token_present": bool(os.environ.get(config.data.get("github", {}).get("token_env", "MIKASA_GITHUB_TOKEN"))),
             "publishing_enabled": config.data.get("github", {}).get("publish_enabled", False),
@@ -82,6 +86,28 @@ def main(argv=None):
             service = Service(config)
             actor = config.owner
             cmd = args.command
+            if cmd == "chat":
+                from .chat import Chat
+                chat = Chat(config)
+                session = chat.get(args.session, actor) if args.session else chat.create(actor)
+                if args.message is not None:
+                    value = chat.send(session["id"], actor, args.message, uuid.uuid4().hex)
+                    print(json.dumps(value, ensure_ascii=False, indent=2))
+                    return 0
+                print(f"Mikasa · 会话 {session['id']} · 请求模型 {session['model']}\n输入“切换为 完整模型ID”切换，/model 查询，/exit 退出。")
+                while True:
+                    try:
+                        message = input("你：").strip()
+                    except EOFError:
+                        return 0
+                    if message == "/exit":
+                        return 0
+                    if not message:
+                        continue
+                    try:
+                        print("Mikasa：" + chat.send(session["id"], actor, message, uuid.uuid4().hex)["reply"])
+                    except MikasaError as exc:
+                        print(str(exc), file=sys.stderr)
             if cmd == "serve":
                 from .server import make_server
                 server = make_server(service)

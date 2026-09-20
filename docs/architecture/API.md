@@ -2,10 +2,14 @@
 
 CLI：`python3.12 -m mikasa --config <配置路径> <命令>`。本地 CLI 仅供受信任的操作系统账号使用，按负责人权限执行；不能将 shell 账号交给普通成员来实现多用户鉴权。
 
-HTTP 默认监听 `127.0.0.1:8765`。除健康检查和单独验签的 GitHub webhook 外，均需要 `Authorization: Bearer <token>`。token 通过配置中的账号到环境变量名映射识别，不采信 body 中的自称身份。
+HTTP 默认监听 `127.0.0.1:8765`。除健康检查、无数据的 `/chat` 静态页面和单独验签的 GitHub webhook 外，均需要 `Authorization: Bearer <token>`。token 通过配置中的账号到环境变量名映射识别，不采信 body 中的自称身份。
 
 | 方法和路径 | 行为 | 权限 |
 | --- | --- | --- |
+| `GET /chat` | 浏览器聊天页面；数据接口仍需认证 | 无认证 |
+| `POST /chats` | body `{}`，创建当前账号的聊天 | 已配置成员 |
+| `GET /chats/{id}` | 模型、revision、最近 40 轮记录及截断标记 | 会话所属账号 |
+| `POST /chats/{id}/messages` | `{"message":"切换为 gpt-5.6-luna"}`，必需 Idempotency-Key | 会话所属账号 |
 | `GET /health` | 存活与暂停状态 | 无认证；不含任务信息 |
 | `GET /tasks` | 最近 500 个任务 | 已配置成员 |
 | `GET /tasks/{id}` | 状态、结果和错误 | 已配置成员 |
@@ -21,6 +25,8 @@ HTTP 默认监听 `127.0.0.1:8765`。除健康检查和单独验签的 GitHub we
 | `POST /provenance` | `repo`、`pr`、`head`、`provenance` | 负责人 |
 | `POST /control` | `{"paused":true}` 或 `false` | 负责人 |
 | `POST /webhooks/github` | HMAC SHA-256 签名校验和 delivery 去重 | GitHub webhook secret |
+
+模型任务结果可包含 `execution`，记录可信 worker 提供的 SDK 版本、请求模型、API 模式、规则和 skill SHA-256 及工具数；这是宿主注入证据，不是模型自述；Hermes 的 post_api_request hook 另提供 reported_model，表示 SDK 观察到的响应标识，仍不独立证明供应商实际模型身份。聊天接口语义和失败处理见 [聊天手册](../runbooks/CHAT.md)。
 
 任务示例：
 

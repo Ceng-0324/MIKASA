@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "skills": [
+    {"name": "mikasa-persona", "tasks": ["plan", "implement", "review", "chat"], "path": "mikasa-persona/SKILL.md", "source": "local:identity.md"},
+    {"name": "mikasa-plan", "tasks": ["plan"], "path": "mikasa-plan/SKILL.md", "source": "mattpocock/skills@c55ee46073ed923f86ce59a5eb3b6d895095d1b7:to-tickets"},
+    {"name": "mikasa-implement", "tasks": ["implement"], "path": "mikasa-implement/SKILL.md", "source": "mattpocock/skills@c55ee46073ed923f86ce59a5eb3b6d895095d1b7:tdd,implement"},
+    {"name": "mikasa-review", "tasks": ["review"], "path": "mikasa-review/SKILL.md", "source": "mattpocock/skills@c55ee46073ed923f86ce59a5eb3b6d895095d1b7:code-review"}
+  ]
+}

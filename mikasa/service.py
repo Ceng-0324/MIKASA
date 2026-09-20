@@ -132,6 +132,8 @@ class Service:
             if pr["user"]["login"].lower() == self.config.bot.lower():
                 context["provenance"] = "mikasa"
         result = self.worker.execute(task, context, cancelled)
+        if getattr(self.worker, "last_runtime", None):
+            result["execution"] = self.worker.last_runtime
         result.update({"head": workspace.head, "base": workspace.base, "workspace": str(workspace.path), "observed_at": time.time()})
         if cancelled():
             raise MikasaError("任务已暂停或取消")
@@ -186,6 +188,8 @@ class Service:
                                  "current_diff": git(["diff", "--no-ext-diff", "HEAD", "--"], workspace.path)}
             updated = self.worker.execute(task, context, cancelled)
             result.update({"summary": updated["summary"], "changes": updated["changes"]})
+            if getattr(self.worker, "last_runtime", None):
+                result["execution"] = self.worker.last_runtime
         # Tests may mutate tracked files. Require validation and committed content to match.
         if git(["diff", "--name-only"], workspace.path):
             raise MikasaError("验证命令修改了已暂存内容；拒绝提交未经验证的版本")

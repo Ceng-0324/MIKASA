@@ -21,5 +21,6 @@
 - `runtime/`、本地配置、worker home 和认证文件不进入 Git；不迁移真实 `auth.json`、token 或环境密钥。
 - 当前包含身份、工程规则及 `mikasa/` 运行实现；功能范围和验证边界见 [功能规划](MIKASA_FUNCTION_PLAN.md)。FluxCore 仅用于本体开发后的运行验收，不以开发该仓库为前置任务。
 - 实现检查：`python3.12 -m unittest discover -v`、`python3.12 scripts/check_docs.py`、`python3.12 -m mikasa doctor`。任务状态、凭据与临时工作区不进入 Git；真实模型和平台联调不可用隔离测试替代。
+- 本仓库每轮任务完成后，对已验证且属于本任务的改动自动创建本地提交；禁止自动推送。具体提交约定见 [CONTRIBUTING.md](CONTRIBUTING.md)，无改动时不创建空提交。
 - 修改前阅读现有内容；同步直接受影响的入口与文档，按工作流中的文档检查要求验证。
 - 这里的规则只作用于 Mikasa 项目，不改写主目录或其他工具的全局人格配置。

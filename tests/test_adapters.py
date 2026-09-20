@@ -9,6 +9,7 @@ from unittest.mock import patch
 from mikasa.errors import MikasaError
 from mikasa.github import GitHub
 from mikasa.process import clean_env, run
+from mikasa.skills import load_skills
 from tests.support import BaseTest, REPO, ROOT, SHA
 
 
@@ -70,28 +71,58 @@ class AdapterTests(BaseTest):
 
     def test_bridge_protocol_and_tool_isolation(self):
         # A signature-compatible SDK fixture verifies our adapter, not the real model.
+        package = self.path / "hermes_cli"
+        package.mkdir()
+        (package / "__init__.py").write_text("")
+        (package / "plugins.py").write_text('''
+hooks = {}
+class PluginManifest:
+    def __init__(self, name): pass
+class PluginContext:
+    def __init__(self, manifest, manager): pass
+    def register_hook(self, name, callback): hooks[name] = callback
+def get_plugin_manager(): return None
+''')
         (self.path / "run_agent.py").write_text('''
 import json
+import sys
 class AIAgent:
     def __init__(self, **kwargs):
         assert kwargs['enabled_toolsets'] == []
         assert kwargs['skip_context_files'] and kwargs['skip_memory'] and kwargs['skip_background_review']
         assert kwargs['api_key'] == 'fixture-key'
+        assert kwargs['api_mode'] == 'codex_responses'
         self.tools = []
         print('SDK log must not pollute stdout')
+        print('fixture-key must not escape stderr', file=sys.stderr)
     def run_conversation(self, user_message, system_message):
+        from hermes_cli.plugins import hooks
+        hooks['post_api_request'](response_model='fixture-reported')
         assert system_message.startswith('canonical-rules')
         assert 'rules' not in json.loads(user_message)
-        return {'final_response': json.dumps({'summary': 'ok', 'tasks': []})}
+        assert 'skills' not in json.loads(user_message)
+        assert 'host instruction' in system_message
+        assert '<project-skill name="mikasa-persona">' in system_message
+        assert '<project-skill name="mikasa-implement">' in system_message
+        assert 'Use the public behavior' in system_message
+        return {'final_response': json.dumps({'summary': 'ok', 'changes': [{'path': 'app.py', 'content': 'VALUE = 2\\n'}]})}
 ''')
         env = clean_env({"PYTHONPATH": str(self.path), "HERMES_HOME": str(self.path / "hermes"),
                          "MIKASA_MODEL": "fixture", "MIKASA_MODEL_BASE_URL": "http://localhost:1234/v1",
-                         "MIKASA_MODEL_API_KEY": "fixture-key"})
+                         "MIKASA_MODEL_API_KEY": "fixture-key", "MIKASA_MODEL_API_MODE": "codex_responses"})
+        skills = load_skills(ROOT, "implement")
         output = run([sys.executable, str(ROOT / "workers/hermes/bridge.py")], cwd=self.path, env=env,
-                     stdin=json.dumps({"version": 1, "rules": "canonical-rules", "task": {}}))
+                     stdin=json.dumps({"version": 1, "rules": "canonical-rules", "task": {},
+                                       "skills": skills, "instruction": "host instruction"}))
         self.assertEqual(output["code"], 0)
-        self.assertEqual(json.loads(output["stdout"])["summary"], "ok")
-        self.assertIn("SDK log", output["stderr"])
+        envelope = json.loads(output["stdout"])
+        self.assertEqual(envelope["result"]["summary"], "ok")
+        self.assertEqual(envelope["runtime"]["tool_count"], 0)
+        self.assertEqual(envelope["runtime"]["api_mode"], "codex_responses")
+        self.assertEqual(envelope["runtime"]["reported_model"], "fixture-reported")
+        self.assertEqual(envelope["runtime"]["skills"], [{k: s[k] for k in ("name", "sha256", "source")} for s in skills])
+        self.assertEqual(envelope["result"]["changes"][0]["content"], "VALUE = 2\n")
+        self.assertEqual(output["stderr"], "")
 
     def test_docker_check_mounts_git_readonly_and_cleans_up(self):
         from mikasa.process import check_command

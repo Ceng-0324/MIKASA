@@ -90,7 +90,7 @@ class RecoveryTests(BaseTest):
                     Config.load(self.config_path)
 
     def test_worker_rejects_untrusted_metadata(self):
-        self.data["worker"]["command"] = [sys.executable, "-c", "import json; print(json.dumps({'summary':'x','changes':[],'workspace':'/tmp/escape'}))"]
+        self.data["worker"]["command"] = [sys.executable, "-c", "import json; print(json.dumps({'version':1,'runtime':{'backend':'fixture'},'result':{'summary':'x','changes':[],'workspace':'/tmp/escape'}}))"]
         self.write_config()
         task = self.submit()
         with self.assertRaisesRegex(MikasaError, "output_contract"):

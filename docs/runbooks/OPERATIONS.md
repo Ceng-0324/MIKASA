@@ -28,7 +28,7 @@ python3.12 -m mikasa doctor
 
 公开仓库默认通过 HTTPS clone。本地绝对路径 `source` 可用于隔离测试或管理员预先准备的私有仓库镜像；当前不把 GitHub token 交给 clone 工作器。私有仓库首次拉取仍需管理员配置只读镜像获取机制。
 
-模型配置见 [Hermes 执行器](../../workers/hermes/README.md)。需要明确模型名、兼容 API 端点和 API key；这些信息由环境提供，不从个人工具认证文件复制。
+模型配置见 [Hermes 执行器](../../workers/hermes/README.md)。需要明确模型名、兼容 API 端点和 API key；默认由环境提供；本机联调也可显式选择 `worker.model_source.type=codex`，只读 provider 配置和 API key，不复制认证文件，不迁移 OAuth 会话。真实联调命令和边界见 [联调记录](../HERMES_CCH_VALIDATION.md)。
 
 ## 启动和任务流程
 

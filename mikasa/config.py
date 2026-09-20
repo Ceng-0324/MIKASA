@@ -62,6 +62,14 @@ class Config:
             env_names = worker.get("env_allowlist", [])
             if not isinstance(env_names, list) or not all(isinstance(v, str) and re.fullmatch(r"[A-Z_][A-Z0-9_]*", v) for v in env_names):
                 raise MikasaError("worker.env_allowlist 必须为环境变量名称数组")
+            model_source = worker.get("model_source", {"type": "environment"})
+            if not isinstance(model_source, dict) or model_source.get("type") not in {"environment", "codex"}:
+                raise MikasaError("worker.model_source.type 必须为 environment 或 codex")
+            if set(model_source) - {"type", "config_path", "auth_path"}:
+                raise MikasaError("model_source 仅保存读取来源，不允许内嵌凭据")
+            for field in ("hermes_source", "home"):
+                if field in worker and (not isinstance(worker[field], str) or not worker[field]):
+                    raise MikasaError(f"worker.{field} 必须为路径")
             for key, default, upper in (("timeout", 600, 7200), ("max_output_bytes", 2000000, 10000000), ("max_context_bytes", 200000, 1000000), ("max_attempts", 3, 5)):
                 value = worker.get(key, default)
                 if type(value) is not int or not 1 <= value <= upper:

@@ -12,7 +12,8 @@
     "max_attempts": 3,
     "max_output_bytes": 2000000,
     "max_context_bytes": 200000,
-    "env_allowlist": ["MIKASA_MODEL", "MIKASA_MODEL_BASE_URL", "MIKASA_MODEL_API_KEY", "HERMES_HOME"]
+    "model_source": {"type": "environment"},
+    "env_allowlist": ["MIKASA_MODEL", "MIKASA_MODEL_BASE_URL", "MIKASA_MODEL_API_KEY", "MIKASA_MODEL_API_MODE", "HERMES_HOME"]
   },
   "server": {
     "host": "127.0.0.1",
