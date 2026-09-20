@@ -16,7 +16,7 @@ class RecoveryTests(BaseTest):
         calls = []
 
         class RepairWorker:
-            def execute(self, task, context, cancelled, *, workspace=None):
+            def execute(self, task, context, cancelled, *, workspace=None, progress=None):
                 calls.append(json.loads(json.dumps(context)))
                 return {"summary": "repair", "changes": [{"path": "app.py", "content": f"VALUE = {2 if len(calls) > 1 else 0}\n"}]}
 

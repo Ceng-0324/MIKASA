@@ -123,7 +123,10 @@ class Service:
                  "blocker": t["error"], "depends_on": t["payload"].get("depends_on", []),
                  "updated": t["updated"], "result": t["result"]} for t in tasks]}, "done"
         pr = self.github.pr(repo, payload["pr"]) if kind == "review" else None
+        progress = lambda data: self.store.record_execution(task["id"], token, data)
+        progress({"phase": "workspace", "status": "started"})
         workspace = Workspace(self.config, task, token).prepare(pr)
+        progress({"phase": "workspace", "status": "completed", "base": workspace.base, "head": workspace.head})
         context = workspace.context()
         cancelled = lambda: self.store.paused() or self.store.get(task["id"])["state"] != "running"
         if pr:
@@ -132,7 +135,7 @@ class Service:
             context["provenance"] = self.store.get_provenance(repo, payload["pr"], workspace.head)
             if pr["user"]["login"].lower() == self.config.bot.lower():
                 context["provenance"] = "mikasa"
-        result = self.worker.execute(task, context, cancelled, workspace=workspace)
+        result = self.worker.execute(task, context, cancelled, workspace=workspace, progress=progress)
         if getattr(self.worker, "last_runtime", None):
             result["execution"] = self.worker.last_runtime
         result.update({"head": workspace.head, "base": workspace.base, "workspace": str(workspace.path), "observed_at": time.time()})
@@ -160,9 +163,9 @@ class Service:
             if current["head"]["sha"] != workspace.head or current["base"]["sha"] != workspace.base:
                 raise MikasaError("审查期间 PR head 或目标分支发生变化")
             return result, "done"
-        return self.implement(task, workspace, context, result, cancelled)
+        return self.implement(task, workspace, context, result, cancelled, progress)
 
-    def implement(self, task, workspace, context, result, cancelled):
+    def implement(self, task, workspace, context, result, cancelled, progress):
         repo = task["payload"]["repo"]
         checks = self.config.repo(repo).get("checks", [])
         attempts = self.config.data.get("worker", {}).get("max_attempts", 3)
@@ -176,7 +179,10 @@ class Service:
             if not checks:
                 result["summary"] += "；未配置验证命令，变更保留为未验证草稿"
                 return result, "blocked"
+            progress({"phase": "validation", "status": "started", "attempt": attempt + 1})
             evidence = run_checks(workspace, cancelled)
+            progress({"phase": "validation", "status": "completed", "attempt": attempt + 1,
+                      "checks": [{"code": c["code"], "index": i} for i, c in enumerate(evidence)]})
             history.append({"attempt": attempt + 1, "checks": evidence, "execution": result.get("execution")})
             if all(check["code"] == 0 for check in evidence):
                 break
@@ -186,7 +192,7 @@ class Service:
                 return result, "blocked"
             context["repair"] = {"attempt": attempt + 2, "checks": evidence,
                                  "current_diff": git(["diff", "--no-ext-diff", "HEAD", "--"], workspace.path)}
-            updated = self.worker.execute(task, context, cancelled, workspace=workspace)
+            updated = self.worker.execute(task, context, cancelled, workspace=workspace, progress=progress)
             result.update({"summary": updated["summary"], "changes": updated["changes"]})
             if getattr(self.worker, "last_runtime", None):
                 result["execution"] = self.worker.last_runtime
@@ -197,7 +203,9 @@ class Service:
         result["attempts"] = history
         if cancelled():
             raise MikasaError("任务已暂停或取消")
+        progress({"phase": "commit", "status": "started"})
         result["head"] = workspace.commit()
+        progress({"phase": "commit", "status": "completed", "head": result["head"]})
         result["branch"] = f"mikasa/task-{task['id']}"
         result["provenance"] = "mikasa"
         return result, "awaiting_review"

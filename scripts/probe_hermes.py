@@ -107,8 +107,11 @@ def tool_loop(config):
         "observed_red_then_green": any(c != 0 for c in codes) and bool(codes) and codes[-1] == 0,
         "host_final_checks_pass": bool(result.get("checks")) and all(c["code"] == 0 for c in result["checks"]),
         "commit_created": bool(result.get("head")) and result.get("head") != result.get("base")}
+    phases = [e["data"] for e in service.store.events(task["id"]) if e["kind"] == "execution"]
+    checks["durable_progress"] = (any(e.get("phase") == "validation" and e.get("status") == "completed" for e in phases)
+                                  and phases[-1].get("phase") == "commit" and phases[-1].get("status") == "completed")
     return {"case": "tool-loop", "passed": all(checks.values()), "checks": checks,
-            "task_id": task["id"], "state": finished["state"], "error": finished["error"], "result": result}
+            "task_id": task["id"], "state": finished["state"], "error": finished["error"], "result": result, "progress": phases}
 
 
 def readonly_tools(config, kind):
@@ -141,7 +144,7 @@ def readonly_tools(config, kind):
     if kind == "review":
         payload["pr"] = 1
         service.store.provenance(payload["repo"], 1, head, "human", local.owner)
-    service.submit(payload, local.owner, "live-readonly-tools")
+    task = service.submit(payload, local.owner, "live-readonly-tools")
     finished = service.run_once()
     result = finished.get("result") or {}
     execution = result.get("execution", {})
@@ -151,8 +154,12 @@ def readonly_tools(config, kind):
               "all_read_tools_used": {e["tool"] for e in events if e["ok"]} == expected,
               "pinned_read": any(e.get("path") == "calc.py" and e.get("revision") == head for e in events),
               "behavior": result.get("verdict") == "CHANGES_REQUESTED" if kind == "review" else bool(result.get("tasks"))}
+    progress = service.store.events(task["id"])
+    phases = [e["data"] for e in progress if e["kind"] == "execution"]
+    checks["durable_progress"] = (any(e.get("phase") == "tool" and e.get("status") == "completed" for e in phases)
+                                  and phases[-1].get("phase") == "worker" and phases[-1].get("status") == "completed")
     return {"case": "tool-" + kind, "passed": all(checks.values()), "checks": checks,
-            "state": finished["state"], "error": finished["error"], "result": result}
+            "state": finished["state"], "error": finished["error"], "result": result, "progress": phases}
 
 
 def paged_context(config):
@@ -276,7 +283,7 @@ def main():
         descriptor = os.open(report_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(descriptor, "w") as file:
             json.dump(report, file, ensure_ascii=False, indent=2)
-        print(json.dumps({k: v for k, v in item.items() if k != "result"}, ensure_ascii=False), flush=True)
+        print(json.dumps({k: v for k, v in item.items() if k not in {"result", "progress"}}, ensure_ascii=False), flush=True)
     return 0 if all(c["passed"] for c in report["cases"]) else 1
 
 

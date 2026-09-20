@@ -239,7 +239,7 @@ print(json.dumps({'version':1,'runtime':{'backend':'fixture'},'result':{'summary
         self.github.current['base']['sha'], self.github.current['head']['sha'] = base, head
         self.service.store.provenance(REPO, 1, head, 'human', self.config.owner)
         for full in [False, True]:
-            def execute(worker, task, context, cancelled, *, workspace=None):
+            def execute(worker, task, context, cancelled, *, workspace=None, progress=None):
                 session = ToolSession(workspace, 'review', cancelled)
                 offset = 0
                 while True:

@@ -4,6 +4,7 @@ import json
 import socket
 import threading
 import uuid
+import time
 from pathlib import PurePosixPath
 
 from .errors import MikasaError
@@ -56,9 +57,10 @@ def run_checks(workspace, cancelled):
 
 
 class ToolSession:
-    def __init__(self, workspace, kind, cancelled):
+    def __init__(self, workspace, kind, cancelled, *, progress=None):
         self.workspace, self.kind = workspace, kind
         self.cancelled = cancelled
+        self.progress = progress
         self.stopped = threading.Event()
         self.schemas = READ_TOOLS + (WRITE_TOOLS if kind == "implement" else []) if workspace else []
         self.events = []
@@ -222,7 +224,12 @@ class ToolSession:
                 "truncated": next_cursor is not None, "next_cursor": next_cursor}
 
     def call(self, name, args):
-        event = {"tool": name, "ok": False}
+        safe_name = name if isinstance(name, str) and any(s["name"] == name for s in self.schemas) else "unauthorized"
+        event = {"tool": safe_name, "ok": False}
+        call_id = len(self.events) + 1
+        started = time.monotonic()
+        if self.progress and call_id <= 65:
+            self.progress({"phase": "tool", "status": "started", "call": call_id, "tool": safe_name})
         try:
             if len(self.events) >= 64 or self.is_cancelled() or self.fatal:
                 raise MikasaError("工具预算耗尽、取消或检查完整性失败")
@@ -267,3 +274,6 @@ class ToolSession:
         finally:
             if len(self.events) < 65:
                 self.events.append(event)
+                if self.progress:
+                    self.progress({"phase": "tool", "status": "completed", "call": call_id,
+                                   "duration_seconds": round(time.monotonic() - started, 3), **event})

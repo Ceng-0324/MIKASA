@@ -50,6 +50,8 @@ python3.12 -m mikasa --config config/local/mikasa.json show TASK_ID
 python3.12 -m mikasa --config config/local/mikasa.json events TASK_ID
 ```
 
+运行期间可重复查询 `events TASK_ID`，读取 `kind=execution` 的阶段与工具记录，不必等待任务结束。worker/tool 的 `invocation` 区分每次模型调用；tool 的 `call` 配对 started/completed。completed 只表示调用返回，检查是否成功看退出码。失败、超时、进程中断后已记录事件继续保留；最后只有 started 时，副作用状态未知，应核对工作区后再重试。
+
 拆解完成后 `expand TASK_ID` 生成具有依赖关系的实施任务。`assign TASK_ID ACCOUNT` 明确移交；交给人类的任务不会被 runner 自动接管。分析报告的 `done` 表示报告完成，代码任务的 `awaiting_review` 表示已生成并验证本地提交，尚未完成独立审批和交付。
 
 ## 发布与审批

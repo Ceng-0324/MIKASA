@@ -53,3 +53,13 @@ python3.12 scripts/probe_hermes.py --config config/local/hermes-cch.json --case 
 ```
 
 同一内容 SHA-256 的已读区间完整覆盖后，宿主才记录 `complete=true`；只读尾页、漏读中段或混用变化前后的内容均不能消除审查遗漏。单文件仍限制 1 MB、单次会话仍限制 64 次工具调用；本次不代表任意规模任务均能完成。搜索跳过的二进制、超限和受保护文件必须继续作为缺口说明。
+
+## 后续：执行证据实时持久化
+
+基线 `8aee0de` 上补齐宿主执行事件。真实 Hermes/CCH 实现任务完成 10 次工具调用、红绿修复、宿主独立验证及本地提交，84.779 秒，停在 awaiting_review；只读拆解使用 3 个工具，36.705 秒，完成。两条链路均通过持久化事件验收；只读任务仍为 running 时，另一个 SQLite 连接已可读到三次工具完成记录。脱敏证据见 [hermes-progress-evidence.json](hermes-progress-evidence.json)。
+
+```sh
+python3.12 scripts/probe_hermes.py --config config/local/hermes-cch.json --case tool-loop --case tool-plan --report runtime/state/hermes-cch/execution-progress.json
+```
+
+新增隔离测试证明模型失败/超时后证据保留、实时查询、取消后无迟到记录、旧令牌不能向重试任务写入、runner 恢复保留最后阶段、进度写入失败时不执行工具变更、成功时记录验证与提交。尚未在真实 VM 强杀/重启下验证；只有 started 的操作保持副作用未知，不自动重放。

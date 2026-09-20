@@ -42,7 +42,7 @@ bridge 是单次进程：stdin 接收 version=1、rules、instruction、skills�
 
 Hermes 通过官方 `PluginContext.register_tool` 加载宿主提供的工具。`plan/review` 获得 `mikasa_list_files`、`mikasa_read_file`、`mikasa_search`；`implement` 另获得 `mikasa_apply_changes`、`mikasa_run_checks`。没有工作区的直接探针与聊天仍无工具。固定上游默认通过 Tool Search 渐进披露插件工具，所以模型可见的是 `tool_search/tool_describe/tool_call`；`runtime.tools` 记录这个入口集合，`granted_tools` 记录实际授权集合，宿主核对两者。
 
-工具经继承的专用 socket FD 请求宿主，串行处理，不能选择其他工作区、任意命令或扩展权限。审查读取固定 PR head 的 Git blob，实现读取当前工作树。文件应用沿用规则、凭据、执行配置和符号链接保护；检查只接受配置中的命令，生产仍需隔离镜像。检查修改 Git 索引、HEAD 或已暂存内容会中止交付。超时/取消会结束模型进程组、取消正在执行的检查并关闭通道。`runtime.tool_events` 由宿主记录工具名称、路径、读取版本/摘要与检查退出码，不采信模型自报。
+工具经继承的专用 socket FD 请求宿主，串行处理，不能选择其他工作区、任意命令或扩展权限。审查读取固定 PR head 的 Git blob，实现读取当前工作树。文件应用沿用规则、凭据、执行配置和符号链接保护；检查只接受配置中的命令，生产仍需隔离镜像。检查修改 Git 索引、HEAD 或已暂存内容会中止交付。超时/取消会结束模型进程组、取消正在执行的检查并关闭通道。`runtime.tool_events` 由宿主记录工具名称、路径、读取版本/摘要与检查退出码，不采信模型自报。运行中宿主同步把工具开始/完成事件写入 SQLite；即使模型未返回最终 JSON，已执行证据仍可通过任务 events 查询。
 
 上下文自动发现、原生记忆、soul、trajectory 和后台 review 关闭。三个 canonical 规则及对应 [项目 skill](../../skills/README.md) 明确注入 system message。SDK stdout/stderr 不进入协议或持久化诊断；专用 home 仍有 SDK 自身日志/SQLite，联调后检查认证值是否落盘。GitHub/控制面 token 不传入 worker。
 

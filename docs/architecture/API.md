@@ -13,7 +13,7 @@ HTTP 默认监听 `127.0.0.1:8765`。除健康检查、无数据的 `/chat` 静�
 | `GET /health` | 存活与暂停状态 | 无认证；不含任务信息 |
 | `GET /tasks` | 最近 500 个任务 | 已配置成员 |
 | `GET /tasks/{id}` | 状态、结果和错误 | 已配置成员 |
-| `GET /tasks/{id}/events` | 任务事件历史 | 已配置成员 |
+| `GET /tasks/{id}/events` | 任务事件历史及实时执行进度 | 已配置成员 |
 | `POST /tasks` | 创建任务，必须携带 `Idempotency-Key` | 成员可提交分析需求；负责人可实施和派发 |
 | `POST /tasks/{id}/cancel` | 取消，失效运行令牌 | 负责人 |
 | `POST /tasks/{id}/retry` | 重试失败、阻塞或取消任务 | 负责人 |
@@ -48,3 +48,7 @@ POST 请求体最多 1 MB，必须使用 Content-Length；错误分别返回 400
 `server.auto_review=true` 时，PR opened/reopened/synchronize/ready_for_review 事件创建只读审查任务，结果先留为本地草稿。webhook 文本不会自动触发代码实施或发布。定期审计由 `schedules.audit_interval_seconds` 控制，默认 0 关闭。
 
 发布歧义恢复仅提供本地 CLI `resolve-publication TASK EXTERNAL_ID`，读取外部记录并核对作者、任务标记和提交，不盲目重发。`gate REPO PR` 输出当前审批政策检查结果，加 `--publish` 才发布 `mikasa/approval` commit status，仍需显式启用外部发布；`backup PATH` 使用 SQLite 一致性备份。
+
+执行时无需等待最终结果即可读取 `GET /tasks/{id}/events` 或 CLI `events TASK_ID`。`kind=execution` 的 `data` 包含 `phase`（workspace/worker/tool/validation/commit）、`status`（started/completed，worker 还可能 failed）。worker 与其工具事件共享 `invocation`，工具另有 `call` 序号；completed 表示该调用已返回，是否成功看 `ok` 或检查退出码，不代表任务已交付。
+
+宿主记录工具名称、已验证路径、读取版本/摘要/覆盖范围和检查退出码，不写入模型推理、原始工具参数、源码正文或 SDK 错误文本。开始事件先于工具副作用落库；完成事件在返回模型前落库。进程被突然终止时可能只有 started，不能推断副作用未发生，必须核对保留工作区。取消或重试会失效运行令牌，禁止旧执行者追加记录；历史事件继续保留。该机制提供追踪，不实现会话自动续跑。

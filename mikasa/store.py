@@ -144,6 +144,16 @@ class Store:
                 return task, token
             return None
 
+    def record_execution(self, task, token, data):
+        """Append host evidence only while this runner still owns the task lease."""
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT state,run_token FROM tasks WHERE id=?", (task,)).fetchone()
+            if not row or row["state"] != "running" or row["run_token"] != token:
+                raise Conflict("执行令牌失效；拒绝写入旧执行进度")
+            self.event(db, task, "execution", "runtime", data)
+            db.execute("UPDATE tasks SET updated=? WHERE id=?", (time.time(), task))
+
     def finish(self, task, token, state, result=None, error=None):
         if state not in {"done", "failed", "awaiting_review", "blocked"}:
             raise MikasaError("非法执行结束状态")
