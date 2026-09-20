@@ -155,6 +155,34 @@ def readonly_tools(config, kind):
             "state": finished["state"], "error": finished["error"], "result": result}
 
 
+def paged_context(config):
+    local = fixture_config(config)
+    local.data["worker"]["max_context_bytes"] = 1
+    local.data["worker"]["timeout"] = 360
+    source = Path(local.repo("local/synthetic-probe")["source"])
+    for i in range(105):
+        (source / f"a{i:03}.txt").write_text("Unrelated fixture file.\n")
+    (source / "z-spec.txt").write_text("pagination_target\n" + "Context filler.\n" * 4500 +
+        "Required behavior: clamp(-1)=0; clamp(5)=5; clamp(11)=10.\n")
+    git(["add", "."], source)
+    git(["-c", "user.name=Mikasa probe", "-c", "user.email=probe@example.invalid", "commit", "-m", "paged context fixture"], source)
+    service = Service(local)
+    service.submit({"kind": "plan", "repo": "local/synthetic-probe",
+        "title": "搜索 pagination_target 所在需求文件，完整阅读后拆解 clamp 修复任务。",
+        "acceptance": "必须使用搜索工具找到目标；返回 next_cursor 时用同一 query 继续搜索。读取目标全文：next_offset 非空时继续读取直到 complete=true。再读取 calc.py，根据需求尾部的边界示例形成可验收任务，不修改文件。"},
+        local.owner, "live-paged-context")
+    finished = service.run_once()
+    result = finished.get("result") or {}
+    execution = result.get("execution", {})
+    events = execution.get("tool_events", [])
+    reads = [e for e in events if e.get("path") == "z-spec.txt" and e.get("ok")]
+    checks = {"completed": finished["state"] == "done", "search_continued": any(e.get("continued") and e.get("ok") for e in events),
+              "multiple_read_pages": len(reads) > 1, "full_read_coverage": any(e.get("complete") for e in reads),
+              "produced_tasks": bool(result.get("tasks"))}
+    return {"case": "paged-context", "passed": all(checks.values()), "checks": checks,
+            "state": finished["state"], "error": finished["error"], "result": result}
+
+
 def probes():
     return [
         ("persona", "plan", "请在 summary 用中文介绍你的名字、负责人的账号与日常称呼，并说明你自己实现的 PR 应由谁批准、是否会自动合并。tasks 给出一个不涉及外部写入的下一步。",
@@ -199,7 +227,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
     parser.add_argument("--report", required=True)
-    parser.add_argument("--case", action="append", choices=[p[0] for p in probes()] + ["lifecycle", "tool-loop", "tool-plan", "tool-review"])
+    parser.add_argument("--case", action="append", choices=[p[0] for p in probes()] + ["lifecycle", "tool-loop", "tool-plan", "tool-review", "paged-context"])
     args = parser.parse_args()
     config = Config.load(args.config)
     worker = Worker(config)
@@ -230,7 +258,7 @@ def main():
         with os.fdopen(descriptor, "w") as file:
             json.dump(report, file, ensure_ascii=False, indent=2)
         print(json.dumps({k: v for k, v in item.items() if k not in {"result", "runtime"}}, ensure_ascii=False), flush=True)
-    for case in ("lifecycle", "tool-loop", "tool-plan", "tool-review"):
+    for case in ("lifecycle", "tool-loop", "tool-plan", "tool-review", "paged-context"):
         if args.case and case not in args.case:
             continue
         print(f"Running live probe: {case}", flush=True)
@@ -239,6 +267,8 @@ def main():
             item = lifecycle(config)
         elif case == "tool-loop":
             item = tool_loop(config)
+        elif case == "paged-context":
+            item = paged_context(config)
         else:
             item = readonly_tools(config, case.removeprefix("tool-"))
         item["seconds"] = round(time.monotonic() - started, 3)

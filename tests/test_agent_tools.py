@@ -153,3 +153,104 @@ print(json.dumps({'version':1,'runtime':{'backend':'fixture'},'result':{'summary
         self.assertTrue(session.call('mikasa_apply_changes', {'changes': [{'path': '*', 'content': 'literal filename\n'}]})['applied'])
         staged = git(['diff', '--cached', '--name-only'], w.path)
         self.assertEqual(staged, '*')
+
+    def test_search_reaches_later_files_and_resumes_inside_file(self):
+        w = self.workspace()
+        for i in range(105):
+            (w.path / f'a{i:03}.txt').write_text('nothing here\n')
+        (w.path / 'z-target.txt').write_text('needle\n' * 230)
+        git(['add', '.'], w.path)
+        session = ToolSession(w, 'implement', lambda: False)
+        args = {'query': 'needle'}
+        matches, pages = [], 0
+        while True:
+            result = session.call('mikasa_search', args)
+            self.assertNotIn('error', result)
+            matches.extend(result['matches'])
+            pages += 1
+            if result['next_cursor'] is None:
+                break
+            args['cursor'] = result['next_cursor']
+        self.assertEqual(pages, 4)
+        self.assertEqual([m['line'] for m in matches], list(range(1, 231)))
+        self.assertEqual({m['path'] for m in matches}, {'z-target.txt'})
+
+    def test_read_pages_preserve_unicode_crlf_and_require_full_coverage(self):
+        import hashlib
+        w = self.workspace('plan')
+        content = ('界\r\n' * 25000) + '\ufffd end'
+        (w.path / 'long.txt').write_bytes(content.encode())
+        git(['add', '.'], w.path)
+        w.head = w.commit()
+        session = ToolSession(w, 'review', lambda: False)
+        last = session.call('mikasa_read_file', {'path': 'long.txt', 'offset': 75000})
+        self.assertIsNone(last['next_offset'])
+        self.assertFalse(last['complete'])  # Reading the tail is not reading the whole file.
+        parts, offset = [], 0
+        while True:
+            page = session.call('mikasa_read_file', {'path': 'long.txt', 'offset': offset})
+            self.assertNotIn('error', page)
+            parts.append(page['content'])
+            if page['next_offset'] is None:
+                self.assertTrue(page['complete'])
+                break
+            offset = page['next_offset']
+            self.assertFalse(page['complete'])
+        self.assertEqual(''.join(parts), content)
+        self.assertEqual(page['sha256'], hashlib.sha256(content.encode()).hexdigest())
+
+    def test_read_evidence_cannot_mix_changed_content(self):
+        w = self.workspace()
+        (w.path / 'app.py').write_text('a' * 20000)
+        session = ToolSession(w, 'implement', lambda: False)
+        first = session.call('mikasa_read_file', {'path': 'app.py'})
+        self.assertFalse(first['complete'])
+        (w.path / 'app.py').write_text('b' * 20000)
+        last = session.call('mikasa_read_file', {'path': 'app.py', 'offset': first['next_offset']})
+        self.assertFalse(last['complete'])
+        self.assertNotEqual(first['sha256'], last['sha256'])
+
+    def test_bad_cursors_offsets_and_binary_reads_fail_closed(self):
+        w = self.workspace()
+        (w.path / 'app.py').write_text('needle\n' * 130)
+        session = ToolSession(w, 'implement', lambda: False)
+        cursor = session.call('mikasa_search', {'query': 'needle'})['next_cursor']
+        self.assertIn('error', session.call('mikasa_search', {'query': 'other', 'cursor': cursor}))
+        self.assertIn('error', session.call('mikasa_search', {'query': 'needle', 'cursor': 'forged'}))
+        (w.path / 'app.py').write_text('different\n' * 130)
+        self.assertIn('error', session.call('mikasa_search', {'query': 'needle', 'cursor': cursor}))
+        for offset in [-1, True, '1', 10**9]:
+            self.assertIn('error', session.call('mikasa_read_file', {'path': 'app.py', 'offset': offset}))
+        for raw in [b'bad\x00file', b'bad\xfffile', b'x' * 1_000_001]:
+            (w.path / 'app.py').write_bytes(raw)
+            self.assertIn('error', session.call('mikasa_read_file', {'path': 'app.py'}))
+
+    def test_partial_review_read_does_not_unlock_approval(self):
+        from unittest.mock import patch
+        from mikasa.worker import Worker
+        self.config.data['worker']['max_context_bytes'] = 1
+        base = git(['rev-parse', 'HEAD'], self.repo)
+        (self.repo / 'large.txt').write_text('x' * 70000)
+        git(['add', '.'], self.repo)
+        git(['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'large human change'], self.repo)
+        head = git(['rev-parse', 'HEAD'], self.repo)
+        git(['update-ref', 'refs/pull/1/head', head], self.repo)
+        git(['update-ref', 'refs/heads/main', base], self.repo)
+        self.github.current['base']['sha'], self.github.current['head']['sha'] = base, head
+        self.service.store.provenance(REPO, 1, head, 'human', self.config.owner)
+        for full in [False, True]:
+            def execute(worker, task, context, cancelled, *, workspace=None):
+                session = ToolSession(workspace, 'review', cancelled)
+                offset = 0
+                while True:
+                    page = session.call('mikasa_read_file', {'path': 'large.txt', 'offset': offset})
+                    if not full or page['next_offset'] is None:
+                        break
+                    offset = page['next_offset']
+                worker.last_runtime = {'tool_events': session.events}
+                return {'summary':'review', 'verdict':'APPROVED', 'basis':['fixture'], 'findings':[], 'limitations':[]}
+            with patch.object(Worker, 'execute', execute):
+                self.submit('review', key=f'coverage-{full}', pr=1)
+                task = self.service.run_once()
+                self.assertEqual(task['state'], 'done', task.get('error'))
+                self.assertEqual(task['result']['verdict'], 'APPROVED' if full else 'INCOMPLETE')

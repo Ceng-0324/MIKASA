@@ -40,7 +40,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor
 python3.12 scripts/probe_hermes.py --config config/local/hermes-cch.json --report runtime/state/hermes-cch/live-probe.json
 ```
 
-当前脚本默认执行上述五类及三类工具覆盖探针；可重复传入 `--case persona`、`--case plan`、`--case review`、`--case implement` 、`--case lifecycle`、`--case tool-loop`、`--case tool-plan` 或 `--case tool-review`。报告保存在所选 runtime 内，权限 0600。实现探针只在新建合成仓库中运行本机 Python 检查，环境不继承认证；不具备生产容器的操作系统隔离。脚本不使用配置中的真实仓库，也不发布外部内容。首次四类探针的原始结果已保留，代码执行证据随后补入 engineering-probe.json。
+当前脚本默认执行上述五类及四类工具覆盖探针；可重复传入 `--case persona`、`--case plan`、`--case review`、`--case implement` 、`--case lifecycle`、`--case tool-loop`、`--case tool-plan` 、`--case tool-review` 或 `--case paged-context`。报告保存在所选 runtime 内，权限 0600。实现探针只在新建合成仓库中运行本机 Python 检查，环境不继承认证；不具备生产容器的操作系统隔离。脚本不使用配置中的真实仓库，也不发布外部内容。首次四类探针的原始结果已保留，代码执行证据随后补入 engineering-probe.json。
 
 ## 保留的验收边界
 

@@ -16,7 +16,7 @@ def clean_env(extra=None):
     return env
 
 
-def run(argv, *, cwd, timeout=120, limit=2_000_000, env=None, stdin=None, cancelled=None, pass_fds=()):
+def run(argv, *, cwd, timeout=120, limit=2_000_000, env=None, stdin=None, cancelled=None, pass_fds=(), decode_errors="replace"):
     """No shell, bounded disk-backed output, terminate the whole process group."""
     if not argv:
         raise MikasaError("执行命令尚未配置")
@@ -55,8 +55,8 @@ def run(argv, *, cwd, timeout=120, limit=2_000_000, env=None, stdin=None, cancel
             raise MikasaError("执行输出超出上限")
         out.seek(0)
         err.seek(0)
-        return {"code": proc.returncode, "stdout": out.read(limit).decode("utf-8", "replace"),
-                "stderr": err.read(limit).decode("utf-8", "replace")}
+        return {"code": proc.returncode, "stdout": out.read(limit).decode("utf-8", decode_errors),
+                "stderr": err.read(limit).decode("utf-8", decode_errors)}
 
 
 def git(args, cwd, *, strip=True, **kwargs):

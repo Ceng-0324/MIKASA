@@ -77,7 +77,7 @@ GitHub 主人为 `Ceng-0324`，Mikasa 称其为 `Shawn` 或 `Ceng`，`origin` �
 
 人类 PR 需要 Mikasa 审查批准；Mikasa 及受委派执行者实现的 PR 需要负责人批准。审查留下结论 comment，Mikasa 不自动合并。
 
-试点仓库 [Ceng-0324/FluxCore](https://github.com/Ceng-0324/FluxCore) 仅用于 Mikasa 开发完成后的运行验收，不作为先行开发对象。当前先完成 Mikasa 本体，见 [功能规划](MIKASA_FUNCTION_PLAN.md)。任务事实源采用本地 SQLite；账号权限、平台强制门禁、VM 部署及飞书原生接入仍需外部配置或后续决定。CCH 返回模型标识与请求名的差异见联调记录。
+试点仓库 [Ceng-0324/FluxCore](https://github.com/Ceng-0324/FluxCore) 仅用于 Mikasa 开发完成后的运行验收，不作为先行开发对象。当前顺序为 Hermes 底层 → CCH 路由 → GitHub/飞书权限接入 → VM 部署 → 聊天工程任务与 FluxCore 联合验收，见 [功能规划](MIKASA_FUNCTION_PLAN.md)。任务事实源采用本地 SQLite；账号权限、平台强制门禁、VM 部署及飞书原生接入仍需外部配置或后续决定。CCH 返回模型标识与请求名的差异见联调记录。
 
 ## Git 工程状态
 

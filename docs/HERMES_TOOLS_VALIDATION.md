@@ -43,3 +43,13 @@ python3.12 scripts/probe_hermes.py --config config/local/hermes-cch.json --case 
 隔离回归覆盖专用 FD 进程通信、官方插件注册适配、红绿修复与最终复验、只读任务拒绝写入、固定 head 读取、凭据/规则/符号链接路径拒绝、禁止自选命令、工具预算、搜索截断、原始空白与读取摘要、Git 通配符路径不扩展、检查篡改索引/内容后拒绝交付、关闭时终止检查并回收线程、模型伪造证据覆盖，以及完整读取消除未读 PR 文件限制。检查命令与总结果见 [验证记录](VALIDATION.md)。
 
 真实联调未涉及 FluxCore、GitHub 外部写入、Docker、Linux VM、飞书或长时间大仓库任务。搜索和读取仍有明确资源上限；超过上限必须报告缺口，不能据此宣称全仓审查完成。
+
+## 后续：分页检索与分段上下文
+
+基线 `c270b01` 上增加可续查搜索与分段读取。真实 Hermes/CCH 在 107 文件合成仓库中，初始源码预算为 1 字节：两次搜索越过前 100 个文件，找到 `z-spec.txt`；按偏移 0、16000、32000、48000、64000 分五页完整读取约 67 KB 文件，再读取 `calc.py` 并依据需求尾部示例生成任务。160.417 秒完成，8 次工具调用，全部验收通过。脱敏证据见 [hermes-pagination-evidence.json](hermes-pagination-evidence.json)。
+
+```sh
+python3.12 scripts/probe_hermes.py --config config/local/hermes-cch.json --case paged-context --report runtime/state/hermes-cch/paged-context.json
+```
+
+同一内容 SHA-256 的已读区间完整覆盖后，宿主才记录 `complete=true`；只读尾页、漏读中段或混用变化前后的内容均不能消除审查遗漏。单文件仍限制 1 MB、单次会话仍限制 64 次工具调用；本次不代表任意规模任务均能完成。搜索跳过的二进制、超限和受保护文件必须继续作为缺口说明。
