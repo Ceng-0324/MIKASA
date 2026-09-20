@@ -12,14 +12,18 @@ python3.12 -m mikasa --config config/local/hermes-cch.json chat
 
 ```text
 记住这个项目的验收代号是蓝鲸。
-切换为 gpt-5.6-luna
+/model
+/model claude-opus-4-6
 刚才的验收代号是什么？
+/model gpt-6-astra
 当前模型
 恢复默认模型
 /exit
 ```
 
 切换前会检查连接，成功后对当前聊天生效；保留聊天记录，其他会话及工程任务不受影响。模型名称使用 CCH 支持的完整 ID，不知道名称时查 CCH 配置；`/models` 提供使用说明，不伪造可用模型列表。首次切换会额外消耗一次小型验证调用。
+
+GPT/Claude 跨协议切换需要配置 [模型来源路由](CCH.md)，本机已接入现有 Codex/CCH 和 Claude Code/CCH 配置。裸 `/model` 与 `/models` 显示本地配置候选，网页可以点击候选按钮；菜单不是 CCH 实时目录。仍可直接输入未列入菜单但符合配置前缀的完整模型 ID。切换与查询由宿主直接处理，无须模型理解命令；尚未接入的 `/new`、`/init` 会明确返回未执行。
 
 终端会打印会话 ID，可跨进程继续：
 

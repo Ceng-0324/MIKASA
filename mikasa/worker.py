@@ -60,7 +60,12 @@ class Worker:
         forbidden.add(self.config.data.get("github", {}).get("token_env", "MIKASA_GITHUB_TOKEN"))
         if set(extra) & forbidden:
             raise MikasaError("worker 不得继承控制面或 GitHub 凭据")
-        extra.update(model_environment(settings))
+        # Clear allowlisted model fields before applying a selected source, so a
+        # different route cannot inherit the previous source's mode or key.
+        from .model_settings import MODEL_FIELDS
+        for field in MODEL_FIELDS:
+            extra.pop(field, None)
+        extra.update(model_environment(settings, model))
         if model is not None:
             extra["MIKASA_MODEL"] = validate_model(model)
         for field, variable in (("hermes_source", "MIKASA_HERMES_SOURCE"), ("home", "HERMES_HOME")):
@@ -106,6 +111,8 @@ class Worker:
                 raise MikasaError("Hermes 规则、skill 注入证据或工具隔离不匹配")
             if model is not None and runtime.get("requested_model") != model:
                 raise MikasaError("Hermes 请求模型与会话选择不一致")
+            if runtime.get("api_mode") != extra.get("MIKASA_MODEL_API_MODE", "chat_completions"):
+                raise MikasaError("Hermes API 协议与选定路由不一致")
         runtime["tool_events"] = session.events
         self.last_runtime = runtime
         if not isinstance(value, dict) or not isinstance(value.get("summary"), str) or not value["summary"].strip():

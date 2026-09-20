@@ -19,6 +19,7 @@ def parser():
     commands = p.add_subparsers(dest="command", required=True)
     diagnostic = commands.add_parser("doctor")
     diagnostic.add_argument("--probe-model", action="store_true", help="经当前 worker 发起一次真实模型调用；会消耗模型额度")
+    diagnostic.add_argument("--model", help="诊断指定模型的路由；不改变默认模型或聊天")
     commands.add_parser("serve")
     chat = commands.add_parser("chat", help="与 Mikasa 聊天，支持：切换为 完整模型ID")
     chat.add_argument("--session", help="继续已有聊天 ID")
@@ -66,13 +67,13 @@ def parser():
     return p
 
 
-def doctor(config, *, probe_model=False):
+def doctor(config, *, probe_model=False, selected_model=None):
     from .skills import skill_inventory
     from .model_settings import model_diagnostics
     from .model_errors import ModelFailure
     from .worker import Worker
     command = config.data.get("worker", {}).get("command", [])
-    model = model_diagnostics(config.data.get("worker", {}))
+    model = model_diagnostics(config.data.get("worker", {}), selected_model)
     if probe_model and model["configuration"] == "valid":
         worker = Worker(config)
         try:
@@ -102,7 +103,7 @@ def main(argv=None):
     try:
         config = Config.load(args.config)
         if args.command == "doctor":
-            value = doctor(config, probe_model=args.probe_model)
+            value = doctor(config, probe_model=args.probe_model, selected_model=args.model)
             print(json.dumps(value, ensure_ascii=False, indent=2))
             return int(args.probe_model and value["model"]["connection"] != "passed")
         else:
@@ -117,7 +118,7 @@ def main(argv=None):
                     value = chat.send(session["id"], actor, args.message, uuid.uuid4().hex)
                     print(json.dumps(value, ensure_ascii=False, indent=2))
                     return 0
-                print(f"Mikasa · 会话 {session['id']} · 请求模型 {session['model']}\n输入“切换为 完整模型ID”切换，/model 查询，/exit 退出。")
+                print(f"Mikasa · 会话 {session['id']} · 请求模型 {session['model']}\n输入 /model 查看候选，/model 完整模型ID 切换，/exit 退出。")
                 while True:
                     try:
                         message = input("你：").strip()

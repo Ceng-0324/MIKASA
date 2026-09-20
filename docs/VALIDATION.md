@@ -1,24 +1,24 @@
 # 本体开发验证记录
 
-日期：2026-09-20。对象：基线 `471e7c0` 加本轮 CCH 配置与诊断变更，Python 3.12.13。本记录不证明后续变更。
+日期：2026-09-20。对象：基线 `06a8715` 加本轮跨协议 /model 变更，Python 3.12.13。本记录不证明后续变更。
 
 ## 已执行
 
 | 检查 | 结果 |
 | --- | --- |
-| `python3.12 -m unittest discover -q` | 96 项通过，53.767 秒 |
+| `python3.12 -m unittest discover -q` | 105 项通过，55.695 秒 |
 | `python3.12 scripts/check_docs.py` | 相对链接、空白和 canonical 顺序通过 |
 | `python3.12 -m compileall -q mikasa workers/hermes tests scripts` | 通过 |
-| 本地配置 `doctor --probe-model` | 真实 Hermes → CCH Responses 通过，请求/响应均为 gpt-6-astra；配置 valid，分组 unverified；仓库为空、GitHub token 未配置、发布关闭 |
+| 原生协议与安装依赖 | 官方 Hermes 0.21.3、Anthropic 0.87.0；uv pip check 通过，未改官方源码 |
 | `git diff --check` 与 Git 可纳入文本逐文件空白检查 | 通过，覆盖未跟踪文件 |
-| 官方 Hermes 错误钩子 | 临时 loopback HTTP 服务返回 401；官方 SDK 发出 2 次请求后桥接输出 auth，未调用 CCH，未使用真实凭据 |
-| 真实 HTTP 聊天切换 | gpt-6-astra → gpt-5.6-luna → 恢复默认，8 项检查全部通过：模型切换、后续请求、上下文保留、幂等重放与持久化；见 [本轮路由证据](cch-routing-evidence.json) |
+| 真实 HTTP 系统命令切换 | gpt-6-astra Responses → /model claude-opus-4-6 Messages → /model default，10 项全部通过；见 [跨协议证据](cross-protocol-evidence.json) |
+| 网页脚本 | Node --check 通过；HTTP 入口和菜单数据回归通过，未运行真实浏览器视觉/点击验收 |
 | 真实认证值字节扫描 | Git 可纳入文件和 runtime/state 未发现实际 Key 匹配；本地配置及两份联调报告权限 0600 |
-| 人格与工程 skill | 真实连接探针加载 persona，宿主指纹核对通过；四个 skill 可读取，工程任务路由由隔离回归验证 |
+| 人格与工程 skill | GPT/Claude 真实聊天加载 persona，宿主指纹核对通过；诊断使用官方 pre_api_request 确认 canonical 全文进入 Claude 请求；工程任务路由由隔离回归验证 |
 
 历史执行进度、分页及工程工具验证见 [工具覆盖记录](HERMES_TOOLS_VALIDATION.md)，本轮未重复这些真实工程场景。历史验证另保留：[首次 Hermes/CCH 联调](HERMES_CCH_VALIDATION.md)、[聊天模型切换](CHAT_VALIDATION.md)。
 
-本轮真实聊天复现：`python3.12 scripts/probe_chat.py --config config/local/hermes-cch.json --target gpt-5.6-luna --report runtime/state/hermes-cch/routing-chat-probe.json`。原始本地报告不提交，脱敏摘要及原报告 SHA-256 保存在上述路由证据中。
+本轮真实聊天复现：`python3.12 scripts/probe_chat.py --config config/local/hermes-cch.json --target claude-opus-4-6 --slash --report runtime/state/hermes-cch/cross-protocol-chat.json`。原始本地报告不提交，脱敏摘要及原报告 SHA-256 保存在上述路由证据中。上轮诊断和同协议联调保留在 [路由证据](cch-routing-evidence.json)。
 
 ## 证据范围
 
@@ -26,7 +26,7 @@
 
 Hermes 适配测试使用 SDK 夹具检查 system 参数、skill 指纹、官方插件注册接口、工具授权、Responses 模式与日志隔离。额外真实联调使用固定官方 Hermes、CCH Responses 和宿主工具执行，因此不把夹具通过当作真实工具兼容的唯一证据。GitHub REST、正式 Review 与外部发布仍模拟；Docker 测试仅验证启动参数和清理路径。
 
-本轮新增：环境白名单与 Codex 来源统一校验、非法端点/协议/凭据在 worker 启动前拒绝、诊断不暴露密钥和端点路径、探针显式执行及失败退出码、403 与 WAF/认证区分、结构化错误白名单、失败进度与聊天错误码、切换失败保留状态与幂等重放、API 恢复后清除旧错误。真实 CCH 不注入失败、不修改后台配置；default 分组仍缺网关侧证据。
+本轮新增：只读 Claude 配置来源、完整模型/最长前缀路由、缺失来源禁止回退凭据、跨协议并发不混用认证、/model 候选与真实子进程切换、未接入斜杠命令禁止进入模型、Anthropic bridge 参数/指纹核验、仅接受完整 JSON 或单个完整 JSON 代码围栏。真实验收中先遇到缺少 Anthropic 依赖及 Claude 返回非契约格式，均按失败处理；补齐官方依赖和输出封装兼容后，最终跨协议验收通过。真实 CCH 不注入失败、不修改后台配置；default 分组仍缺网关侧证据。
 
 既有执行进度回归：运行中进度可查询、模型失败/超时后的证据持久化、取消后旧进度拒绝写入、重试令牌隔离、runner 恢复保留阶段、写入失败先于工具副作用中止、验证和提交阶段记录。
 

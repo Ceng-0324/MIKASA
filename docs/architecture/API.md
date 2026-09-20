@@ -4,6 +4,8 @@ CLI：`python3.12 -m mikasa --config <配置路径> <命令>`。本地 CLI 仅�
 
 `doctor` 包含脱敏的本地模型配置状态，默认不联网。显式 `doctor --probe-model` 发起一次模型验证，失败退出码为 1；不建立聊天或工程任务。诊断字段与限制见 [CCH 手册](../runbooks/CCH.md)。
 
+`doctor --model MODEL_ID` 按指定模型诊断配置，结合 `--probe-model` 验证实际协议。聊天 `/model` 和 `/models` 回复可包含 `model_options` 数组，仅列受信任配置中的候选 ID，网页按钮仍通过现有消息 API 发送 `/model MODEL_ID`；不增加任意端点/配置修改接口。未接入的斜杠命令返回 `kind=unsupported_command`，不调用模型。
+
 HTTP 默认监听 `127.0.0.1:8765`。除健康检查、无数据的 `/chat` 静态页面和单独验签的 GitHub webhook 外，均需要 `Authorization: Bearer <token>`。token 通过配置中的账号到环境变量名映射识别，不采信 body 中的自称身份。
 
 | 方法和路径 | 行为 | 权限 |

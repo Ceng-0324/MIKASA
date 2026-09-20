@@ -1,0 +1,129 @@
+{
+  "date": "2026-09-20",
+  "baseline": "06a8715 plus cross-protocol model commands",
+  "scope": "live HTTP -> Mikasa /model -> official Hermes -> CCH",
+  "hermes_revision": "f9524d3f119c672e4a4444f56d582e7475716ba3",
+  "deployed_cch_revision": "unknown",
+  "provider_group": "unverified",
+  "report_sha256": "37d41637446e4332aceef75ec3531c4ba9c7ac58cd3f59ad91aaa653005ae136",
+  "passed": true,
+  "checks": {
+    "switch_effective": true,
+    "target_used_next_turn": true,
+    "history_survives_switch": true,
+    "retry_idempotent": true,
+    "restored_default": true,
+    "history_survives_restore": true,
+    "readback_persisted": true,
+    "real_hermes": true,
+    "target_protocol": true,
+    "restored_protocol": true
+  },
+  "steps": [
+    {
+      "kind": "chat",
+      "model": "gpt-6-astra",
+      "revision": 0,
+      "execution": {
+        "backend": "hermes",
+        "version": "0.21.3",
+        "requested_model": "gpt-6-astra",
+        "reported_model": "gpt-6-astra",
+        "api_mode": "codex_responses",
+        "rules_sha256": "ecfe8619a876ee9b9a7c62f84d85d88ab468307fb581fe0430a9660a33a9c2b3",
+        "system_sha256": "c994c181afe82c7f8257ff0e6925f6d13e2f5f0164c7a93a7b20eeca39e52b37",
+        "skills": [
+          {
+            "name": "mikasa-persona",
+            "sha256": "af448d2439a8427f3e6163549f31d116a8ffb66433d17da98d4a298a1217a454",
+            "source": "local:identity.md"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "switch",
+      "model": "claude-opus-4-6",
+      "revision": 1,
+      "execution": {
+        "backend": "hermes",
+        "version": "0.21.3",
+        "requested_model": "claude-opus-4-6",
+        "reported_model": "claude-opus-4-6",
+        "api_mode": "anthropic_messages",
+        "rules_sha256": "ecfe8619a876ee9b9a7c62f84d85d88ab468307fb581fe0430a9660a33a9c2b3",
+        "system_sha256": "c994c181afe82c7f8257ff0e6925f6d13e2f5f0164c7a93a7b20eeca39e52b37",
+        "skills": [
+          {
+            "name": "mikasa-persona",
+            "sha256": "af448d2439a8427f3e6163549f31d116a8ffb66433d17da98d4a298a1217a454",
+            "source": "local:identity.md"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "chat",
+      "model": "claude-opus-4-6",
+      "revision": 1,
+      "execution": {
+        "backend": "hermes",
+        "version": "0.21.3",
+        "requested_model": "claude-opus-4-6",
+        "reported_model": "claude-opus-4-6",
+        "api_mode": "anthropic_messages",
+        "rules_sha256": "ecfe8619a876ee9b9a7c62f84d85d88ab468307fb581fe0430a9660a33a9c2b3",
+        "system_sha256": "c994c181afe82c7f8257ff0e6925f6d13e2f5f0164c7a93a7b20eeca39e52b37",
+        "skills": [
+          {
+            "name": "mikasa-persona",
+            "sha256": "af448d2439a8427f3e6163549f31d116a8ffb66433d17da98d4a298a1217a454",
+            "source": "local:identity.md"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "reset",
+      "model": "gpt-6-astra",
+      "revision": 2,
+      "execution": {
+        "backend": "hermes",
+        "version": "0.21.3",
+        "requested_model": "gpt-6-astra",
+        "reported_model": "gpt-6-astra",
+        "api_mode": "codex_responses",
+        "rules_sha256": "ecfe8619a876ee9b9a7c62f84d85d88ab468307fb581fe0430a9660a33a9c2b3",
+        "system_sha256": "c994c181afe82c7f8257ff0e6925f6d13e2f5f0164c7a93a7b20eeca39e52b37",
+        "skills": [
+          {
+            "name": "mikasa-persona",
+            "sha256": "af448d2439a8427f3e6163549f31d116a8ffb66433d17da98d4a298a1217a454",
+            "source": "local:identity.md"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "chat",
+      "model": "gpt-6-astra",
+      "revision": 2,
+      "execution": {
+        "backend": "hermes",
+        "version": "0.21.3",
+        "requested_model": "gpt-6-astra",
+        "reported_model": "gpt-6-astra",
+        "api_mode": "codex_responses",
+        "rules_sha256": "ecfe8619a876ee9b9a7c62f84d85d88ab468307fb581fe0430a9660a33a9c2b3",
+        "system_sha256": "c994c181afe82c7f8257ff0e6925f6d13e2f5f0164c7a93a7b20eeca39e52b37",
+        "skills": [
+          {
+            "name": "mikasa-persona",
+            "sha256": "af448d2439a8427f3e6163549f31d116a8ffb66433d17da98d4a298a1217a454",
+            "source": "local:identity.md"
+          }
+        ]
+      }
+    }
+  ]
+}

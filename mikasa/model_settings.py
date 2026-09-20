@@ -26,6 +26,61 @@ def default_model(config):
 
 
 MODEL_FIELDS = ("MIKASA_MODEL", "MIKASA_MODEL_BASE_URL", "MIKASA_MODEL_API_KEY", "MIKASA_MODEL_API_MODE")
+API_MODES = {"codex_responses", "chat_completions", "anthropic_messages"}
+
+
+def validate_source(selection):
+    if not isinstance(selection, dict) or selection.get("type") not in {"environment", "codex", "claude"}:
+        raise MikasaError("worker.model_source.type 必须为 environment、codex 或 claude")
+    if set(selection) - {"type", "config_path", "auth_path"}:
+        raise MikasaError("model_source 仅保存读取来源，不允许内嵌凭据")
+    for field in ("config_path", "auth_path"):
+        if field in selection and (not isinstance(selection[field], str) or not selection[field]):
+            raise MikasaError("模型来源路径必须为非空字符串")
+    if "auth_path" in selection and selection["type"] != "codex":
+        raise MikasaError("仅 Codex 来源支持 auth_path")
+
+
+def validate_routes(routes):
+    if not isinstance(routes, list) or len(routes) > 100:
+        raise MikasaError("model_routes 必须为最多 100 条路由的数组")
+    seen_models, seen_prefixes = set(), set()
+    for route in routes:
+        if not isinstance(route, dict) or set(route) - {"models", "prefixes", "model_source"}:
+            raise MikasaError("model_routes 路由字段不合法")
+        validate_source(route.get("model_source"))
+        if not route.get("models") and not route.get("prefixes"):
+            raise MikasaError("模型路由需要 models 或 prefixes")
+        for field, seen in (("models", seen_models), ("prefixes", seen_prefixes)):
+            values = route.get(field, [])
+            if not isinstance(values, list) or len(values) > 200:
+                raise MikasaError("路由匹配项必须为最多 200 项的数组")
+            for value in values:
+                validate_model(value)
+                if value in seen:
+                    raise MikasaError("模型路由包含重复匹配项")
+                seen.add(value)
+
+
+def select_source(settings, model=None):
+    routes = settings.get("model_routes", [])
+    validate_routes(routes)
+    if model is not None:
+        validate_model(model)
+        for route in routes:
+            if model in route.get("models", []):
+                return route["model_source"]
+        candidates = [(len(prefix), route["model_source"]) for route in routes
+                      for prefix in route.get("prefixes", []) if model.startswith(prefix)]
+        if candidates:
+            return max(candidates, key=lambda item: item[0])[1]
+    return settings.get("model_source", {"type": "environment"})
+
+
+def model_choices(settings):
+    """Configured names only, never imply a live CCH inventory."""
+    validate_routes(settings.get("model_routes", []))
+    return sorted({model for route in settings.get("model_routes", []) for model in route.get("models", [])})
 
 
 def validate_environment(env, *, required=False):
@@ -50,20 +105,32 @@ def validate_environment(env, *, required=False):
         key = env["MIKASA_MODEL_API_KEY"]
         if not isinstance(key, str) or not key or any(c.isspace() or ord(c) < 32 for c in key):
             raise MikasaError("模型 API key 必须为非空且无空白的字符串")
-    if "MIKASA_MODEL_API_MODE" in env and env["MIKASA_MODEL_API_MODE"] not in {"codex_responses", "chat_completions"}:
-        raise MikasaError("模型 API 模式仅支持 codex_responses 或 chat_completions")
+    if "MIKASA_MODEL_API_MODE" in env and env["MIKASA_MODEL_API_MODE"] not in API_MODES:
+        raise MikasaError("模型 API 模式仅支持 codex_responses、chat_completions 或 anthropic_messages")
     return env
 
 
-def model_environment(settings):
-    selection = settings.get("model_source", {"type": "environment"})
+def model_environment(settings, model=None):
+    selection = select_source(settings, model)
+    validate_source(selection)
     source = selection.get("type")
     if source == "environment":
-        return validate_environment({k: os.environ[k] for k in MODEL_FIELDS
-                                     if k in settings.get("env_allowlist", []) and k in os.environ})
-    if source != "codex":
-        raise MikasaError("model_source.type 仅支持 environment 或 codex")
+        env = {k: os.environ[k] for k in MODEL_FIELDS if k in settings.get("env_allowlist", []) and k in os.environ}
+        if model is not None:
+            env["MIKASA_MODEL"] = model
+        return validate_environment(env)
     try:
+        if source == "claude":
+            path = Path(selection.get("config_path", "~/.claude/settings.json")).expanduser()
+            config = json.loads(path.read_text())
+            env = config.get("env", {})
+            # Explicitly selected settings file only: no OAuth/keychain, helper or shell execution.
+            key = env.get("ANTHROPIC_AUTH_TOKEN") or env.get("ANTHROPIC_API_KEY")
+            selected = model or env.get("ANTHROPIC_MODEL") or config.get("model")
+            if not isinstance(selected, str) or not selected or selected in {"opus", "sonnet", "haiku", "default"} or "[" in selected:
+                raise MikasaError("Claude 来源需要完整模型 ID；不将 Claude Code 的别名或上下文后缀当成网关模型名")
+            return validate_environment({"MIKASA_MODEL": selected, "MIKASA_MODEL_BASE_URL": env.get("ANTHROPIC_BASE_URL"),
+                                         "MIKASA_MODEL_API_KEY": key, "MIKASA_MODEL_API_MODE": "anthropic_messages"}, required=True)
         config_path = Path(selection.get("config_path", "~/.codex/config.toml")).expanduser()
         config = tomllib.loads(config_path.read_text())
         provider = config["model_providers"][config["model_provider"]]
@@ -78,19 +145,19 @@ def model_environment(settings):
         wire = provider.get("wire_api", "responses")
         if wire not in {"responses", "chat"}:
             raise MikasaError("不支持选定 Codex provider 的 wire_api")
-        return validate_environment({"MIKASA_MODEL": config["model"], "MIKASA_MODEL_BASE_URL": base_url,
+        return validate_environment({"MIKASA_MODEL": model or config["model"], "MIKASA_MODEL_BASE_URL": base_url,
                 "MIKASA_MODEL_API_KEY": key, "MIKASA_MODEL_API_MODE": "codex_responses" if wire == "responses" else "chat_completions"}, required=True)
     except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
         raise MikasaError("无法读取已选择的本地模型配置或认证；未复制认证文件") from exc
 
 
-def model_diagnostics(settings):
+def model_diagnostics(settings, model=None):
     """Local evidence only. Never expose keys, auth paths or endpoint paths."""
-    report = {"source": settings.get("model_source", {}).get("type", "environment"),
+    report = {"source": select_source(settings, model).get("type"),
               "connection": "not_checked", "provider_group": "unverified",
               "group_note": "CCH 分组由网关 Key 配置决定；本地模型名和连接成功不能证明属于 default 分组"}
     try:
-        env = model_environment(settings)
+        env = model_environment(settings, model)
         validate_environment(env, required=True)
     except MikasaError as exc:
         return {**report, "configuration": "invalid", "error": str(exc)}

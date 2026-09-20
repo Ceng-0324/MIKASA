@@ -34,13 +34,19 @@ uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/b
 
 同时设置顶层 `runtime` 为 `runtime/state/hermes-cch`。本地配置权限设为 0600。显式选择 `codex` 才只读 `~/.codex/config.toml` 中选定 provider、model、base_url、wire_api；API key 从对应 env_key、配置 bearer token 或 `auth.json` 的 OPENAI_API_KEY 读取到内存。可用 `config_path`/`auth_path` 指定来源，不复制文件，不迁移 OAuth，不输出 key。Responses 映射为 Hermes 的 `codex_responses`。
 
-默认 `model_source.type=environment` 不读取个人工具配置。生产通过专用环境注入 `MIKASA_MODEL`、`MIKASA_MODEL_BASE_URL`、`MIKASA_MODEL_API_KEY`、`MIKASA_MODEL_API_MODE`，并在 `worker.env_allowlist` 中列出；API 模式为 `chat_completions`（默认）或 `codex_responses`。home/source 也可用 `HERMES_HOME`/`MIKASA_HERMES_SOURCE` 白名单环境变量设置。专用 home 不可等于个人 home 或 `~/.hermes`。
+默认 `model_source.type=environment` 不读取个人工具配置。生产通过专用环境注入 `MIKASA_MODEL`、`MIKASA_MODEL_BASE_URL`、`MIKASA_MODEL_API_KEY`、`MIKASA_MODEL_API_MODE`，并在 `worker.env_allowlist` 中列出；API 模式支持 `chat_completions`（默认）、`codex_responses` 和 `anthropic_messages`。home/source 也可用 `HERMES_HOME`/`MIKASA_HERMES_SOURCE` 白名单环境变量设置。专用 home 不可等于个人 home 或 `~/.hermes`。
 
-两种模型来源使用同一配置校验：完整模型 ID、有效 HTTP(S) 端点、无空白 API key 和受支持的协议；端点不得嵌入认证、查询参数或片段。`doctor` 输出配置状态、端点 origin（不含路径）、请求模型和协议，不输出认证值或认证文件路径。显式 `doctor --probe-model` 才通过当前 worker 发起一次无工具聊天验证，不创建聊天记录或工程任务；探针失败返回非零退出码。详细步骤见 [CCH 诊断](../../docs/runbooks/CCH.md)。
+跨 GPT/Claude 的 `/model` 切换通过 `worker.model_routes` 按完整模型 ID 或前缀选择来源，示例见 [CCH 手册](../../docs/runbooks/CCH.md)。`model_source.type=claude` 显式只读 `~/.claude/settings.json` 或指定 `config_path` 的 env.ANTHROPIC_BASE_URL、env.ANTHROPIC_AUTH_TOKEN（优先）/env.ANTHROPIC_API_KEY，使用 Hermes 原生 `anthropic_messages`。不执行 apiKeyHelper，不读取 OAuth/keychain，不合并其他 Claude 设置文件或继承未经允许的全局认证变量。`opus[1m]` 等客户端别名不作为模型 ID；切换命令传入完整网关模型名。默认请求模型仍来自 worker.model_source；路由内 models 是菜单候选，不是可用性承诺。
+
+Anthropic 协议依赖 Hermes 官方声明的 `anthropic==0.87.0`，已纳入安装快照；缺失时返回 missing_dependency。请求保持 provider=custom，避免触发原生 Anthropic OAuth 或个人凭据回退，SDK 请求、工具和响应转换由 Hermes 官方 transport 完成。
+
+三种模型来源使用同一配置校验：完整模型 ID、有效 HTTP(S) 端点、无空白 API key 和受支持的协议；端点不得嵌入认证、查询参数或片段。`doctor` 输出配置状态、端点 origin（不含路径）、请求模型和协议，不输出认证值或认证文件路径。显式 `doctor --probe-model` 才通过当前 worker 发起一次无工具聊天验证，不创建聊天记录或工程任务；探针失败返回非零退出码。详细步骤见 [CCH 诊断](../../docs/runbooks/CCH.md)。
 
 ## 执行协议与限制
 
 bridge 是单次进程：stdin 接收 version=1、rules、instruction、skills、task、context、output_contract；stdout 返回 `{"version":1,"result":{...},"runtime":{...}}`。result 是任务对应严格 JSON；runtime 包含 SDK 版本、请求模型、通过公开 post_api_request hook 观察到的响应模型标识 reported_model、API 模式、规则/system/skill SHA-256、来源和工具数。宿主验证规则、skill 指纹及工具数并保存到任务 execution，不能用模型自述代替加载证据。
+
+模型原始回复允许整个 JSON 文档包在一个完整 JSON 代码围栏内；bridge 仅剥除这层外壳，不从说明文字中搜索 JSON，不修复畸形内容，不接受多段代码块。字段和实际工具副作用继续由宿主校验。响应 API 模式还必须与宿主选定路由一致。
 
 失败时 bridge 以非零码退出，stdout 只返回 `{"version":1,"error":{"code":"固定错误码"}}`。使用官方 `api_request_error` hook 的结构化 reason/status 分类；不复制 error.message、request 或原始 SDK 异常。宿主再次按固定词表校验，并将可识别的 `error_code` 写入失败进度。恢复成功后的 API 错误不会继续当作最终失败；未知原因仍为泛化错误，不猜测网关故障来源。
 

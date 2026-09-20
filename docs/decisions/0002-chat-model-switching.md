@@ -8,7 +8,7 @@
 
 | 核对对象 | 证据与结论 |
 | --- | --- |
-| CCH 模型路由 | [provider-selector.ts](https://github.com/ding113/claude-code-hub/blob/dfeb14331cb350f672e92a3684adecf1052dd476/src/app/v1/_lib/proxy/provider-selector.ts)：基于请求模型、供应商 allowedModels 等条件选择供应商；会话绑定不支持新模型时清除旧绑定并重新选择 |
+| CCH 模型路由 | [provider-selector.ts](https://github.com/ding113/claude-code-hub/blob/dfeb14331cb350f672e92a3684adecf1052dd476/src/app/v1/_lib/proxy/provider-selector.ts)：基于请求模型、供应商 allowedModels 等条件选择供应商；会话绑定不支持新模型时清除旧绑定并重新选择。checkFormatProviderTypeCompatibility 限定 Responses → codex，Messages → claude/claude-auth，Chat → openai-compatible，跨协议不能只改 model |
 | CCH 模型重写 | [model-redirector.ts](https://github.com/ding113/claude-code-hub/blob/dfeb14331cb350f672e92a3684adecf1052dd476/src/app/v1/_lib/proxy/model-redirector.ts)：依据供应商 modelRedirects 改写请求 body.model，并记录原始模型及目标模型 |
 | CCH 配置热更新 | [provider-cache.ts](https://github.com/ding113/claude-code-hub/blob/dfeb14331cb350f672e92a3684adecf1052dd476/src/lib/cache/provider-cache.ts)：更新发布缓存失效消息；Redis 通知不可用时依赖 30 秒 TTL。生效针对后续请求，不迁移正在生成的流 |
 | CCH 回归用例 | [模型不匹配绑定测试](https://github.com/ding113/claude-code-hub/blob/dfeb14331cb350f672e92a3684adecf1052dd476/tests/unit/proxy/provider-selector-model-mismatch-binding.test.ts)：覆盖原会话绑定不能处理新模型时的清除行为。本轮阅读源码，未运行 CCH 上游测试 |
@@ -20,7 +20,7 @@
 
 复用 CCH 作为唯一上游网关。Mikasa 聊天控制面解释直接用户命令、验证候选模型、保存会话选择，然后用现有 Hermes bridge 将选择放进请求。无需新增 HTTP 代理，也无需 CCH 管理员凭据或修改网关全局映射。
 
-切换范围为当前聊天，用户之间及聊天之间隔离；原工程任务继续使用运行配置。若以后把聊天直接关联到工程任务，需要单独定义任务继承模型的语义。本轮不暗中改变已有任务或个人 Codex 配置。
+切换范围为当前聊天，用户之间及聊天之间隔离；原工程任务继续使用运行配置。若以后把聊天直接关联到工程任务，需要单独定义任务继承模型的语义。不暗中改变已有任务或个人 Codex/Claude 配置。当前已增加由受信任配置定义的 model_routes，按模型选择对应端点、凭据引用和协议；用户入口统一为 `/model`，不暴露认证设置。
 
 ## 行为与失败处理
 
@@ -29,7 +29,7 @@
 - 每条消息使用独立 worker，并固定 model 到本次进程环境。当前聊天正在处理消息时拒绝并发修改；其他会话不受影响。运行暂停时不提交新选择。
 - SQLite 原子保存会话模型、revision、回复与切换事件；进程重建后可继续。Idempotency-Key 防止已完成请求重放；进程在模型调用后、事务提交前崩溃，重试可能再次消耗模型调用，但不会产生仓库副作用。
 - 会话全量历史保存在本地数据库，展示和模型上下文取最近 40 轮，并受 max_context_bytes 限制；截断会告知模型。人格与规则每轮重新加载，不依靠上一模型的隐式记忆。
-- 模型切换不改变端点、凭据或 API 协议。当前桥接支持 Responses/Chat；能否跨模型家族由 CCH 的兼容路由决定，不保证任意 Claude/Gemini 名称可用。
+- 模型切换根据受信任 model_routes 选择来源，同步切换本次 worker 的端点、凭据与协议；源配置文件保持只读。桥接支持 Hermes 官方 Responses/Chat/Messages；GPT 与 Claude 可以走各自原生协议，不保证任意 CCH 名称或尚未实现的其他协议可用。
 
 ## 入口与验证
 
@@ -38,3 +38,5 @@
 真实 HTTP → Chat → Hermes → CCH 验收见 [聊天切换验证](../CHAT_VALIDATION.md)。单元测试覆盖失败保留、跨账号拒绝、会话隔离、重放、并发锁、暂停、上下文截断和真实 worker 参数传递。CCH 后台供应商配置及管理端写入没有执行。
 
 后续收口增加统一配置校验、显式连接探针和安全故障反馈，见 [CCH 诊断](../runbooks/CCH.md)。固定 Hermes 的 [api_request_hooks.py](https://github.com/NousResearch/hermes-agent/blob/f9524d3f119c672e4a4444f56d582e7475716ba3/agent/api_request_hooks.py) 公开 `api_request_error`，携带分类 reason/status；bridge 只取结构化分类并映射固定词表，丢弃 message/request。恢复成功时清除此前错误，避免误报。`default` 分组仍需网关侧 Key 配置与路由证据，本地探针通过不把它自动标记为已切换。
+
+跨协议依据：同一 Hermes revision 的 [agent_init.py](https://github.com/NousResearch/hermes-agent/blob/f9524d3f119c672e4a4444f56d582e7475716ba3/agent/agent_init.py) 接受显式 anthropic_messages，并在 provider=custom 时使用显式 Key，不触发个人 Anthropic OAuth；[命令定义](https://github.com/NousResearch/hermes-agent/blob/f9524d3f119c672e4a4444f56d582e7475716ba3/hermes_cli/commands.py) 确认 /model、/new、/init 为 CLI/Gateway 命令。Mikasa 的嵌入式入口自行解释 /model，复用 AIAgent 及官方 transport，不启动另一套 CLI 会话或推理循环。

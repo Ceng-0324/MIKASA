@@ -1,5 +1,11 @@
 # 聊天模型切换验证
 
+## 跨协议增量验收
+
+2026-09-20，基线 `06a8715` 加跨协议变更：真实 HTTP → Mikasa 系统命令 → Hermes 0.21.3 → CCH，`/model claude-opus-4-6` 从 GPT Responses 切为 Claude Messages，Claude 正确复述 GPT 记住的随机代号；`/model default` 恢复 GPT Responses 后再次正确复述。10 项检查全部通过，包括协议、后续请求、上下文、幂等重放和数据库回读。请求/响应标识分别为 gpt-6-astra 与 claude-opus-4-6；底层身份仍需网关证据。脱敏结果见 [跨协议证据](cross-protocol-evidence.json)。
+
+复现命令：`python3.12 scripts/probe_chat.py --config config/local/hermes-cch.json --target claude-opus-4-6 --slash --report runtime/state/hermes-cch/cross-protocol-chat.json`。配置来源与协议选择见 [CCH 手册](runbooks/CCH.md)。当前回归结果见 [本体验证](VALIDATION.md)，下面保留最初同协议切换的历史证据。
+
 日期：2026-09-20；对象：Mikasa 基线 `3164e4e` 加本轮工作区。调研来源与方案见 [架构决定](decisions/0002-chat-model-switching.md)。真实结果摘要见 [chat-switch-evidence.json](chat-switch-evidence.json)。
 
 ## 真实执行

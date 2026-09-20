@@ -15,7 +15,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from mikasa.model_errors import ModelFailure, classify_failure
-from mikasa.model_settings import validate_environment
+from mikasa.model_settings import API_MODES, validate_environment
+
+
+def parse_result(text):
+    # Accept only a whole JSON document or a single whole fenced JSON document.
+    # Never search prose for an embedded object or repair malformed payloads.
+    if isinstance(text, str):
+        fenced = re.fullmatch(r"\s*```(?:json)?\s*\n(.*?)\n```\s*", text, re.DOTALL)
+        if fenced:
+            text = fenced.group(1)
+    return json.loads(text)
 
 
 def main():
@@ -39,7 +49,7 @@ def main():
             raise ValueError("Hermes source is incomplete")
         sys.path.insert(0, str(source))
     mode = os.environ.get("MIKASA_MODEL_API_MODE", "chat_completions")
-    if mode not in {"chat_completions", "codex_responses"}:
+    if mode not in API_MODES:
         raise ValueError("unsupported model API mode")
     skills = request.get("skills", [])
     for skill in skills:
@@ -48,9 +58,16 @@ def main():
     system_message = request["rules"] + "\n\n" + request.get("instruction", "")
     for skill in skills:
         system_message += f"\n\n<project-skill name=\"{skill['name']}\">\n{skill['content']}\n</project-skill>"
-    system_message += "\n仅按 output_contract 返回 JSON，不附代码围栏。"
+    system_message += ("\n宿主输出协议：最终响应必须是单个 JSON 对象，不附代码围栏或对象之外的说明。"
+                       "用户要求简短回复时，将回复文字放入 summary 字段，仍须遵守 JSON 协议。"
+                       "字段契约（值为字段说明）：" + json.dumps(request.get("output_contract", {}), ensure_ascii=False))
     # Discard SDK console diagnostics; dedicated SDK home logs are checked separately.
     with tempfile.TemporaryFile(mode="w+") as diagnostics, contextlib.redirect_stdout(diagnostics), contextlib.redirect_stderr(diagnostics):
+        if mode == "anthropic_messages":
+            try:
+                import anthropic
+            except ImportError:
+                raise ModelFailure("missing_dependency") from None
         from run_agent import AIAgent
         from hermes_cli.plugins import PluginContext, PluginManifest, get_plugin_manager
 
@@ -117,7 +134,8 @@ def main():
             raise RuntimeError("Hermes tool grant mismatch")
         try:
             result = agent.run_conversation(
-                user_message=json.dumps({k: v for k, v in request.items() if k not in {"rules", "skills", "instruction"}}, ensure_ascii=False),
+                user_message="按 output_contract 返回一个 JSON 对象，将回复放入 summary 字段；不要附代码围栏。以下是任务数据：\n" + json.dumps(
+                    {k: v for k, v in request.items() if k not in {"rules", "skills", "instruction"}}, ensure_ascii=False),
                 system_message=system_message,
             )
         except Exception:
@@ -125,7 +143,7 @@ def main():
         if result.get("failed") or result.get("interrupted"):
             raise ModelFailure(failures[-1] if failures else "execution_failed")
         try:
-            output = json.loads(result["final_response"])
+            output = parse_result(result["final_response"])
         except (ValueError, TypeError, KeyError):
             raise ModelFailure(failures[-1] if failures else "invalid_response") from None
     try:

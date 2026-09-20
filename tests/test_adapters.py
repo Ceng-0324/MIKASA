@@ -14,6 +14,16 @@ from tests.support import BaseTest, REPO, ROOT, SHA
 
 
 class AdapterTests(BaseTest):
+    def test_model_output_accepts_only_whole_json_documents(self):
+        from workers.hermes.bridge import parse_result
+        value = {'summary': 'ok'}
+        for text in ('{"summary":"ok"}', '```json\n{"summary":"ok"}\n```', '```\n{"summary":"ok"}\n```'):
+            self.assertEqual(parse_result(text), value)
+        for text in ('ok', '解释 {"summary":"ok"}', '```json\n{"summary":"ok"}\n``` 尾注',
+                     '```json\n{"summary":"ok"}\n```\n```json\n{}\n```'):
+            with self.assertRaises(ValueError):
+                parse_result(text)
+
     def test_github_pagination_and_ci_status(self):
         github = GitHub(self.config)
         def request(method, path, body=None):
@@ -99,8 +109,8 @@ class AIAgent:
         from hermes_cli.plugins import hooks
         hooks['post_api_request'](response_model='fixture-reported')
         assert system_message.startswith('canonical-rules')
-        assert 'rules' not in json.loads(user_message)
-        assert 'skills' not in json.loads(user_message)
+        assert 'rules' not in json.loads(user_message.split('\\n', 1)[1])
+        assert 'skills' not in json.loads(user_message.split('\\n', 1)[1])
         assert 'host instruction' in system_message
         assert '<project-skill name="mikasa-persona">' in system_message
         assert '<project-skill name="mikasa-implement">' in system_message
@@ -154,6 +164,28 @@ class AIAgent:
         envelope = json.loads(result['stdout'])
         self.assertEqual(len(envelope['runtime']['granted_tools']), 3)
         self.assertEqual(envelope['runtime']['tool_count'], 3)
+
+    def test_bridge_selects_native_anthropic_transport(self):
+        from mikasa.worker import Worker
+        self.test_bridge_protocol_and_tool_isolation()
+        # Host Python need not install either SDK; exercise the full subprocess bridge.
+        (self.path / 'anthropic.py').write_text('')
+        source = self.path / 'run_agent.py'
+        source.write_text(source.read_text().replace("'codex_responses'", "'anthropic_messages'"))
+        self.config.data['worker'].update({'command': [sys.executable, str(ROOT / 'workers/hermes/bridge.py')],
+            'hermes_source': str(self.path), 'home': str(self.path / 'hermes'),
+            'env_allowlist': ['MIKASA_MODEL', 'MIKASA_MODEL_BASE_URL', 'MIKASA_MODEL_API_KEY', 'MIKASA_MODEL_API_MODE']})
+        from mikasa.skills import digest
+        env = {'MIKASA_MODEL': 'claude-test', 'MIKASA_MODEL_BASE_URL': 'https://cch.invalid',
+               'MIKASA_MODEL_API_KEY': 'fixture-key', 'MIKASA_MODEL_API_MODE': 'anthropic_messages'}
+        # Preserve the strict engineering contract and host attestation on the new wire.
+        with patch.dict(os.environ, env), patch.object(Worker, 'request', return_value={
+                'version': 1, 'rules': 'canonical-rules', 'instruction': 'host instruction',
+                'skills': load_skills(ROOT, 'implement'), 'output_contract': {'summary': 'text', 'changes': []}}):
+            worker = Worker(self.config)
+            worker.execute({'payload': {'kind': 'implement'}}, {}, lambda: False, model='claude-test')
+        self.assertEqual(worker.last_runtime['api_mode'], 'anthropic_messages')
+        self.assertEqual(worker.last_runtime['rules_sha256'], digest('canonical-rules'))
 
     def test_bridge_failure_hook_and_recovery_discard_private_details(self):
         from mikasa.worker import Worker

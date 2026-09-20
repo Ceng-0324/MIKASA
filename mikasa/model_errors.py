@@ -3,6 +3,7 @@ from .errors import MikasaError
 
 
 MESSAGES = {
+    "missing_dependency": "Hermes 缺少所选协议的依赖；请按 requirements-tested.txt 安装独立执行环境",
     "auth": "模型服务拒绝认证；检查选定 API key 是否有效",
     "access_denied": "模型服务返回 403；可能涉及网关访问控制或 WAF，不能仅据此判断 Key 权限不足",
     "upstream_blocked": "Hermes 识别到网关或 WAF 拦截；请由服务管理员核对访问策略",

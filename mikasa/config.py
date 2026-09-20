@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import MikasaError
+from .model_settings import validate_routes, validate_source
 
 REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 KINDS = {"audit", "plan", "implement", "review", "followup"}
@@ -63,10 +64,8 @@ class Config:
             if not isinstance(env_names, list) or not all(isinstance(v, str) and re.fullmatch(r"[A-Z_][A-Z0-9_]*", v) for v in env_names):
                 raise MikasaError("worker.env_allowlist 必须为环境变量名称数组")
             model_source = worker.get("model_source", {"type": "environment"})
-            if not isinstance(model_source, dict) or model_source.get("type") not in {"environment", "codex"}:
-                raise MikasaError("worker.model_source.type 必须为 environment 或 codex")
-            if set(model_source) - {"type", "config_path", "auth_path"}:
-                raise MikasaError("model_source 仅保存读取来源，不允许内嵌凭据")
+            validate_source(model_source)
+            validate_routes(worker.get("model_routes", []))
             for field in ("hermes_source", "home"):
                 if field in worker and (not isinstance(worker[field], str) or not worker[field]):
                     raise MikasaError(f"worker.{field} 必须为路径")

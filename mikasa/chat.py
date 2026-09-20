@@ -7,7 +7,7 @@ import uuid
 from contextlib import contextmanager
 
 from .errors import Conflict, MikasaError, NotFound
-from .model_settings import default_model, validate_model
+from .model_settings import default_model, model_choices, validate_model
 from .model_errors import ModelFailure
 from .store import Store
 from .worker import Worker
@@ -23,7 +23,7 @@ SWITCH = re.compile(
 STATUS = {"当前模型", "现在用的什么模型", "现在用的什么模型？", "你现在用什么模型", "你现在用什么模型？", "/model"}
 MODELS = {"可用模型", "有哪些模型", "有哪些模型？", "/models"}
 RESET = {"恢复默认模型", "切换为默认模型", "/model default"}
-HELP = "可以说“切换为 完整模型ID”，或输入 /model 查看当前模型、/models 查看模型信息。切换仅影响当前聊天；工程任务仍使用运行配置。"
+HELP = "输入 /model 完整模型ID 或说“切换为 完整模型ID”即可切换 GPT、Claude 等已接入模型；/model 查看当前模型和配置候选，/model default 恢复默认。切换仅影响当前聊天；工程任务仍使用运行配置。"
 
 
 def command(message):
@@ -40,6 +40,8 @@ def command(message):
         return "switch", validate_model(match.group(1))
     if re.match(r"^(?:(?:Mikasa|三笠)[，,：:\s]*)?(?:请|帮我|请帮我)?\s*(?:切换|换成|换为|把模型|将模型|/model\b)", text, re.I):
         return "help", None
+    if re.match(r"^/[A-Za-z][A-Za-z0-9_-]*(?:\s|$)", text):
+        return "unsupported_command", None
     return "chat", None
 
 
@@ -126,15 +128,21 @@ class Chat:
                             reply += " 网关未提供可记录的模型标识，实际路由以 CCH 为准。"
             elif kind == "status":
                 reply = f"当前聊天的请求模型是 {model}。实际上游由 CCH 路由，其他聊天与工程任务不受本会话选择影响。"
+                if message.strip() == "/model":
+                    reply += "\n" + self.model_menu()
             elif kind == "models":
-                reply = f"当前请求模型：{model}。请使用 CCH 提供的完整模型 ID；本入口不假定有模型目录权限，也不把示例当作可用列表。" + HELP
+                reply = f"当前请求模型：{model}。\n" + self.model_menu()
             elif kind == "help":
                 reply = HELP
+            elif kind == "unsupported_command":
+                reply = "这个系统命令尚未接入 Mikasa，未执行任何操作。" + HELP
             else:
                 result, execution = self.infer(model, message, current["turns"], current["history_truncated"])
                 reply = result["summary"]
             response = {"chat_id": chat_id, "kind": kind, "reply": reply, "model": model,
                         "revision": current["revision"] + int(changed), "execution": execution}
+            if kind == "models" or (kind == "status" and message.strip() == "/model"):
+                response["model_options"] = model_choices(self.config.data.get("worker", {}))
             with self.store.connect() as db:
                 db.execute("BEGIN IMMEDIATE")
                 paused = db.execute("SELECT value FROM settings WHERE key='paused'").fetchone()
@@ -148,6 +156,13 @@ class Chat:
                 db.execute("INSERT INTO chat_turns(chat_id,request_key,message,response,created) VALUES(?,?,?,?,?)",
                            (chat_id, key, message, json.dumps(response, ensure_ascii=False), time.time()))
             return response
+
+    def model_menu(self):
+        choices = model_choices(self.config.data.get("worker", {}))
+        lines = ["已配置候选（可用性以切换验证为准，不是 CCH 完整目录）："] if choices else []
+        lines.extend("/model " + name for name in choices)
+        lines.append(HELP)
+        return "\n".join(lines)
 
     def infer(self, model, message, turns, history_truncated=False):
         # One worker per call: runtime evidence cannot race across HTTP threads.

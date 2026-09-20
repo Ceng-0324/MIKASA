@@ -23,6 +23,7 @@ def main():
     parser.add_argument('--config', required=True)
     parser.add_argument('--target', required=True)
     parser.add_argument('--report', required=True)
+    parser.add_argument('--slash', action='store_true', help='使用 /model 系统命令完成切换与恢复')
     args = parser.parse_args()
     config = Config.load(args.config)
     validate_model(args.target)
@@ -67,10 +68,11 @@ def main():
             return result
         marker = '蓝鲸-'+secrets.token_hex(3)
         before = send('请记住本次验收代号 '+marker+'，只需简短确认。')
-        switched = send('切换为 '+args.target, 'switch-target')
-        replay = request('POST', route+'/messages', {'message':'切换为 '+args.target}, 'switch-target')
+        switch_command = ('/model ' if args.slash else '切换为 ') + args.target
+        switched = send(switch_command, 'switch-target')
+        replay = request('POST', route+'/messages', {'message':switch_command}, 'switch-target')
         after = send('刚才的验收代号是什么？请原样回答。')
-        reset = send('恢复默认模型')
+        reset = send('/model default' if args.slash else '恢复默认模型')
         after_reset = send('再复述一次本次验收代号。')
         current = request('GET',route)
         report['checks'] = {
@@ -83,6 +85,11 @@ def main():
             'readback_persisted':current['model']==session['model'] and len(current['turns'])==5,
             'real_hermes':all(r['execution']['backend']=='hermes' for r in [before,switched,after,reset,after_reset]),
         }
+        from mikasa.model_settings import model_environment
+        target_mode = model_environment(config.data['worker'], args.target).get('MIKASA_MODEL_API_MODE', 'chat_completions')
+        default_mode = model_environment(config.data['worker'], session['model']).get('MIKASA_MODEL_API_MODE', 'chat_completions')
+        report['checks']['target_protocol'] = all(r['execution'].get('api_mode') == target_mode for r in [switched, after])
+        report['checks']['restored_protocol'] = all(r['execution'].get('api_mode') == default_mode for r in [reset, after_reset])
         report['passed']=all(report['checks'].values())
         print(json.dumps({'passed':report['passed'],'checks':report['checks']},ensure_ascii=False),flush=True)
     finally:

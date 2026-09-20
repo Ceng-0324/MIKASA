@@ -4,16 +4,49 @@ Mikasa 读取模型配置，Hermes 官方 harness 负责模型调用，CCH 负�
 
 ## 配置和连接检查
 
-按 [Hermes 配置](../../workers/hermes/README.md) 选择 `codex` 或 `environment`。环境来源只读取 `worker.env_allowlist` 内的模型变量；Codex 来源按 env_key、内嵌 bearer、邻近 auth.json 的顺序只读取得 API key，不复制认证文件。
+按 [Hermes 配置](../../workers/hermes/README.md) 选择 `codex`、`claude` 或 `environment`。环境来源只读取 `worker.env_allowlist` 内的模型变量；Codex 来源按 env_key、内嵌 bearer、邻近 auth.json 的顺序只读取得 API key；Claude 来源只读选定 settings.json 中的 CCH 端点和 token/API key，不复制认证文件。
 
 ```sh
 python3.12 -m mikasa --config config/local/hermes-cch.json doctor
 python3.12 -m mikasa --config config/local/hermes-cch.json doctor --probe-model
+python3.12 -m mikasa --config config/local/hermes-cch.json doctor --model claude-opus-4-6 --probe-model
 ```
 
 第一条只检查本地条件，`connection=not_checked`。第二条通过当前 worker 发送一次无工具聊天请求，会消耗一次模型调用；成功为 `connection=passed`，失败或配置不完整时退出码为 1。探针不创建任务、聊天或改动模型选择；Hermes 自身仍可能写专用 home 日志。配置、进程、协议或输出契约失败都不能报告连接通过。
 
 输出的 `requested_model` 是请求名，`reported_model` 是响应标识，`model_match` 为 same/different/unreported。即使 same，也不能独立证明供应商实际底层模型。`backend` 明确实际使用的 worker；夹具 worker 通过不算真实 CCH 联调。默认 doctor 的退出码仍只表示命令执行成功，模型配置状态读取 `model.configuration`。
+
+## /model 跨 GPT 与 Claude 切换
+
+`/model` 是宿主系统命令，CLI、网页和 HTTP 使用同一控制面，不交给模型决定是否执行。直接输入 `/model gpt-6-astra` 或 `/model claude-opus-4-6`；裸 `/model` 列出当前模型及本地配置候选，网页提供候选按钮。也支持“切换为 完整模型ID”。模型是否可用必须由真实调用验证；成功后保留聊天上下文并保存新选择，失败保持原选择。
+
+在 worker 中添加以下配置，模型名为配置示例，可按 CCH 实际提供的名称调整：
+
+```json
+{
+  "model_source": {"type": "codex"},
+  "model_routes": [
+    {
+      "models": ["gpt-6-astra", "gpt-5.6-luna"],
+      "prefixes": ["gpt-", "o1", "o3", "o4"],
+      "model_source": {"type": "codex"}
+    },
+    {
+      "models": ["claude-opus-4-6"],
+      "prefixes": ["claude-", "anthropic/claude-"],
+      "model_source": {"type": "claude", "config_path": "~/.claude/settings.json"}
+    }
+  ]
+}
+```
+
+匹配优先级：完整 models 匹配 → 最长 prefixes 匹配 → worker 默认来源。同一完整模型或前缀不允许重复配置。菜单来自 models；前缀允许直接切换未列入菜单的新模型，不将示例列表当作 CCH 完整目录。`model_source` 只存来源引用，拒绝内嵌密钥；不同路由可以引用不同受信任配置文件。请求体、聊天文本和模型回复不能指定配置路径或任意端点。
+
+模型切换时，端点、凭据和协议一起从选定来源读取到本次 worker 环境；当前会话只持久化模型名，其他聊天与工程默认配置保持独立。选定来源缺失或损坏时直接失败，不回退到其他来源的凭据。运行配置修改后，后续请求读取新配置所指向的认证；本机制不迁移正在生成的请求。
+
+固定 CCH 源码按协议筛选供应商：Responses → codex，Messages → claude/claude-auth，Chat Completions → openai-compatible。Hermes 已原生支持这些 transport，因此切换 Claude 时采用 Messages，GPT 按 Codex 配置采用 Responses；不自研协议转换代理，不把所有名字塞进同一个 Responses 端点。
+
+Hermes CLI/Gateway 的 `/model`、`/new`、`/init` 属于交互入口命令，不会由嵌入式 AIAgent.run_conversation 自动执行。Mikasa 使用自己的会话和授权入口，复用底层 harness；本轮只接入模型命令，`/new`、`/init` 等未接入命令明确提示未执行，不转成普通模型请求。新建聊天仍使用现有 CLI 启动或网页按钮。
 
 ## default 分组
 
@@ -27,6 +60,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor --probe-model
 
 | 错误码 | 含义与下一步 |
 | --- | --- |
+| `missing_dependency` | 按 Hermes requirements-tested.txt 安装所选协议依赖 |
 | `auth` | 服务拒绝认证；核对所选 Key 是否有效 |
 | `access_denied` | HTTP 403；检查访问控制和 WAF，不能仅凭状态码判定 Key 权限 |
 | `upstream_blocked` | Hermes 分类识别到 WAF/网关拦截；由服务管理员核对策略 |
