@@ -11,3 +11,5 @@
 以上 Chat 回执测试对应暂留的 HTTP/`--message` API。终端入口另验证直接启动原生 CLI、不创建业务服务、TTY 与凭据隔离、profile 互斥、SIGTERM 清理、配置偏好保留与坏文件保护。`scripts/probe_native_cli.py` 通过真实固定 SDK 和本地模型目录验证原生命令、跨协议解析及会话恢复，不消耗模型额度，不代替真实 CCH 可用性验收。
 
 工程 profile 测试覆盖账号绑定、共享原生记忆但隔离会话、旧数据留档、同任务互斥与异常释放、链接及路径越界拒绝。`scripts/probe_engineering_state.py` 独立验证固定 SDK 与真实 Docker 的续话、压缩链和跨进程记忆，不以模拟 SDK 替代依赖兼容证据，详见 [0008](../docs/decisions/0008-engineering-state.md)。
+
+修复循环回归确认最终检查失败只调用一次 worker、不自动重试、不提交失败版本；显式 retry 获得上次最终验收证据，旧 max_attempts 不恢复外层循环。真实 SDK/Docker 实施链验证见 [0009](../docs/decisions/0009-native-repair-loop.md)。

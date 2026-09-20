@@ -31,7 +31,7 @@ python3.12 -m mikasa doctor
 
 公开仓库默认通过 HTTPS clone。本地绝对路径 `source` 可用于隔离测试或管理员预先准备的私有仓库镜像；当前不把 GitHub token 交给 clone 工作器。私有仓库首次拉取仍需管理员配置只读镜像获取机制。
 
-模型配置见 [Hermes 执行器](../../workers/hermes/README.md)。需要明确模型名、兼容 API 端点和 API key；默认由环境提供；本机联调也可显式选择 `worker.model_source.type=codex`，只读 provider 配置和 API key，不复制认证文件，不迁移 OAuth 会话。真实联调命令和边界见 [联调记录](../HERMES_CCH_VALIDATION.md) 与 [工具覆盖验证](../HERMES_TOOLS_VALIDATION.md)。任务结果的 `execution.granted_tools` 显示授权集合，`execution.tool_events` 显示宿主实际执行的工具；`attempts[].execution` 保留各轮证据。
+模型配置见 [Hermes 执行器](../../workers/hermes/README.md)。需要明确模型名、兼容 API 端点和 API key；默认由环境提供；本机联调也可显式选择 `worker.model_source.type=codex`，只读 provider 配置和 API key，不复制认证文件，不迁移 OAuth 会话。真实联调命令和边界见 [联调记录](../HERMES_CCH_VALIDATION.md) 与 [工具覆盖验证](../HERMES_TOOLS_VALIDATION.md)。任务结果的 `execution.granted_tools` 显示授权集合，`execution.tool_events` 保存同次执行的工具/检查证据，`checks` 保存最终独立验收；旧结果中的 `attempts` 仅为历史，新的任务不再生成外层修复轮列表。
 
 ## 启动和任务流程
 
@@ -75,7 +75,7 @@ python3.12 -m mikasa --config config/local/mikasa.json events TASK_ID
 
 `pause` 阻止新任务和发布，并使正在运行的模型/检查子进程终止；网络读取可能在超时后返回。`resume` 允许后续任务。暂停不撤回已经发送的外部请求。
 
-模型/检查有超时、输出上限和最多修复次数。失败结果及工作区保留在 runtime；`retry TASK_ID` 使用新尝试目录，不覆盖旧现场。runner 使用独占锁；进程崩溃后，下一次启动将遗留 running 标记失败，不自动重做可能已产生副作用的操作。
+模型/检查有超时、输出上限和原生工具迭代预算。检查/修复在同次 worker 内完成；宿主最终验收失败返回 blocked，不启动额外修复轮。失败结果及工作区保留在 runtime；`retry TASK_ID` 使用新尝试目录，不覆盖旧现场，恢复原生任务历史并传入上次最终验收结果，Agent 须重新确认当前源码。`worker.max_attempts` 已停用，旧配置由 doctor 提示清理。runner 使用独占锁；进程崩溃后，下一次启动将遗留 running 标记失败，不自动重做可能已产生副作用的操作。
 
 发布超时进入 uncertain，禁止自动重发。先在 GitHub 查找带有 `mikasa-task:<ID>` 标记的产物，再执行 `resolve-publication TASK_ID EXTERNAL_ID` 读取验证回执。若只有分支已推送而 PR 未创建，可人工按原任务标记建立 PR 后核对。确认完全没有发布时，取消旧任务并以新的幂等键重建任务；不要直接清除 publications 表以绕过防重。
 

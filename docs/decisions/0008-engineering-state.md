@@ -34,6 +34,8 @@
 
 ## 验证与剩余范围
 
+后续更新：外层修复循环已由 [0009](0009-native-repair-loop.md) 删除。下文保留本阶段的验证及当时剩余范围。
+
 `scripts/probe_engineering_state.py` 使用一次性账号和仓库、本地 HTTP 模型夹具、固定 SDK 与真实 Docker，走正式 Worker→bridge→AIAgent 路径。覆盖跨进程续话、完整工具历史、不重复落库、畸形最终结果后的恢复、原生压缩后续、账号记忆双向可见、并发写入、账号隔离、身份/skills 注入、容器 ID/清理与凭据不落盘。模型响应是夹具；这证明原生存储和工具链兼容，不代表真实 CCH 模型遵循约定的验收。
 
 本阶段实际验收：全量 `python3.12 -m unittest discover -v` 140 项通过；上述 SDK/Docker 探针 26 项通过；`probe_native_offline.py` 的迁移、persona、三类工程 skills 和记忆加载 12 项通过。文档检查与 diff 检查通过。默认 doctor 正确报告示例未配置模型；本机 CCH 配置 doctor 报告 configuration=valid、connection=not_checked、provider_group=unverified。

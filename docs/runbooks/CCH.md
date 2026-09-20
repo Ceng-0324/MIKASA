@@ -70,6 +70,6 @@ Hermes 的交互命令不会由嵌入式 AIAgent.run_conversation 或现有 `/v1
 | `invalid_response` | 模型调用未产生约定 JSON；核对结构化输出能力 |
 | `execution_failed` | 缺少可识别的故障证据；核对隔离环境、配置和提供商状态 |
 
-以上分类来自官方 Hermes 结构化错误钩子，再经本地固定词表映射，不代表已查明网关根因。宿主进程超时、取消和输出上限保留已有提示。Hermes 和 CCH 各自保留官方内部恢复机制，Mikasa 不增加一层模型回退或自动换名；工程任务的重试/修复上限仍由 `max_attempts` 约束。
+以上分类来自官方 Hermes 结构化错误钩子，再经本地固定词表映射，不代表已查明网关根因。宿主进程超时、取消和输出上限保留已有提示。Hermes 和 CCH 各自保留官方内部恢复机制，Mikasa 不增加一层模型回退或自动换名。工程检查/修复在 Hermes 原生工具循环内完成；宿主 `max_attempts` 已停用，最终验收失败不自动重启 Agent，见 [0009](../decisions/0009-native-repair-loop.md)。
 
 旧 API 聊天切换失败保留原模型和 revision，`execution.error_code` 提供已识别的失败类别；普通聊天失败不保存该轮，修复后可以重试。原生 CLI 使用 Hermes 自带错误反馈，不承诺真实推理失败自动回滚选择。工程任务的 `worker/failed` 事件可带 `error_code`，不保存 SDK 异常原文。查看与恢复方式见 [操作手册](OPERATIONS.md)。

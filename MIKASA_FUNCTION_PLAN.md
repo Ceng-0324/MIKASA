@@ -20,7 +20,7 @@ Mikasa 是基于原生 Hermes、通过 CCH 使用模型、拥有持续身份和�
 负责人已调整优先级：先搭好底层与接入，再部署 VM；聊天工程任务与试点仓库一起放在最后。
 
 1. **Hermes 底层 agent**：完善主动检索、分段上下文、实现/检查/修复循环、运行证据、取消与失败恢复；扩大合成任务验收，明确资源上限。直接采用官方 Hermes harness 负责推理、上下文管理和工具调度，现有宿主仍管理任务、快照及副作用校验，按收窄决定逐步迁往原生能力；身份、工程规范与记忆保持加载。后续扩展以协作开发、质量监督和交付推进为判断依据；优先官方扩展点，不因能力可用而自动扩大范围。
-   终端已直接调用 Hermes 官方 CLI，完整命令分派、会话恢复和默认偏好均由原生实现；HTTP/单条消息暂留旧 API 命令适配并通过 Gateway 运行。同账号两个入口共用 SessionDB、MEMORY/USER，进程互斥，详见 [原生 CLI](docs/decisions/0007-native-cli.md)。工程任务使用原生 Docker 文件/终端、SOUL、skills 和持续 SessionDB，会话按任务隔离，长期记忆与提交账号共用；旧任务记忆留档，见 [工程续话与记忆](docs/decisions/0008-engineering-state.md)。Mikasa 暂保留快照、独立验收和外层修复流程，审批分工交给规则与记忆。下一步收窄工程生命周期、迁移 Kanban，再接 Cron、事件和备份。聊天工程任务仍在最后接入，见 [工程工具归属](docs/decisions/0005-native-engineering-tools.md)。
+   终端已直接调用 Hermes 官方 CLI，完整命令分派、会话恢复和默认偏好均由原生实现；HTTP/单条消息暂留旧 API 命令适配并通过 Gateway 运行。同账号两个入口共用 SessionDB、MEMORY/USER，进程互斥，详见 [原生 CLI](docs/decisions/0007-native-cli.md)。工程任务使用原生 Docker 文件/终端、SOUL、skills 和持续 SessionDB，会话按任务隔离，长期记忆与提交账号共用；旧任务记忆留档，见 [工程续话与记忆](docs/decisions/0008-engineering-state.md)。宿主外层修复循环已删除，Mikasa 暂保留快照和最终独立验收，审批分工交给规则与记忆，见 [原生修复](docs/decisions/0009-native-repair-loop.md)。下一步迁移 Kanban 任务事实源和调度，再接 Cron、事件和备份。聊天工程任务仍在最后接入，见 [工程工具归属](docs/decisions/0005-native-engineering-tools.md)。
 2. **CCH 模型路由**：继续采用 CCH 提供模型路由，收口模型配置、故障行为和路由验证。`default` 是网关 Key 的 provider 分组，不是模型名；当前分组尚未取得网关侧证据，不能标记为已切换。不新增重复路由网关。
 
    本地已补齐 Codex/Claude/环境来源的统一校验、`doctor --probe-model --model MODEL_ID` 连接诊断与 Hermes 官方错误钩子的固定故障反馈；`/model` 作为宿主系统命令按受信任路由同步选择模型、协议和凭据，GPT Responses ↔ Claude Messages 已完成真实会话切换与上下文保留验收。连接成功、响应标识与分组证据分开报告。剩余为网关侧 `default` 分组确认，具体见 [CCH 诊断](docs/runbooks/CCH.md)。后续可继续外部身份/权限接入的独立准备。

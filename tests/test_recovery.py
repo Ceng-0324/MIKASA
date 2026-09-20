@@ -28,7 +28,7 @@ class RecoveryTests(BaseTest):
         self.assertEqual(completed["state"], "done")
         self.assertEqual(self.github.writes, [])
 
-    def test_repair_uses_failed_check_evidence(self):
+    def test_final_failure_does_not_restart_worker_and_explicit_retry_gets_evidence(self):
         calls = []
 
         class RepairWorker:
@@ -37,12 +37,27 @@ class RecoveryTests(BaseTest):
                 return {"summary": "repair", "changes": [{"path": "app.py", "content": f"VALUE = {2 if len(calls) > 1 else 0}\n"}]}
 
         self.service.worker = RepairWorker()
-        self.submit()
+        self.config.data['worker']['max_attempts'] = 5  # Legacy setting cannot restore the old loop.
+        task = self.submit()
+        result = self.service.run_once()
+        self.assertEqual(result['state'], 'blocked')
+        self.assertEqual(len(calls), 1)
+        self.assertNotEqual(result['result']['checks'][0]['code'], 0)
+        self.assertNotIn('attempts', result['result'])
+        self.assertEqual(git(['rev-parse', 'HEAD'], result['result']['workspace']), result['result']['base'])
+        self.assertIsNone(self.service.run_once())
+        self.service.action(task['id'], 'retry', self.config.owner)
         result = self.service.run_once()
         self.assertEqual(result["state"], "awaiting_review")
         self.assertEqual(len(calls), 2)
-        self.assertNotEqual(calls[1]["repair"]["checks"][0]["code"], 0)
-        self.assertEqual(len(result["result"]["attempts"]), 2)
+        self.assertNotEqual(calls[1]['previous_validation']['checks'][0]['code'], 0)
+        self.assertNotIn('repair', calls[1])
+
+    def test_doctor_explains_legacy_repair_setting(self):
+        from mikasa.cli import doctor
+        self.data['worker']['max_attempts'] = 3
+        self.write_config()
+        self.assertIn('max_attempts', doctor(self.config)['deprecated_settings'][0])
 
     def test_periodic_audit_is_idempotent_and_pauses(self):
         self.data["schedules"] = {"audit_interval_seconds": 60}

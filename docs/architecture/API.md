@@ -34,6 +34,8 @@ HTTP 默认监听 `127.0.0.1:8765`。除健康检查和单独验签的 GitHub we
 
 内置 Hermes 工程执行另返回 `session_owner=hermes`、`root_session_id`、`session_id`（可能为压缩后的后续会话）、`history_messages` 和 `memory_owner`。根会话固定为 `mikasa-task-<task-id>`，记忆归属取自可信任务提交账号，不能由任务 body 指定。重试与修复读取原生 SessionDB，不从任务事件重拼历史；失败不会回滚已经落盘的会话或记忆。旧随机工程会话保留为档案，不自动接入新根会话。详见 [0008](../decisions/0008-engineering-state.md)。
 
+每次认领只调用一次 worker，最终验收失败返回 blocked，不再自动生成宿主修复轮。新结果不生成 `attempts`，工具内检查记录在 `execution.tool_events`，最终验收记录在 `checks`；旧任务结果保持可读。validation 事件不再携带外层 `attempt`。显式 retry 时 worker context 可含 `previous_validation`（上次 checks、head、base），只是历史证据，不复制旧工作区。第三方 v1 worker 同样自行完成内部修复，stdin/stdout 结构和工具 RPC 不变。见 [0009](../decisions/0009-native-repair-loop.md)。
+
 任务示例：
 
 ```json

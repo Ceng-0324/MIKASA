@@ -83,6 +83,8 @@ def doctor(config, *, probe_model=False, selected_model=None):
             "worker_configured": bool(command), "worker_executable": bool(command and shutil.which(command[0])),
             "github_token_present": bool(os.environ.get(config.data.get("github", {}).get("token_env", "MIKASA_GITHUB_TOKEN"))),
             "publishing_enabled": config.data.get("github", {}).get("publish_enabled", False), "model": model,
+            "deprecated_settings": (["worker.max_attempts 已停用；检查和修复由执行器工具循环完成"]
+                                    if "max_attempts" in config.data.get("worker", {}) else []),
             "note": "默认仅检查本地前提；模型探针不证明 CCH 分组、GitHub 权限或 VM 已完成联调"}
 
 

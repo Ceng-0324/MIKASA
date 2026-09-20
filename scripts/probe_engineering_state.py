@@ -17,6 +17,8 @@ from mikasa.engineering import engineering_profile
 from mikasa.model_errors import ModelFailure
 from mikasa.native import HERMES_REVISION, prepare_profile
 from mikasa.process import clean_env, git
+from mikasa.sandbox import IMAGE
+from mikasa.service import Service
 from mikasa.skills import load_skills
 from mikasa.worker import Worker
 from mikasa.workspace import Workspace
@@ -26,6 +28,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     checks, requests, containers = {}, [], []
     turn, step = 0, 0
+    scenario = 'continuity'
 
     class Model(BaseHTTPRequestHandler):
         def do_POST(self):
@@ -43,6 +46,21 @@ def main():
                 requests.append(body)
             if not engineering:
                 message, reason = {'role': 'assistant', 'content': 'Fixture metadata'}, 'stop'
+            elif scenario != 'continuity':
+                check_call = ('tool_call', {'calls': [{'name': 'mikasa_run_checks', 'arguments': {}}]})
+                bad = ('write_file', {'path': '/workspace/calc.py', 'content': 'VALUE = 0\n'})
+                good = ('write_file', {'path': '/workspace/calc.py', 'content': 'VALUE = 2\n'})
+                actions = {'repair': [bad, check_call, good, check_call],
+                           'unfinished': [bad, check_call], 'regressed': [good, check_call, bad]}[scenario]
+                if step < len(actions):
+                    name, arguments = actions[step]
+                    message = {'role': 'assistant', 'content': None, 'tool_calls': [
+                        {'id': scenario + '-' + str(step), 'type': 'function',
+                         'function': {'name': name, 'arguments': json.dumps(arguments)}}]}
+                    reason = 'tool_calls'
+                else:
+                    message = {'role': 'assistant', 'content': json.dumps({'summary': scenario, 'changes': []})}
+                    reason = 'stop'
             elif turn == 0 and step < 2:
                 name, arguments = ('read_file', {'path': '/workspace/calc.py'}) if step == 0 else (
                     'memory', {'action': 'add', 'target': 'memory', 'content': 'Engineering confirmed convention marker.'})
@@ -55,7 +73,7 @@ def main():
                     'summary': 'fixture completed ' + str(turn),
                     'tasks': [{'title': 'fixture task', 'acceptance': 'fixture acceptance', 'depends_on': []}]})}
                 reason = 'stop'
-            if engineering and turn == 0 and step == 1:
+            if engineering and scenario == 'continuity' and turn == 0 and step == 1:
                 payload = json.loads(next(m['content'] for m in reversed(messages) if m['role'] == 'user').split('\n', 1)[1])
                 run_id = payload['native']['run_id']
                 ids = subprocess.check_output(['docker', 'ps', '-q', '--filter', 'label=hermes-task-id=' + run_id], text=True).split()
@@ -196,6 +214,34 @@ d.close(); print(json.dumps(True))''')
                     worker.last_runtime['session_id'] == 'compressed-child'
                     and worker.last_runtime['history_messages'] == 2
                     and 'Compressed context marker.' in history and 'fixture-call-0' not in history)
+                config.data['repositories']['local/probe'].update(
+                    check_image=IMAGE, checks=[['python', '-c', 'from calc import VALUE; assert VALUE == 2']])
+                service = Service(config)
+                for scenario in ('repair', 'unfinished', 'regressed'):
+                    step, start = 0, len(requests)
+                    task = service.submit({'kind': 'implement', 'repo': 'local/probe', 'title': scenario,
+                                           'acceptance': 'VALUE equals 2'}, config.owner, scenario)
+                    finished = service.run_once()
+                    result = finished.get('result') or {}
+                    checks[scenario + '_expected_outcome'] = finished['state'] == ('awaiting_review' if scenario == 'repair' else 'blocked')
+                    if not result:
+                        raise RuntimeError('Implementation probe failed: ' + str(finished.get('error')))
+                    events = [e['data'] for e in service.store.events(task['id']) if e['kind'] == 'execution']
+                    checks[scenario + '_one_worker_invocation'] = len([e for e in events if e.get('phase') == 'worker' and e['status'] == 'started']) == 1
+                    checks[scenario + '_one_final_validation'] = len([e for e in events if e.get('phase') == 'validation' and e['status'] == 'completed']) == 1
+                    codes = [c['code'] for e in result['execution']['tool_events'] for c in e.get('checks', [])]
+                    if scenario == 'repair':
+                        checks['native_red_green_repair'] = len(codes) == 2 and codes[0] != 0 and codes[1] == 0
+                        checks['same_conversation_observes_failed_check'] = any(m.get('role') == 'tool' and 'AssertionError' in str(m.get('content')) for m in requests[-1]['messages'])
+                        checks['repaired_tree_committed'] = (git(['show', 'HEAD:calc.py'], result['workspace']) == 'VALUE = 2'
+                                                             and result['head'] != result['base'])
+                    else:
+                        checks[scenario + '_no_commit_on_failure'] = (result['checks'][0]['code'] != 0
+                            and git(['rev-parse', 'HEAD'], result['workspace']) == result['base'])
+                        checks[scenario + '_no_automatic_requeue'] = service.run_once() is None
+                    if scenario == 'regressed':
+                        checks['final_check_rejects_changes_after_green_tool_check'] = codes == [0] and result['checks'][0]['code'] != 0
+                checks['implementation_identity_and_skills_loaded'] = result['execution']['native_injection']
                 remaining = subprocess.check_output(['docker', 'ps', '-aq'], text=True).split()
                 checks['bridge_containers_removed'] = bool(containers) and not set(containers) & set(remaining)
                 checks['synthetic_key_not_saved'] = not any(env['MIKASA_MODEL_API_KEY'].encode() in p.read_bytes()

@@ -73,6 +73,8 @@ class Config:
                     raise MikasaError(f"worker.{field} 必须为路径")
             if "native_gateway" in worker:
                 raise MikasaError("聊天已统一使用原生 Gateway；删除旧 native_gateway 开关")
+            # v1 max_attempts remains readable for deployed configs but has no
+            # execution effect; doctor reports its deprecation. No host retry loop.
             for key, default, upper in (("timeout", 600, 7200), ("max_output_bytes", 2000000, 10000000), ("max_context_bytes", 200000, 1000000), ("max_attempts", 3, 5)):
                 value = worker.get(key, default)
                 if type(value) is not int or not 1 <= value <= upper:

@@ -124,6 +124,11 @@ class Service:
         workspace = Workspace(self.config, task, token).prepare(pr)
         progress({"phase": "workspace", "status": "completed", "base": workspace.base, "head": workspace.head})
         context = workspace.context()
+        previous = task.get('result') or {}
+        if kind == 'implement' and previous.get('checks'):
+            context['previous_validation'] = {
+                'checks': previous['checks'], 'head': previous.get('head'), 'base': previous.get('base'),
+                'note': '这是上次执行的最终验收结果；当前工作区重新准备，先读取当前源码，不假定旧改动仍在。'}
         cancelled = lambda: self.store.paused() or self.store.get(task["id"])["state"] != "running"
         if pr:
             context["pr"] = {"number": payload["pr"], "title": pr["title"], "body": pr.get("body"), "author": pr["user"]["login"]}
@@ -150,44 +155,31 @@ class Service:
             if current["head"]["sha"] != workspace.head or current["base"]["sha"] != workspace.base:
                 raise MikasaError("审查期间 PR head 或目标分支发生变化")
             return result, "done"
-        return self.implement(task, workspace, context, result, cancelled, progress)
+        return self.implement(task, workspace, result, cancelled, progress)
 
-    def implement(self, task, workspace, context, result, cancelled, progress):
+    def implement(self, task, workspace, result, cancelled, progress):
         repo = task["payload"]["repo"]
         checks = self.config.repo(repo).get("checks", [])
-        attempts = self.config.data.get("worker", {}).get("max_attempts", 3)
-        history = []
-        for attempt in range(attempts):
-            changes = result.pop("changes", None)
-            if changes != []:
-                workspace.apply(changes, cancelled=cancelled)
-            elif not git(["diff", "--cached", "--stat"], workspace.path):
-                raise MikasaError("执行者未产生实际变更")
-            if not checks:
-                result["summary"] += "；未配置验证命令，变更保留为未验证草稿"
-                return result, "blocked"
-            progress({"phase": "validation", "status": "started", "attempt": attempt + 1})
-            evidence = run_checks(workspace, cancelled)
-            progress({"phase": "validation", "status": "completed", "attempt": attempt + 1,
-                      "checks": [{"code": c["code"], "index": i} for i, c in enumerate(evidence)]})
-            history.append({"attempt": attempt + 1, "checks": evidence, "execution": result.get("execution")})
-            if all(check["code"] == 0 for check in evidence):
-                break
-            if attempt + 1 == attempts:
-                result["checks"] = evidence
-                result["attempts"] = history
-                return result, "blocked"
-            context["repair"] = {"attempt": attempt + 2, "checks": evidence,
-                                 "current_diff": git(["diff", "--no-ext-diff", "HEAD", "--"], workspace.path)}
-            updated = self.worker.execute(task, context, cancelled, workspace=workspace, progress=progress)
-            result.update({"summary": updated["summary"], "changes": updated["changes"]})
-            if getattr(self.worker, "last_runtime", None):
-                result["execution"] = self.worker.last_runtime
+        changes = result.pop("changes", None)
+        if changes != []:
+            workspace.apply(changes, cancelled=cancelled)
+        elif not git(["diff", "--cached", "--stat"], workspace.path):
+            raise MikasaError("执行者未产生实际变更")
+        if not checks:
+            result["summary"] += "；未配置验证命令，变更保留为未验证草稿"
+            return result, "blocked"
+        # Repair belongs to the worker's native tool loop. This is one final,
+        # independent validation of the returned tree, never another agent loop.
+        progress({"phase": "validation", "status": "started"})
+        evidence = run_checks(workspace, cancelled)
+        progress({"phase": "validation", "status": "completed",
+                  "checks": [{"code": c["code"], "index": i} for i, c in enumerate(evidence)]})
+        result["checks"] = evidence
+        if not all(check["code"] == 0 for check in evidence):
+            return result, "blocked"
         # Tests may mutate tracked files. Require validation and committed content to match.
         if git(["diff", "--name-only"], workspace.path):
             raise MikasaError("验证命令修改了已暂存内容；拒绝提交未经验证的版本")
-        result["checks"] = evidence
-        result["attempts"] = history
         if cancelled():
             raise MikasaError("任务已暂停或取消")
         progress({"phase": "commit", "status": "started"})

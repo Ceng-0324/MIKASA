@@ -17,3 +17,5 @@
 `probe_native_engineering_offline.py --report runtime/state/hermes-cch/native-engineering-offline-proof.json` 不调用模型，验证原生只读文件/shell、真实读取证据和杀死 SDK 进程后的容器回收。工程联调的宿主独立检查也使用真实 Docker check_image。
 
 `python3.12 scripts/probe_engineering_state.py` 使用固定 SDK、真实 Docker、临时仓库和本地 HTTP 模型夹具，验证 Worker→bridge→AIAgent 的续话、工具历史去重、失败后恢复、压缩后续、账号记忆双向可见、并发原生记忆写入、身份/skills 注入及容器 ID/清理。需要本机固定 SDK 环境和已缓存工程镜像，不读取真实模型认证、不调用 CCH，也不证明真实模型一定遵循记忆约定。
+
+该探针另走正式 Service 实施任务链：在同一次 Hermes 调用中原生写文件、调用真实 Docker 检查、修复并复查；验证最终验收通过才提交、未修好时 blocked、不启动外层修复、工具检查变绿后又改坏仍被最终检查拦截。所有提交仅在一次性夹具仓库内。

@@ -27,7 +27,6 @@ uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/b
   "home": "runtime/state/hermes-cch/home",
   "model_source": {"type": "codex"},
   "timeout": 240,
-  "max_attempts": 3,
   "env_allowlist": []
 }
 ```
@@ -66,6 +65,8 @@ Mikasa 将当前暂存树（实现/修复）或固定 PR head（计划/审查）
 
 工程返回严格 JSON，原生实现必须通过工具修改快照并返回 `changes: []`。宿主暂保留任务、固定 revision、检查和发布适配；审查分工由 Agent 依据规则与记忆判断，不再由宿主归属分类或指定审批人引擎执行。没有工作区的诊断调用仍为无工具结构化请求，不代表工程执行。
 
+每次任务认领只调用一次 worker；Hermes 在原生工具循环中自行读取失败、修改并重跑 `mikasa_run_checks`。宿主结束后独立验收一次，失败返回 blocked、保留结果与工作区，不启动新的 Agent 修复轮。显式 retry 恢复同任务原生历史，并传递上次最终验收结果；新工作区不自动复制旧失败改动。旧 `worker.max_attempts` 仅供 v1 配置读取兼容，doctor 明确报告已停用。详见 [0009](../../docs/decisions/0009-native-repair-loop.md)。
+
 可配置的第三方 worker 暂保留 version=1 的宿主 RPC 协议（旧 mikasa_list/read/search/apply）；它是已公开进程协议的兼容对象，内置 Hermes 工程路径不使用它。待第三方协议升级、调用方与协议测试一起迁移后删除该兼容实现，不提供 Hermes 新旧后端切换开关。
 
 原生容器、工程循环与分页证据见 [原生验收](../../docs/NATIVE_HERMES_VALIDATION.md)。旧自研工具的验证保留为 [历史记录](../../docs/HERMES_TOOLS_VALIDATION.md)，不能当作当前实现的验收结果。
@@ -94,4 +95,4 @@ uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/b
 
 `worker.native_python` 可指定 CLI/Gateway 解释器，默认 runtime/cache/hermes-venv/bin/python；`worker.hermes_source` 指向固定源码。配置沿用现有 model_source/model_routes，所有已配置来源须可读取。生成的 Hermes providers 只包含 Key 环境变量名，无实际 Key。`profile_config.py` 在该解释器中解析 YAML/JSON，刷新集成配置并保留 Hermes 原生偏好；格式错误不覆盖文件。当前模型工具只启用 memory 与 skills，plugin 拒绝未授予的工具；本地 CLI 系统命令仍采用原生行为，这不是操作系统沙箱。
 
-`bridge.py` 保留工程结构化协议、原生 harness 配置和交付证据适配；文件、搜索、修改、shell、任务续话与账号长期记忆已使用官方原生能力。审批引擎已移除；外层修复流程和任务队列仍待收窄迁移。
+`bridge.py` 保留工程结构化协议、原生 harness 配置和交付证据适配；文件、搜索、修改、shell、任务续话与账号长期记忆已使用官方原生能力。审批引擎与外层修复循环已移除；任务队列和调度仍待迁入 Kanban。
