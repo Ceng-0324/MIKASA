@@ -1,0 +1,8 @@
+# Keep rules, configuration and generated text portable across the VM and local hosts.
+* text=auto eol=lf
+*.md text
+*.toml text
+*.yaml text
+*.yml text
+*.json text
+*.sh text eol=lf

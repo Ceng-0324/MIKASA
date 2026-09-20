@@ -1,0 +1,25 @@
+[Unit]
+Description=Mikasa task runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mikasa
+Group=mikasa
+WorkingDirectory=/opt/mikasa
+EnvironmentFile=/etc/mikasa/runtime.env
+ExecStart=/opt/mikasa/.venv/bin/python -m mikasa --config /etc/mikasa/config.json run
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mikasa
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,78 @@
+# Mikasa
+
+Mikasa 是与人类成员共同开发、监督工程质量并推进交付的仿生程序员。本目录包含人格与工程规则 1.0，以及 Python 运行时 0.1：任务持久化、审计、拆解、实现验证、PR 审查、进度查询、CLI 和 HTTP API。真实 Hermes 模型、GitHub 账号与 VM 尚未完成联调或部署。
+
+## 本地运行
+
+需要 Python 3.12+、Git；核心运行时仅使用 Python 标准库，无需安装第三方依赖即可执行：
+
+```sh
+python3.12 -m mikasa doctor
+python3.12 -m unittest discover -v
+python3.12 scripts/check_docs.py
+python3.12 -m mikasa --help
+```
+
+将 [配置示例](config/examples/mikasa.json) 复制到 `config/local/mikasa.json` 并填写仓库、模型执行器和账号环境变量后：
+
+```sh
+python3.12 -m mikasa --config config/local/mikasa.json serve
+python3.12 -m mikasa --config config/local/mikasa.json run
+```
+
+API 和 runner 分别运行。默认示例不启用仓库、模型、定期审计或外部发布；`doctor` 会明确显示缺少的运行条件。完整说明见 [运行手册](docs/runbooks/OPERATIONS.md)、[API 契约](docs/architecture/API.md) 和 [架构决定](docs/decisions/0001-runtime.md)。
+
+当前本地 46 项测试通过，真实执行与模拟范围见 [验证记录](docs/VALIDATION.md)。
+
+## 规则文件
+
+| 文件 | 职责 |
+| --- | --- |
+| [identity.md](identity.md) | 基于动画官方角色资料进行本地适配的身份、关系与交流方式 |
+| [engineering-contract.md](engineering-contract.md) | 授权、事实边界、工程质量、协作与 PR 审批责任 |
+| [engineering-workflow.md](engineering-workflow.md) | 调查、拆解、实现、审查、验证与交付步骤 |
+| [AGENTS.md](AGENTS.md) | 目录级规则入口及 canonical 读取顺序 |
+| [CLAUDE.md](CLAUDE.md) | 指向同一套规则的入口 |
+| [docs/ADAPTATION_SOURCES.md](docs/ADAPTATION_SOURCES.md) | 官方角色依据、适配判断及两处 AptS 来源的版本记录 |
+| [MIKASA_FUNCTION_PLAN.md](MIKASA_FUNCTION_PLAN.md) | 已确认的产品方向和后续待定项 |
+
+## 当前目录骨架
+
+```text
+config/          无密钥配置模板与 schema
+mikasa/          任务、存储、执行、GitHub 适配、CLI 与 HTTP API
+docs/            架构、决策记录、来源和运行手册
+integrations/    GitHub、飞书等外部系统适配边界
+workers/         Codex、Claude 等执行器契约与隔离说明
+skills/          工程 skills 的来源、筛选和适配记录
+deploy/          VM 与服务部署设计
+runtime/         运行时状态、日志、缓存和工作区（默认不入 Git）
+tests/           规则、配置和集成验证支持
+scripts/         可重复的检查和运行辅助脚本
+```
+
+运行代码集中在 `mikasa/`；`workers/hermes/bridge.py` 是独立 Hermes 执行器。其他集成目录记录接入边界，不复制实现。代码存在、隔离测试通过与生产服务已运行是不同状态。
+
+## 使用与维护
+
+在本目录工作时，从 `AGENTS.md` 按顺序读取身份、工程契约和工程工作流。所有引用使用相对路径；目录可以整体迁移，不依赖主机全局 canonical 路径。
+
+不同工具是否自动加载入口，需在各自会话中核实。运行时按 canonical 顺序读取规则，并通过 [Hermes 桥接](workers/hermes/README.md) 注入会话；真实 SDK 环境和模型端点仍需联调。
+
+角色风格集中在身份文件，工程权限和质量标准集中在契约，操作步骤集中在工作流。修改时同步直接受影响的入口和文档，避免复制多份正文。官方事实与本地判断分别注明来源。
+
+纯文档变更检查相对链接、读取顺序、身份残留、审批规则一致性及空白格式。有 Git 仓库时增加 `git diff --check`，不运行会改写主目录的上游安装器。
+
+## 当前边界
+
+GitHub 主人为 `Ceng-0324`，Mikasa 称其为 `Shawn` 或 `Ceng`，`origin` 为 `git@github.com:Ceng-0324/MIKASA.git`；飞书对应人为曾俊轩。代码支持审计、任务拆解与分配、代码验证和提交、Issue/草稿 PR/正式 Review 发布；外部写入必须显式启用，并使用经账号核验的 Mikasa token。
+
+人类 PR 需要 Mikasa 审查批准；Mikasa 及受委派执行者实现的 PR 需要负责人批准。审查留下结论 comment，Mikasa 不自动合并。
+
+试点仓库 [Ceng-0324/FluxCore](https://github.com/Ceng-0324/FluxCore) 仅用于 Mikasa 开发完成后的运行验收，不作为先行开发对象。当前先完成 Mikasa 本体，见 [功能规划](MIKASA_FUNCTION_PLAN.md)。任务事实源采用本地 SQLite；账号权限、平台强制门禁、真实模型联调、VM 部署及飞书原生接入仍需外部配置或后续决定。
+
+## Git 工程状态
+
+本目录默认分支为 `main`，远端为 `git@github.com:Ceng-0324/MIKASA.git`。Shawn/Ceng 已授权创建本地首次提交，包含身份与工程规则、运行时实现和验证支持；推送由 Shawn/Ceng 执行，推送后继续后续开发与联调。
+
+提交前阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，并使用 [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) 记录变更目的、实际验证、安全边界和未完成事项。

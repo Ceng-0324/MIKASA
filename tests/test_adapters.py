@@ -1,0 +1,113 @@
+import io
+import json
+import os
+import subprocess
+import sys
+from contextlib import redirect_stdout
+from unittest.mock import patch
+
+from mikasa.errors import MikasaError
+from mikasa.github import GitHub
+from mikasa.process import clean_env, run
+from tests.support import BaseTest, REPO, ROOT, SHA
+
+
+class AdapterTests(BaseTest):
+    def test_github_pagination_and_ci_status(self):
+        github = GitHub(self.config)
+        def request(method, path, body=None):
+            if "check-runs" in path:
+                return {"check_runs": [{"name": "unit", "status": "completed", "conclusion": "success"}]}
+            return [{"context": "mikasa/approval", "state": "failure"},
+                    {"context": "build", "state": "success"}, {"context": "build", "state": "failure"}]
+        with patch.object(github, "request", side_effect=request):
+            result = github.checks(REPO, SHA)
+        self.assertTrue(result["passed"])
+        self.assertEqual(len(result["statuses"]), 1)
+        with patch.object(github, "request", return_value=list(range(100))) as call:
+            with self.assertRaisesRegex(MikasaError, "2000"):
+                github.paginate("/example")
+            self.assertEqual(call.call_count, 20)
+
+    def test_empty_ci_never_passes(self):
+        github = GitHub(self.config)
+        with patch.object(github, "paginate", return_value=[]):
+            self.assertFalse(github.checks(REPO, SHA)["passed"])
+
+    def test_gate_publication_binds_current_head(self):
+        github = GitHub(self.config)
+        verdict = {"allowed": True, "head": SHA}
+        with patch.object(github, "verify_publisher"), patch.object(github, "gate", return_value=verdict), \
+                patch.object(github, "pr", return_value={"head": {"sha": SHA}}), patch.object(github, "request") as request:
+            github.publish_gate(REPO, 1, self.service.store)
+            self.assertEqual(request.call_args.args[1], f"/repos/{REPO}/statuses/{SHA}")
+            self.assertEqual(request.call_args.args[2]["context"], "mikasa/approval")
+        with patch.object(github, "verify_publisher"), patch.object(github, "gate", return_value=verdict), \
+                patch.object(github, "pr", return_value={"head": {"sha": "b" * 40}}), patch.object(github, "request") as request:
+            with self.assertRaises(MikasaError):
+                github.publish_gate(REPO, 1, self.service.store)
+            request.assert_not_called()
+
+    def test_http_request_never_redirects_credentials(self):
+        github = GitHub(self.config)
+        seen = []
+        class Response:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+            def read(self, limit):
+                return b'{"login":"Mikasa-0910"}'
+        def open_request(req, timeout):
+            seen.append(req)
+            return Response()
+        with patch.dict(os.environ, {"MIKASA_GITHUB_TOKEN": "fixture"}), patch.object(github.opener, "open", side_effect=open_request):
+            self.assertEqual(github.request("GET", "/user")["login"], self.config.bot)
+        self.assertEqual(seen[0].full_url, "https://api.github.com/user")
+        self.assertEqual(seen[0].get_header("Authorization"), "Bearer fixture")
+        from mikasa.github import NoRedirect
+        self.assertIsNone(NoRedirect().redirect_request(None, None, 302, "", {}, "https://other.invalid"))
+
+    def test_bridge_protocol_and_tool_isolation(self):
+        # A signature-compatible SDK fixture verifies our adapter, not the real model.
+        (self.path / "run_agent.py").write_text('''
+import json
+class AIAgent:
+    def __init__(self, **kwargs):
+        assert kwargs['enabled_toolsets'] == []
+        assert kwargs['skip_context_files'] and kwargs['skip_memory'] and kwargs['skip_background_review']
+        assert kwargs['api_key'] == 'fixture-key'
+        self.tools = []
+        print('SDK log must not pollute stdout')
+    def run_conversation(self, user_message, system_message):
+        assert system_message.startswith('canonical-rules')
+        assert 'rules' not in json.loads(user_message)
+        return {'final_response': json.dumps({'summary': 'ok', 'tasks': []})}
+''')
+        env = clean_env({"PYTHONPATH": str(self.path), "HERMES_HOME": str(self.path / "hermes"),
+                         "MIKASA_MODEL": "fixture", "MIKASA_MODEL_BASE_URL": "http://localhost:1234/v1",
+                         "MIKASA_MODEL_API_KEY": "fixture-key"})
+        output = run([sys.executable, str(ROOT / "workers/hermes/bridge.py")], cwd=self.path, env=env,
+                     stdin=json.dumps({"version": 1, "rules": "canonical-rules", "task": {}}))
+        self.assertEqual(output["code"], 0)
+        self.assertEqual(json.loads(output["stdout"])["summary"], "ok")
+        self.assertIn("SDK log", output["stderr"])
+
+    def test_docker_check_mounts_git_readonly_and_cleans_up(self):
+        from mikasa.process import check_command
+        with patch("mikasa.process.run", return_value={"code": 0, "stdout": "", "stderr": ""}) as proc:
+            check_command(["pytest"], {"check_image": "fixture:1"}, self.repo, 5, lambda: False)
+        argv = proc.call_args_list[0].args[0]
+        self.assertIn("--network=none", argv)
+        self.assertIn(f"type=bind,source={self.repo}/.git,target=/workspace/.git,readonly", argv)
+        self.assertEqual(proc.call_args_list[1].args[0][:3], ["docker", "rm", "-f"])
+
+    def test_cli_local_flow_and_backup(self):
+        from mikasa.cli import main
+        with redirect_stdout(io.StringIO()) as captured:
+            self.assertEqual(main(["--config", str(self.config_path), "submit", "audit", REPO, "Audit", "--acceptance", "report"]), 0)
+        task = json.loads(captured.getvalue())
+        self.assertEqual(task["state"], "queued")
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(main(["--config", str(self.config_path), "backup", str(self.path / "backup.sqlite3")]), 0)
+        self.assertEqual((self.path / "backup.sqlite3").stat().st_mode & 0o777, 0o600)

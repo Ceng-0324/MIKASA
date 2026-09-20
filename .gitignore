@@ -1,0 +1,30 @@
+# Secrets and machine-local configuration
+config/local/
+config/*.local.*
+*.secret.*
+*.secrets.*
+.env
+.env.*
+!.env.example
+
+# Hermes and Mikasa runtime state; do not commit task history, sessions or logs
+runtime/state/
+runtime/logs/
+runtime/workspaces/
+runtime/cache/
+
+# Local model/tool homes and generated artifacts
+workers/*/home/
+workers/*/auth.json
+workers/*/config.toml
+workers/*/.env
+skills/installed/
+deploy/vm/generated/
+*.log
+__pycache__/
+.DS_Store
+.venv/
+build/
+dist/
+*.egg-info/
+.coverage
