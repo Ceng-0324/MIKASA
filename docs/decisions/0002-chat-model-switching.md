@@ -33,7 +33,7 @@
 
 ## 入口与验证
 
-提供标准库 CLI 聊天、`/chat` 网页和鉴权 HTTP API，见 [聊天用法](../runbooks/CHAT.md)。网页将回复作为纯文本渲染，令牌不写 localStorage；任何会话读取与写入都核对账号归属。
+提供标准库 CLI 聊天和鉴权 HTTP API，见 [聊天用法](../runbooks/CHAT.md)。早期 `/chat` 网页调试入口已按负责人要求清除，系统命令不依赖网页；任何会话读取与写入都核对账号归属。
 
 真实 HTTP → Chat → Hermes → CCH 验收见 [聊天切换验证](../CHAT_VALIDATION.md)。单元测试覆盖失败保留、跨账号拒绝、会话隔离、重放、并发锁、暂停、上下文截断和真实 worker 参数传递。CCH 后台供应商配置及管理端写入没有执行。
 

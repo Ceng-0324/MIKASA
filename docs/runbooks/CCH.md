@@ -18,7 +18,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor --model claude
 
 ## /model 跨 GPT 与 Claude 切换
 
-`/model` 是宿主系统命令，CLI、网页和 HTTP 使用同一控制面，不交给模型决定是否执行。直接输入 `/model gpt-6-astra` 或 `/model claude-opus-4-6`；裸 `/model` 列出当前模型及本地配置候选，网页提供候选按钮。也支持“切换为 完整模型ID”。模型是否可用必须由真实调用验证；成功后保留聊天上下文并保存新选择，失败保持原选择。
+`/model` 是宿主系统命令，CLI 和 HTTP 使用同一控制面，不交给模型决定是否执行。直接输入 `/model gpt-6-astra` 或 `/model claude-opus-4-6`；裸 `/model` 列出当前模型及本地配置候选。也支持“切换为 完整模型ID”。模型是否可用必须由真实调用验证；成功后保留聊天上下文并保存新选择，失败保持原选择。
 
 在 worker 中添加以下配置，模型名为配置示例，可按 CCH 实际提供的名称调整：
 
@@ -46,7 +46,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor --model claude
 
 固定 CCH 源码按协议筛选供应商：Responses → codex，Messages → claude/claude-auth，Chat Completions → openai-compatible。Hermes 已原生支持这些 transport，因此切换 Claude 时采用 Messages，GPT 按 Codex 配置采用 Responses；不自研协议转换代理，不把所有名字塞进同一个 Responses 端点。
 
-Hermes CLI/Gateway 的 `/model`、`/new`、`/init` 属于交互入口命令，不会由嵌入式 AIAgent.run_conversation 自动执行。Mikasa 使用自己的会话和授权入口，复用底层 harness；本轮只接入模型命令，`/new`、`/init` 等未接入命令明确提示未执行，不转成普通模型请求。新建聊天仍使用现有 CLI 启动或网页按钮。
+Hermes CLI/Gateway 的 `/model`、`/new`、`/init` 属于交互入口命令，不会由嵌入式 AIAgent.run_conversation 自动执行。Mikasa 使用自己的会话和授权入口，复用底层 harness；已接入 `/model`、`/new`、`/help` 和 `/version`；`/init` 随最后的工程交互接入，当前明确提示未执行。未开放的命令不转成普通模型请求。
 
 ## default 分组
 

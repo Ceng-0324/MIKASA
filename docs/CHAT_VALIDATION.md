@@ -1,5 +1,7 @@
 # 聊天模型切换验证
 
+下文保留历史验收结果；其中网页调试入口已在后续清理中移除，当前交互入口为 CLI 和鉴权 HTTP，见 [聊天用法](runbooks/CHAT.md)。
+
 ## 跨协议增量验收
 
 2026-09-20，基线 `06a8715` 加跨协议变更：真实 HTTP → Mikasa 系统命令 → Hermes 0.21.3 → CCH，`/model claude-opus-4-6` 从 GPT Responses 切为 Claude Messages，Claude 正确复述 GPT 记住的随机代号；`/model default` 恢复 GPT Responses 后再次正确复述。10 项检查全部通过，包括协议、后续请求、上下文、幂等重放和数据库回读。请求/响应标识分别为 gpt-6-astra 与 claude-opus-4-6；底层身份仍需网关证据。脱敏结果见 [跨协议证据](cross-protocol-evidence.json)。

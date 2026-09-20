@@ -10,7 +10,7 @@
 - 官方 lifecycle hook 观察到原生 `skill_view` 两次和 `memory` 一次成功；专门状态探针进一步通过 20 项真实检查：重启和 `/new` 后记忆恢复、账号隔离、旧请求与运行证据稳定重放、取消终态、原生人格 skill 自动加载、两种协议完整注入与无 CCH 密钥落盘。见 [状态证据](native-state-evidence.json)。
 - `scripts/probe_native_offline.py` 使用真实固定 SDK，通过 8 项离线检查：51 轮旧记录完整有序导入、重复导入不增加记录、其他账号隔离、旧库不变、官方 plugin 发现、persona auto_load 和工具权限边界。
 - 新启动检查确认必需的人格 skill 加载后原生 API 才就绪，错误 API 凭据返回 401。
-- 网页停止按钮调用原生 stop API；该操作不等待聊天发送锁，先返回停止请求，再由 Hermes 进入 cancelled/interrupted。
+- 所属账号通过鉴权 HTTP 停止接口调用原生 stop API；该操作不等待聊天发送锁，先返回停止请求，再由 Hermes 进入 cancelled/interrupted。
 
 ## 边界
 

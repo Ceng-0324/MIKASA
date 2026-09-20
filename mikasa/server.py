@@ -3,7 +3,6 @@ import hmac
 import json
 import os
 import re
-from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .errors import Conflict, Forbidden, MikasaError, NotFound
@@ -84,17 +83,6 @@ def make_server(service, host=None, port=None):
                 path = self.path
                 if method == "GET" and path == "/health":
                     return self.respond(200, {"status": "ok", "paused": service.store.paused()})
-                if method == "GET" and path == "/chat":
-                    page = Path(__file__).with_name("chat.html").read_bytes()
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html; charset=utf-8")
-                    self.send_header("Content-Length", str(len(page)))
-                    self.send_header("Cache-Control", "no-store")
-                    self.send_header("X-Content-Type-Options", "nosniff")
-                    self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
-                    self.end_headers()
-                    self.wfile.write(page)
-                    return
                 raw = b""
                 if method == "POST":
                     if self.headers.get("Transfer-Encoding"):

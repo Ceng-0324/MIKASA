@@ -30,7 +30,7 @@ API 和 runner 分别运行。默认示例不启用仓库、模型、定期审�
 python3.12 -m mikasa --config config/local/hermes-cch.json chat
 ```
 
-输入 `/model 完整模型ID`，或直接说“切换为 gpt-5.6-luna”“恢复默认模型”。`/new` 开始新聊天并保留当前模型，`/help` 查看已接入命令。Hermes 共享组件负责通用命令解析，Hermes Gateway 负责会话、记忆、skills 和取消，Mikasa 负责授权、命令适配及业务回执，详见 [职责边界](docs/decisions/0004-native-hermes-runtime.md)。切换经真实调用验证后对当前聊天生效，保留上下文；原工程任务仍使用运行配置。也可启动 API 后访问 `/chat` 网页。配置、会话恢复和鉴权见 [聊天用法](docs/runbooks/CHAT.md)，调研依据见 [CCH 路由决定](docs/decisions/0002-chat-model-switching.md)，真实结果见 [聊天验证](docs/CHAT_VALIDATION.md)。
+输入 `/model 完整模型ID`，或直接说“切换为 gpt-5.6-luna”“恢复默认模型”。`/new` 开始新聊天并保留当前模型，`/help` 查看已接入命令。Hermes 共享组件负责通用命令解析，Hermes Gateway 负责会话、记忆、skills 和取消，Mikasa 负责授权、命令适配及业务回执，详见 [职责边界](docs/decisions/0004-native-hermes-runtime.md)。切换经真实调用验证后对当前聊天生效，保留上下文；原工程任务仍使用运行配置。配置、会话恢复和鉴权见 [聊天用法](docs/runbooks/CHAT.md)，调研依据见 [CCH 路由决定](docs/decisions/0002-chat-model-switching.md)，真实结果见 [聊天验证](docs/CHAT_VALIDATION.md)。
 
 ## 规则文件
 
