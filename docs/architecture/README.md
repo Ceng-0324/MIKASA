@@ -1,8 +1,8 @@
 # 架构文档
 
-这里记录 Mikasa、Hermes、外部集成、执行 worker 和持久化组件的职责边界与数据流。
+目标为 Hermes 原生运行时 + CCH 模型配置 + Mikasa 身份、工程 skills 与协作记忆。审批分工通过规则和记忆指导，不另建 Mikasa 审批引擎。下文描述尚在迁移的实现，保留、迁移与删除清单见 [0006](../decisions/0006-hermes-native-mikasa.md)。
 
-当前结构为 CLI/HTTP → Service → SQLite、GitHub、独立工作区和 Hermes 进程。设计取舍见 [运行时决定](../decisions/0001-runtime.md)，入口见 [API 契约](API.md)。FluxCore 仅用于本体完成后的运行验收，见 [功能规划](../../MIKASA_FUNCTION_PLAN.md)。
+当前过渡实现结构为 CLI/HTTP → Service → SQLite、GitHub、独立工作区和 Hermes 进程。设计取舍见 [运行时决定](../decisions/0001-runtime.md)，入口见 [API 契约](API.md)。FluxCore 仅用于本体完成后的运行验收，见 [功能规划](../../MIKASA_FUNCTION_PLAN.md)。
 
 聊天路径为 CLI/HTTP → Mikasa 账号授权与命令适配 → 每账号独立 Hermes Gateway → CCH。Hermes 保存原生 SessionDB、压缩历史、MEMORY/USER 记忆，执行 skills 和工具循环；Mikasa SQLite 保存任务、审批和对 native session/run 的引用，不重建模型上下文。旧 chat_turns 只作为迁移档案保留，不再写入。见 [原生运行决定](../decisions/0004-native-hermes-runtime.md)。
 

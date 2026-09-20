@@ -1,6 +1,6 @@
 # Mikasa
 
-Mikasa 是与人类成员共同开发、监督工程质量并推进交付的仿生程序员。本目录包含人格与工程规则 1.0，以及 Python 运行时 0.1：任务持久化、审计、拆解、实现验证、PR 审查、进度查询、CLI 和 HTTP API。Hermes 0.21.3/CCH 已完成合成任务真实联调，人格与三类工程 skill 已验证加载，Hermes 可主动检索源码并通过受限工具修改、检查和修复；GitHub 账号和 VM 尚未完成运行验收。
+Mikasa 是基于原生 Hermes 运行、通过 CCH 使用模型、拥有持续身份和协作记忆的仿生程序员。身份、工程 skills 和记忆承载协作约定，不另建强制审批业务引擎。当前正从自研控制面收窄为原生运行配置与必要适配，迁移范围见 [收窄决定与清单](docs/decisions/0006-hermes-native-mikasa.md)。本目录包含人格与工程规则 1.0，以及 Python 运行时 0.1：任务持久化、审计、拆解、实现验证、PR 审查、进度查询、CLI 和 HTTP API。Hermes 0.21.3/CCH 已完成合成任务真实联调，人格与三类工程 skill 已验证加载，Hermes 可主动检索源码并通过受限工具修改、检查和修复；GitHub 账号和 VM 尚未完成运行验收。
 
 ## 本地运行
 
@@ -75,9 +75,9 @@ scripts/         可重复的检查和运行辅助脚本
 
 GitHub 主人为 `Ceng-0324`，Mikasa 称其为 `Shawn` 或 `Ceng`，`origin` 为 `git@github.com:Ceng-0324/MIKASA.git`；飞书对应人为曾俊轩。代码支持审计、任务拆解与分配、代码验证和提交、Issue/草稿 PR/正式 Review 发布；外部写入必须显式启用，并使用经账号核验的 Mikasa token。
 
-人类 PR 需要 Mikasa 审查批准；Mikasa 及受委派执行者实现的 PR 需要负责人批准。审查留下结论 comment，Mikasa 不自动合并。
+默认由 Mikasa 审查人类 PR、负责人审查 Mikasa 的产出；该分工是可通过已确认交互更新的协作约定，默认不自动合并。
 
-试点仓库 [Ceng-0324/FluxCore](https://github.com/Ceng-0324/FluxCore) 仅用于 Mikasa 开发完成后的运行验收，不作为先行开发对象。当前顺序为 Hermes 底层 → CCH 路由 → GitHub/飞书权限接入 → VM 部署 → 聊天工程任务与 FluxCore 联合验收，见 [功能规划](MIKASA_FUNCTION_PLAN.md)。任务事实源采用本地 SQLite；账号权限、平台强制门禁、VM 部署及飞书原生接入仍需外部配置或后续决定。CCH 返回模型标识与请求名的差异见联调记录。
+试点仓库 [Ceng-0324/FluxCore](https://github.com/Ceng-0324/FluxCore) 仅用于 Mikasa 开发完成后的运行验收，不作为先行开发对象。当前顺序为 Hermes 底层 → CCH 路由 → GitHub/飞书权限接入 → VM 部署 → 聊天工程任务与 FluxCore 联合验收，见 [功能规划](MIKASA_FUNCTION_PLAN.md)。任务事实源目前仍是本地 SQLite，计划迁往 Hermes Kanban；GitHub/飞书实际权限与 VM 尚未验收。不把平台强制审批门禁作为本体开发前置。CCH 返回模型标识与请求名的差异见联调记录。
 
 ## Git 工程状态
 
