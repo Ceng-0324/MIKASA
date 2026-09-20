@@ -19,3 +19,5 @@
 `python3.12 scripts/probe_engineering_state.py` 使用固定 SDK、真实 Docker、临时仓库和本地 HTTP 模型夹具，验证 Worker→bridge→AIAgent 的续话、工具历史去重、失败后恢复、压缩后续、账号记忆双向可见、并发原生记忆写入、身份/skills 注入及容器 ID/清理。需要本机固定 SDK 环境和已缓存工程镜像，不读取真实模型认证、不调用 CCH，也不证明真实模型一定遵循记忆约定。
 
 该探针另走正式 Service 实施任务链：在同一次 Hermes 调用中原生写文件、调用真实 Docker 检查、修复并复查；验证最终验收通过才提交、未修好时 blocked、不启动外层修复、工具检查变绿后又改坏仍被最终检查拦截。所有提交仅在一次性夹具仓库内。
+
+`python3.12 scripts/probe_native_events.py` 启动真实固定 Hermes Gateway，用临时 profile、本地模型夹具和合成 Key 验证 SSE 完成通知、同一 run 重放、取消与读取线程清理、重启恢复、原生记忆/工具历史及身份/skills 证据。不读取真实 CCH 配置，不使用正式 profile；它补充事件传输契约，不替代 `probe_native_state.py` 的真实 CCH 跨协议验收。见 [0012](../docs/decisions/0012-native-run-events.md)。

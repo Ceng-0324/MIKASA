@@ -1,6 +1,12 @@
 # 本体开发验证记录
 
-最新 Cron 迁移验收见 [0011](decisions/0011-native-cron.md)：2026-09-21，基线 `56ebb51` 加本阶段变更，`python3.12 -m unittest discover -v` **160 项通过（237.020 秒）**。其中 7 项直接运行固定 Hermes SDK 的 Cron job API、tick、no_agent 脚本子进程、execution 账本与 Kanban 入板，覆盖首次等待与 90 秒间隔、重启时间保持、同次触发重放、活跃审计去重、宿主/原生暂停、配置停启、原生编辑、竞争锁、凭据隔离、脚本失败和派发前退出后的 pending slot 恢复。另用临时干净 venv 仅安装 `requirements-kanban.txt`，同样 **7 项通过（26.902 秒）**，现有 CI 控制面依赖无需增加。
+最新运行事件迁移验收见 [0012](decisions/0012-native-run-events.md)：2026-09-21，基线 `831e946` 加本阶段变更，`python3.12 -m unittest discover -v` **171 项通过（238.953 秒）**。新增 11 项本地 HTTP 协议测试，覆盖事件完成通知、正常路径不轮询、CRLF/多行帧、终态后保持连接、已完成回执、EOF/404 后持久状态恢复、静默流取消、超时与 stop 失败、失败终态、鉴权错误、畸形/超限帧与读取线程清理。现有聊天、模型切换、身份、skills、Kanban 和 Cron 回归继续通过。
+
+`python3.12 scripts/probe_native_events.py` **14 项全部通过**：真实固定 Hermes Gateway 与原生 SSE、临时 profile、本地模型 HTTP 夹具，验收完成通知、持久回复、原生 memory 写入、工具历史、身份/工程规则/persona/skills 索引证据、同一 run 幂等重放、暂停停止、Gateway 重启后的原结果/历史/API Key 保留、取消运行不重启、合成模型 Key 不落盘和读取线程回收。夹具显式触发 memory 工具，不能据此声称真实模型必然主动遵循约定。没有重跑工程 Docker 或真实 CCH 跨协议场景。
+
+本阶段 `python3.12 scripts/check_docs.py`、`python3.12 -m mikasa doctor`、变更 Python 语法及 `git diff --check` 通过。默认 doctor 不发模型请求，示例缺模型配置符合预期；未运行远端 Linux/Python 3.13 CI。没有读取真实 CCH 认证、操作 GitHub/飞书或重启正式 profile。正常等待已消费原生事件，断流仅恢复同一 run 的持久状态；对外仍返回最终 JSON，不提供中间事件重放或新的 SSE API。下一步完整原生状态备份→GitHub/飞书→VM→聊天工程任务与 FluxCore；当前 backup 仍不覆盖全部原生状态。
+
+上一阶段 Cron 迁移验收见 [0011](decisions/0011-native-cron.md)：2026-09-21，基线 `56ebb51` 加本阶段变更，`python3.12 -m unittest discover -v` **160 项通过（237.020 秒）**。其中 7 项直接运行固定 Hermes SDK 的 Cron job API、tick、no_agent 脚本子进程、execution 账本与 Kanban 入板，覆盖首次等待与 90 秒间隔、重启时间保持、同次触发重放、活跃审计去重、宿主/原生暂停、配置停启、原生编辑、竞争锁、凭据隔离、脚本失败和派发前退出后的 pending slot 恢复。另用临时干净 venv 仅安装 `requirements-kanban.txt`，同样 **7 项通过（26.902 秒）**，现有 CI 控制面依赖无需增加。
 
 本阶段文档链接/canonical 顺序检查、变更 Python 语法、`python3.12 -m mikasa doctor` 和 `git diff --check` 通过。doctor 新增 schedules.backend=hermes_cron，并明确 connection=not_checked；不读取或迁移实际调度状态。宿主时间槽算法已删除，但单任务 runner 唤醒和同步工程交接仍在；长任务可延迟周期审计。首次启用现在等待一个间隔，重启保持原生下次时间。
 

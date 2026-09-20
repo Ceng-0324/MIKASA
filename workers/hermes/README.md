@@ -95,10 +95,12 @@ uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/b
 
 `worker.native_python` 可指定 CLI/Gateway 解释器，默认 runtime/cache/hermes-venv/bin/python；`worker.hermes_source` 指向固定源码。配置沿用现有 model_source/model_routes，所有已配置来源须可读取。生成的 Hermes providers 只包含 Key 环境变量名，无实际 Key。`profile_config.py` 在该解释器中解析 YAML/JSON，刷新集成配置并保留 Hermes 原生偏好；格式错误不覆盖文件。当前模型工具只启用 memory 与 skills，plugin 拒绝未授予的工具；本地 CLI 系统命令仍采用原生行为，这不是操作系统沙箱。
 
-`bridge.py` 保留工程结构化协议、原生 harness 配置和交付证据适配；文件、搜索、修改、shell、任务续话与账号长期记忆已使用官方原生能力。审批引擎与外层修复循环已移除；任务事实源与认领调度已接入 Kanban，周期审计已接原生 Cron；宿主仍负责唤醒，事件与完整原生备份继续迁移。
+`bridge.py` 保留工程结构化协议、原生 harness 配置和交付证据适配；文件、搜索、修改、shell、任务续话与账号长期记忆已使用官方原生能力。审批引擎与外层修复循环已移除；任务事实源与认领调度已接入 Kanban，周期审计已接原生 Cron；宿主仍负责唤醒；HTTP 聊天等待已接原生 SSE，完整原生备份待迁移。
 
 ## 原生任务控制面
 
 `kanban_adapter.py` 调用固定 SDK 的任务、图、租约、原生 dispatcher 与事件 API，独立 home 为 runtime/kanban，不读取模型凭据。公开 spawn_fn 将认领租约交给现有同步工程 Worker；周期唤醒仍由宿主负责。旧任务导入、API 映射、单一事实源与恢复边界见 [0010](../../docs/decisions/0010-native-kanban.md)。`requirements-kanban.txt` 仅供 CI 和控制面测试，不足以运行模型 agent。
 
 `cron_adapter.py` 在独立 `runtime/scheduler` home 调用原生 `cron.jobs` 和 `cron.scheduler.tick`。官方 no_agent 脚本 `cron_enqueue.py` 按原生 occurrence 向同一 Kanban 入板，删除宿主时间槽算法；不加载模型凭据或发出外部消息。暂停、重启、脚本失败和后续边界见 [0011](../../docs/decisions/0011-native-cron.md)。
+
+HTTP/单条聊天的 `NativeGateway.wait` 消费官方 `/v1/runs/{run_id}/events`，正常等待只读初始/最终状态。固定版 transport 无法重放，断流转为同一 run 的低频状态恢复，不重发推理；取消/超时清理读取线程。对外仍是最终 JSON API，不新增自研事件日志或 UI。见 [0012](../../docs/decisions/0012-native-run-events.md)。

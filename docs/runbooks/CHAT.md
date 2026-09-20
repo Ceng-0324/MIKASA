@@ -79,3 +79,5 @@ CLI 启动原生 CLI 子进程，HTTP 启动原生 Gateway 子进程；同一账
 `backup DIRECTORY` 备份业务回执和原生 Kanban 两个 SQLite，不能作为原生会话/记忆的完整恢复点。维护前停服并保留整个受限 runtime；不把它上传到 Git 或公开存储。
 
 通过 HTTP 调用 `POST /chats/{id}/stop`（空 JSON、所属账号鉴权）。返回 `stop_requested` 仅说明已向 Hermes 发出取消；原生运行进入终态后才能确认停止。取消不会回滚已经写入的长期记忆或已发生的工具副作用。
+
+HTTP/单条消息的内部等待已使用 Hermes 原生运行事件，正常运行不再高频查询状态；对外仍返回最终 JSON。断流后查询同一 run 的持久状态，不重新推理，不保证恢复中间 delta；暂停/超时仍向原生 `/stop` 请求结束。旧回执在 Gateway 重启后可直接读取持久结果，失败或已中断的 run 不会自动重新执行。边界及本地真实 Gateway 验收见 [0012](../decisions/0012-native-run-events.md)。

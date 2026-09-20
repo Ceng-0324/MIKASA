@@ -64,3 +64,5 @@ POST 请求体最多 1 MB，必须使用 Content-Length；错误分别返回 400
 可识别的模型故障在 `worker/failed` 事件附加固定词表 `error_code`。聊天切换失败时 `execution` 可仅含 `error_code`，不能当作成功的模型运行证据；原模型和 revision 保持不变。
 
 任务由 Hermes Kanban 保存并调度。新 ID 形如 `t_<hex>`，迁移旧 ID 保持可用；返回值新增 `native_id`、`native_status`，旧 state 标签作为兼容视图保留。events 包含原生生命周期事件，seq 改为原生事件序号；发布回执另由业务库管理。取消不会解除子任务依赖，手动 complete 也须满足原生父任务条件；详见 [0010](../decisions/0010-native-kanban.md)。
+
+HTTP/`chat --message` 内部以原生 SSE 等待运行完成，最终 JSON 字段不变，不开放新的对外 SSE 路由。事件流缺失或断开时只恢复相同 run 的持久状态，不能承诺重放中间进度；正常等待、取消与断线语义见 [0012](../decisions/0012-native-run-events.md)。

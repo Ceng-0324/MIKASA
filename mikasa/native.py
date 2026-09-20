@@ -15,6 +15,7 @@ from urllib.request import Request, build_opener, ProxyHandler
 
 from .errors import Conflict, MikasaError
 from .model_settings import default_model, model_choices, model_environment, select_source, validate_environment
+from .run_events import RunEvents, TERMINAL
 
 HERMES_REVISION = "f9524d3f119c672e4a4444f56d582e7475716ba3"
 
@@ -276,25 +277,59 @@ class NativeGateway:
 
     def wait(self, run_id, cancelled=lambda: False):
         deadline = time.monotonic() + self.config.data.get("worker", {}).get("timeout", 600)
-        while True:
-            status = self.request("GET", "/v1/runs/" + run_id)
-            if cancelled():
-                if status["status"] not in {"completed", "failed", "cancelled", "interrupted"}:
-                    self.request("POST", "/v1/runs/" + run_id + "/stop", {})
+        path = '/v1/runs/' + run_id
+
+        def read_status(cancel_requested=False):
+            status = self.request('GET', path)
+            if cancel_requested or cancelled():
+                if status['status'] not in TERMINAL:
+                    self.request('POST', path + '/stop', {})
                 raise MikasaError("运行已暂停；原生历史与请求回执保留")
-            if status["status"] == "completed":
-                evidence_path = self.home / "request-evidence" / (hashlib.sha256(run_id.encode()).hexdigest() + ".json")
-                if evidence_path.exists():
-                    evidence = json.loads(evidence_path.read_text())
-                    status.setdefault("runtime", {}).update({k: evidence[k] for k in
-                        ("api_mode", "reported_model", "identity", "policy", "skills_index", "persona_skill") if k in evidence})
-                return status
             if status["status"] in {"failed", "cancelled", "interrupted"}:
                 raise MikasaError("Hermes 原生运行失败或已中止；历史保留，未重新发起请求")
-            if cancelled() or time.monotonic() >= deadline:
-                self.request("POST", "/v1/runs/" + run_id + "/stop", {})
-                raise MikasaError("原生运行已请求取消；后续请检查会话记录")
-            time.sleep(.15)
+            return status
+
+        def check_stop():
+            cancel_requested = cancelled()
+            if cancel_requested or time.monotonic() >= deadline:
+                status = read_status(cancel_requested)  # A just-completed run needs no stop.
+                if status['status'] != 'completed':
+                    self.request('POST', path + '/stop', {})
+                    raise MikasaError('原生运行已请求取消；后续请检查会话记录')
+                return status
+
+        status = read_status()  # Receipts can already be terminal, even after restart.
+        if status['status'] != 'completed':
+            with RunEvents(self.url, self.key, run_id) as events:
+                while not events.done.wait(.1):
+                    completed = check_stop()
+                    if completed is not None:
+                        status = completed
+                        break
+                else:
+                    if events.http_status in {401, 403}:
+                        raise NativeAPIError(events.http_status)
+                    status = read_status()
+            # Pinned Hermes retires the transport on disconnect. There is no
+            # Last-Event-ID replay: recover this same run's durable state only.
+            while status['status'] != 'completed':
+                until = min(deadline, time.monotonic() + 1)
+                while time.monotonic() < until:
+                    completed = check_stop()
+                    if completed is not None:
+                        status = completed
+                        break
+                    time.sleep(.1)
+                if status['status'] == 'completed':
+                    break
+                completed = check_stop()
+                status = completed if completed is not None else read_status()
+        evidence_path = self.home / 'request-evidence' / (hashlib.sha256(run_id.encode()).hexdigest() + '.json')
+        if evidence_path.exists():
+            evidence = json.loads(evidence_path.read_text())
+            status.setdefault('runtime', {}).update({k: evidence[k] for k in
+                ('api_mode', 'reported_model', 'identity', 'policy', 'skills_index', 'persona_skill') if k in evidence})
+        return status
 
     def close(self):
         if self.process and self.process.poll() is None:
