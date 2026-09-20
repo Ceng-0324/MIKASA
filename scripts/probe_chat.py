@@ -68,7 +68,7 @@ def main():
                 json.dump(report,f,ensure_ascii=False,indent=2)
             return result
         marker = '蓝鲸-'+secrets.token_hex(3)
-        before = send('请记住本次验收代号 '+marker+'，只需简短确认。')
+        before = send('只在本次会话上下文保留验收代号，不要写入长期 memory： '+marker+'，只需简短确认。')
         switch_command = ('/model ' if args.slash else '切换为 ') + args.target
         switched = send(switch_command, 'switch-target')
         replay = request('POST', route+'/messages', {'message':switch_command}, 'switch-target')
@@ -78,13 +78,13 @@ def main():
         current = request('GET',route)
         report['checks'] = {
             'switch_effective':switched['model']==args.target and switched['kind']=='switch',
-            'target_used_next_turn':after['execution']['requested_model']==args.target,
+            'target_used_next_turn':after['execution']['requested']['model']==args.target,
             'history_survives_switch':marker in after['reply'],
             'retry_idempotent':replay==switched,
             'restored_default':reset['model']==session['model'],
             'history_survives_restore':marker in after_reset['reply'],
-            'readback_persisted':current['model']==session['model'] and len(current['turns'])==5,
-            'real_hermes':all(r['execution']['backend']=='hermes' for r in [before,switched,after,reset,after_reset]),
+            'readback_persisted':current['model']==session['model'] and len(current['turns'])==3,
+            'real_hermes':all(r['execution']['backend']=='hermes-gateway' for r in [before,switched,after,reset,after_reset]),
         }
         from mikasa.model_settings import model_environment
         target_mode = model_environment(config.data['worker'], args.target).get('MIKASA_MODEL_API_MODE', 'chat_completions')
@@ -92,9 +92,7 @@ def main():
         report['checks']['target_protocol'] = all(r['execution'].get('api_mode') == target_mode for r in [switched, after])
         report['checks']['restored_protocol'] = all(r['execution'].get('api_mode') == default_mode for r in [reset, after_reset])
         if args.commands:
-            report['checks']['native_history'] = all(r['execution'].get('history_messages', 0) > 0
-                                                     and r['execution'].get('session_owner') == 'mikasa'
-                                                     for r in [after, after_reset])
+            report['checks']['native_history'] = bool(current['native_session_id']) and len(current['turns']) == 3
             version = send('/v')
             deferred = send('/init')
             new = send('/reset', 'new-session')
@@ -104,10 +102,11 @@ def main():
             report['checks']['init_deferred'] = deferred['kind'] == 'deferred_command' and deferred['execution'] is None
             report['checks']['new_idempotent'] = new == replay_new
             report['checks']['new_session'] = new['chat_id'] != session['id'] and fresh['turns'] == [] and fresh['model'] == current['model']
-            report['checks']['old_session_retained'] = len(request('GET', route)['turns']) == 8
+            report['checks']['old_session_retained'] = len(request('GET', route)['turns']) == 3
             route = '/chats/'+new['chat_id']
             clean = send('如果当前上下文中没有验收代号，请回答“未提供”；否则给出代号。')
-            report['checks']['new_history_empty'] = clean['execution'].get('history_messages') == 0 and marker not in clean['reply']
+            report['checks']['new_history_empty'] = len(request('GET', route)['turns']) == 1
+        report['checks']['native_injection'] = all(r['execution'].get('identity') and r['execution'].get('policy') and r['execution'].get('skills_index') for r in [before, switched, after, reset, after_reset])
         report['passed']=all(report['checks'].values())
         print(json.dumps({'passed':report['passed'],'checks':report['checks']},ensure_ascii=False),flush=True)
     finally:

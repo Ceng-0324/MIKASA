@@ -30,7 +30,7 @@ API 和 runner 分别运行。默认示例不启用仓库、模型、定期审�
 python3.12 -m mikasa --config config/local/hermes-cch.json chat
 ```
 
-输入 `/model 完整模型ID`，或直接说“切换为 gpt-5.6-luna”“恢复默认模型”。`/new` 开始新聊天并保留当前模型，`/help` 查看已接入命令。Hermes 共享组件负责通用命令解析，Mikasa 负责授权和会话持久化，详见 [职责边界](docs/decisions/0003-hermes-commands-sessions.md)。切换经真实调用验证后对当前聊天生效，保留上下文；原工程任务仍使用运行配置。也可启动 API 后访问 `/chat` 网页。配置、会话恢复和鉴权见 [聊天用法](docs/runbooks/CHAT.md)，调研依据见 [CCH 路由决定](docs/decisions/0002-chat-model-switching.md)，真实结果见 [聊天验证](docs/CHAT_VALIDATION.md)。
+输入 `/model 完整模型ID`，或直接说“切换为 gpt-5.6-luna”“恢复默认模型”。`/new` 开始新聊天并保留当前模型，`/help` 查看已接入命令。Hermes 共享组件负责通用命令解析，Hermes Gateway 负责会话、记忆、skills 和取消，Mikasa 负责授权、命令适配及业务回执，详见 [职责边界](docs/decisions/0004-native-hermes-runtime.md)。切换经真实调用验证后对当前聊天生效，保留上下文；原工程任务仍使用运行配置。也可启动 API 后访问 `/chat` 网页。配置、会话恢复和鉴权见 [聊天用法](docs/runbooks/CHAT.md)，调研依据见 [CCH 路由决定](docs/decisions/0002-chat-model-switching.md)，真实结果见 [聊天验证](docs/CHAT_VALIDATION.md)。
 
 ## 规则文件
 
@@ -59,7 +59,7 @@ tests/           规则、配置和集成验证支持
 scripts/         可重复的检查和运行辅助脚本
 ```
 
-运行代码集中在 `mikasa/`；`workers/hermes/bridge.py` 是独立 Hermes 执行器。其他集成目录记录接入边界，不复制实现。代码存在、隔离测试通过与生产服务已运行是不同状态。
+运行代码集中在 `mikasa/`；聊天由未修改的 Hermes Gateway 执行，`workers/hermes/bridge.py` 暂用于受控工程任务。原生迁移与限制见 [原生运行记录](docs/NATIVE_HERMES_VALIDATION.md)。其他集成目录记录接入边界，不复制实现。代码存在、隔离测试通过与生产服务已运行是不同状态。
 
 ## 使用与维护
 

@@ -1,0 +1,25 @@
+{
+  "created": 1789905023.351265,
+  "hermes_revision": "f9524d3f119c672e4a4444f56d582e7475716ba3",
+  "checks": {
+    "switch_effective": true,
+    "target_used_next_turn": true,
+    "history_survives_switch": true,
+    "retry_idempotent": true,
+    "restored_default": true,
+    "history_survives_restore": true,
+    "readback_persisted": true,
+    "real_hermes": true,
+    "target_protocol": true,
+    "restored_protocol": true,
+    "native_history": true,
+    "official_version": true,
+    "init_deferred": true,
+    "new_idempotent": true,
+    "new_session": true,
+    "old_session_retained": true,
+    "new_history_empty": true,
+    "native_injection": true
+  },
+  "passed": true
+}

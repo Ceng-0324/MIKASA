@@ -12,7 +12,7 @@ HTTP 默认监听 `127.0.0.1:8765`。除健康检查、无数据的 `/chat` 静�
 | --- | --- | --- |
 | `GET /chat` | 浏览器聊天页面；数据接口仍需认证 | 无认证 |
 | `POST /chats` | body `{}`，创建当前账号的聊天 | 已配置成员 |
-| `GET /chats/{id}` | 模型、revision、最近 40 轮记录及截断标记 | 会话所属账号 |
+| `GET /chats/{id}` | 模型、revision、原生历史的最近一页（最多 500 条消息）及截断标记 | 会话所属账号 |
 | `POST /chats/{id}/messages` | `{"message":"切换为 gpt-5.6-luna"}`，必需 Idempotency-Key | 会话所属账号 |
 | `GET /health` | 存活与暂停状态 | 无认证；不含任务信息 |
 | `GET /tasks` | 最近 500 个任务 | 已配置成员 |

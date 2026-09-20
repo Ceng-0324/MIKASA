@@ -112,28 +112,28 @@ def main(argv=None):
             cmd = args.command
             if cmd == "chat":
                 from .chat import Chat
-                chat = Chat(config)
-                session = chat.get(args.session, actor) if args.session else chat.create(actor)
-                if args.message is not None:
-                    value = chat.send(session["id"], actor, args.message, uuid.uuid4().hex)
-                    print(json.dumps(value, ensure_ascii=False, indent=2))
-                    return 0
-                print(f"Mikasa · 会话 {session['id']} · 请求模型 {session['model']}\n输入 /model 查看候选，/model 完整模型ID 切换，/new 新聊天，/help 帮助，/exit 退出。")
-                while True:
-                    try:
-                        message = input("你：").strip()
-                    except EOFError:
+                with Chat(config) as chat:
+                    session = chat.get(args.session, actor) if args.session else chat.create(actor)
+                    if args.message is not None:
+                        value = chat.send(session["id"], actor, args.message, uuid.uuid4().hex)
+                        print(json.dumps(value, ensure_ascii=False, indent=2))
                         return 0
-                    if message == "/exit":
-                        return 0
-                    if not message:
-                        continue
-                    try:
-                        result = chat.send(session["id"], actor, message, uuid.uuid4().hex)
-                        session.update(id=result["chat_id"], model=result["model"])
-                        print("Mikasa：" + result["reply"])
-                    except MikasaError as exc:
-                        print(str(exc), file=sys.stderr)
+                    print(f"Mikasa · 会话 {session['id']} · 请求模型 {session['model']}\n输入 /model 查看候选，/model 完整模型ID 切换，/new 新聊天，/help 帮助，/exit 退出。")
+                    while True:
+                        try:
+                            message = input("你：").strip()
+                        except EOFError:
+                            return 0
+                        if message == "/exit":
+                            return 0
+                        if not message:
+                            continue
+                        try:
+                            result = chat.send(session["id"], actor, message, uuid.uuid4().hex)
+                            session.update(id=result["chat_id"], model=result["model"])
+                            print("Mikasa：" + result["reply"])
+                        except MikasaError as exc:
+                            print(str(exc), file=sys.stderr)
             if cmd == "serve":
                 from .server import make_server
                 server = make_server(service)

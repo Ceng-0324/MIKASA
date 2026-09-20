@@ -1,6 +1,7 @@
 """Official Hermes plugin: policy injection and chat capability boundary."""
 import hashlib
 import json
+import threading
 from pathlib import Path
 
 
@@ -22,6 +23,43 @@ def register(ctx):
             return {"action": "block", "message": "当前聊天未授予此能力；工程执行需通过 Mikasa 任务授权。"}
 
     ctx.register_hook("pre_tool_call", guard)
+    lock = threading.Lock()
+    evidence_dir = home / "request-evidence"
+    evidence_dir.mkdir(exist_ok=True, mode=0o700)
+
+    def record(event):
+        # Structured metadata only; never retain messages, tool arguments or credentials.
+        from tools.approval_context import get_current_session_key
+        event["run_id"] = get_current_session_key()
+        with lock, (home / "native-evidence.jsonl").open("a") as stream:
+            stream.write(json.dumps(event, ensure_ascii=False) + "\n")
+            if event["event"] in {"request", "response"}:
+                path = evidence_dir / (hashlib.sha256(event["run_id"].encode()).hexdigest() + ".json")
+                previous = json.loads(path.read_text()) if path.exists() else {}
+                previous.update(event)
+                temporary = path.with_suffix(".tmp")
+                temporary.write_text(json.dumps(previous))
+                temporary.replace(path)
+
+    def request_evidence(session_id="", system_prompt="", api_mode="", **kwargs):
+        if isinstance(system_prompt, list):
+            system_prompt = "\n".join(p.get("text", "") for p in system_prompt if isinstance(p, dict))
+        if not isinstance(system_prompt, str):
+            system_prompt = ""
+        record({"event": "request", "session_id": session_id, "api_mode": api_mode,
+                "identity": (home / "SOUL.md").read_text().strip() in system_prompt,
+                "policy": all(policy[o:o + 3500] in system_prompt for o in range(0, len(policy), 3500)),
+                "skills_index": all(n in system_prompt for n in ("mikasa-persona", "mikasa-plan", "mikasa-implement", "mikasa-review"))})
+
+    def tool_evidence(tool_name="", session_id="", status="", **kwargs):
+        record({"event": "tool", "session_id": session_id, "tool": tool_name, "status": status})
+
+    def response_evidence(session_id="", response_model="", **kwargs):
+        record({"event": "response", "session_id": session_id, "reported_model": response_model})
+
+    ctx.register_hook("pre_api_request", request_evidence)
+    ctx.register_hook("post_tool_call", tool_evidence)
+    ctx.register_hook("post_api_request", response_evidence)
     # Digests attest loaded inputs, without storing credentials or conversations.
     (home / "policy-loaded.json").write_text(json.dumps({
         "policy_sha256": hashlib.sha256(policy.encode()).hexdigest(),

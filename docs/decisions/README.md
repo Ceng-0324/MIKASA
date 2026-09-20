@@ -7,3 +7,5 @@
 当前记录：[0001：Mikasa 本体运行时](0001-runtime.md)、[0002：聊天模型切换与 CCH 路由](0002-chat-model-switching.md)。
 
 [0003：Hermes 命令复用与会话归属](0003-hermes-commands-sessions.md) 明确共享命令组件、会话事实源和各层职责。
+
+[0004：原生 Hermes Gateway](0004-native-hermes-runtime.md) 取代 0003 中的会话归属；当前聊天使用原生 SessionDB、记忆、skills 和运行取消。

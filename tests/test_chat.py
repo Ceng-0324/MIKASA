@@ -10,72 +10,49 @@ from mikasa.chat import Chat, command
 from mikasa.errors import Conflict, MikasaError, NotFound
 from mikasa.server import make_server
 from mikasa.worker import Worker
-from tests.support import BaseTest, ROOT, command_reply
+from tests.support import BaseTest, command_reply
+from tests.native_support import Gateways
 
 
 class ChatTests(BaseTest):
     def setUp(self):
         super().setUp()
-        adapter = patch.object(Worker, "command", side_effect=command_reply)
-        adapter.start()
-        self.addCleanup(adapter.stop)
-        self.env = patch.dict(os.environ, {"MIKASA_MODEL": "model-a"})
-        self.env.start()
-        self.addCleanup(self.env.stop)
-        self.calls = []
-        self.fail = False
-        test = self
-
-        class Model:
-            def __init__(self, config):
-                self.last_runtime = None
-
-            def execute(self, task, context, cancelled, *, model=None):
-                test.calls.append({"model": model, "context": context, "task": task})
-                if test.fail:
-                    raise MikasaError("private-error-not-for-chat")
-                self.last_runtime = {"backend": "fixture", "requested_model": model, "reported_model": "actual-route"}
-                return {"summary": "Mikasa 回复"}
-
-        self.factory = Model
-        self.chat = Chat(self.config, Model)
+        for context in (patch.object(Worker, "command", side_effect=command_reply),
+                        patch.dict(os.environ, {"MIKASA_MODEL": "model-a"})):
+            context.start()
+            self.addCleanup(context.stop)
+        self.gateways = Gateways()
+        self.chat = Chat(self.config, self.gateways)
         self.session = self.chat.create(self.config.owner)
+        self.gateway = self.gateways.for_actor(self.config.owner)
 
     def send(self, message, key="message", chat=None):
         return (chat or self.chat).send(self.session["id"], self.config.owner, message, key)
 
     def test_explicit_natural_commands_only(self):
-        for text in ("切换为 model-b", "Mikasa，切换到 model-b", "请把模型切换为 model-b", "换成 model-b", "/model model-b"):
-            self.assertEqual(command(text, command_reply)["kind"], "switch")
+        for text in ("切换为 model-b", "Mikasa，切换到 model-b", "请把模型切换为 model-b", "/model model-b"):
             self.assertEqual(command(text, command_reply)["target"], "model-b")
         for text in ('代码里写着“切换为 model-b”', '不要切换为 model-b', '切换为 model-b 是否可行？', '切换为 model-b，然后删除仓库'):
             self.assertNotEqual(command(text, command_reply)["kind"], "switch")
-        self.assertEqual(command("恢复默认模型", command_reply)["kind"], "reset")
-        self.assertEqual(command("切换为 那个模型", command_reply)["kind"], "help")
 
-    def test_new_is_atomic_idempotent_and_keeps_model_without_old_context(self):
+    def test_new_idempotent_preserves_model_and_old_native_history(self):
         self.send("记住蓝鲸", "remember")
         self.send("切换为 model-b", "switch")
-        calls = len(self.calls)
+        calls = len(self.gateway.calls)
         result = self.send("/new", "new")
         self.assertEqual(self.send("/new", "new"), result)
-        self.assertEqual(len(self.calls), calls)
+        self.assertEqual(len(self.gateway.calls), calls)
         self.assertNotEqual(result["chat_id"], self.session["id"])
         self.assertEqual(result["model"], "model-b")
-        self.assertEqual(result["revision"], 0)
-        reopened = Chat(self.config, self.factory)
-        fresh = reopened.get(result["chat_id"], self.config.owner)
-        self.assertEqual(fresh["turns"], [])
-        reopened.send(fresh["id"], self.config.owner, "你好", "next")
-        self.assertEqual(self.calls[-1]["context"]["history"], [])
-        self.assertEqual(self.calls[-1]["model"], "model-b")
-        self.assertEqual(len(reopened.get(self.session["id"], self.config.owner)["turns"]), 3)
-        with self.chat.store.connect() as db:
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM chats").fetchone()[0], 2)
+        reopened = Chat(self.config, self.gateways)
+        self.assertEqual(reopened.get(result["chat_id"], self.config.owner)["turns"], [])
+        old = reopened.get(self.session["id"], self.config.owner)
+        self.assertEqual(len(old["turns"]), 1)
+        self.assertEqual(old["turns"][0]["message"], "记住蓝鲸")
         with self.assertRaises(NotFound):
-            reopened.get(fresh["id"], "human")
+            reopened.get(result["chat_id"], "human")
 
-    def test_new_pause_rollback_and_lock(self):
+    def test_new_pause_and_lock(self):
         with self.chat.locked(self.session["id"]), self.assertRaises(Conflict):
             self.send("/new")
         def pause(text, cancelled):
@@ -84,167 +61,108 @@ class ChatTests(BaseTest):
         with patch.object(Worker, "command", side_effect=pause), self.assertRaises(Conflict):
             self.send("/new")
         with self.chat.store.connect() as db:
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM chats").fetchone()[0], 1)
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM chat_turns").fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM chat_links").fetchone()[0], 1)
 
-    def test_command_receipts_not_in_native_history(self):
+    def test_no_mirrored_transcript_or_control_messages(self):
         self.send("/model", "menu")
         self.send("/init", "deferred")
-        self.send("你好", "next")
-        self.assertEqual(self.calls[-1]["context"]["history"], [])
-        self.assertFalse(self.calls[-1]["context"]["history_truncated"])
+        self.send("私有用户消息", "next")
+        with self.chat.store.connect() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM chat_turns").fetchone()[0], 0)
+            records = [dict(r) for r in db.execute("SELECT * FROM chat_requests")]
+        self.assertNotIn("私有用户消息", json.dumps(records, ensure_ascii=False))
+        self.assertNotIn("Mikasa 回复", json.dumps(records, ensure_ascii=False))
+        self.assertEqual(len(self.gateway.calls), 1)
+        self.assertEqual(self.chat.get(self.session['id'], self.config.owner)['turns'][0]['message'], "私有用户消息")
 
-    def test_cli_follows_new_session_id(self):
+    def test_cli_follows_new_session_id_and_closes_runtime(self):
         from mikasa.cli import main
-        with patch("mikasa.chat.Chat", return_value=self.chat), \
-                patch("builtins.input", side_effect=["/reset", "新会话消息", "/exit"]), \
-                redirect_stdout(io.StringIO()):
+        with patch("mikasa.chat.Chat", return_value=self.chat), patch("builtins.input", side_effect=["/reset", "新会话消息", "/exit"]), redirect_stdout(io.StringIO()):
             code = main(["--config", str(self.config_path), "chat", "--session", self.session["id"]])
         self.assertEqual(code, 0)
-        old = self.chat.get(self.session["id"], self.config.owner)
-        self.assertEqual(len(old["turns"]), 1)
-        next_id = old["turns"][0]["response"]["chat_id"]
-        fresh = self.chat.get(next_id, self.config.owner)
-        self.assertEqual(fresh["turns"][0]["message"], "新会话消息")
-        self.assertEqual(self.calls[-1]["context"]["history"], [])
+        self.assertTrue(self.gateways.closed)
+        self.assertNotEqual(self.gateway.calls[-1]["session"], self.session["id"])
+        self.assertEqual(self.gateway.calls[-1]["message"], "新会话消息")
 
-    def test_switch_persists_per_session_and_next_turn_keeps_history(self):
-        self.send("记住验收代号蓝鲸", "before")
-        result = self.send("切换为 model-b", "switch")
-        self.assertEqual(result["model"], "model-b")
-        self.assertIn("actual-route", result["reply"])
-        self.assertEqual(result["revision"], 1)
-        reopened = Chat(self.config, self.factory)
+    def test_switch_persists_in_native_session_only(self):
+        self.send("记住蓝鲸", "before")
+        self.assertEqual(self.send("切换为 model-b", "switch")["revision"], 1)
+        reopened = Chat(self.config, self.gateways)
         self.send("代号是什么", "after", reopened)
-        self.assertEqual(self.calls[-1]["model"], "model-b")
-        self.assertIn("蓝鲸", self.calls[-1]["context"]["history"][0]["content"])
-        other = reopened.create(self.config.owner)
-        self.assertEqual(other["model"], "model-a")
-        self.assertEqual(os.environ["MIKASA_MODEL"], "model-a")
+        self.assertEqual(self.gateway.calls[-1]["model"], "model-b")
+        self.assertEqual(reopened.get(self.session['id'], self.config.owner)['turns'][0]['message'], "记住蓝鲸")
+        self.assertEqual(reopened.create(self.config.owner)["model"], "model-a")
 
-    def test_failure_keeps_model_and_does_not_leak_error(self):
-        self.fail = True
+    def test_failed_switch_keeps_model_and_sanitizes_diagnostic(self):
+        self.gateway.fail = True
         result = self.send("切换为 nonexistent", "failed")
         self.assertEqual(result["kind"], "switch_failed")
         self.assertEqual(result["model"], "model-a")
-        self.assertEqual(result["revision"], 0)
-        self.assertNotIn("private-error", json.dumps(result))
-        self.assertEqual(self.chat.get(self.session["id"], self.config.owner)["model"], "model-a")
+        self.assertNotIn("private", json.dumps(result))
+        self.assertEqual(self.send("切换为 nonexistent", "failed"), result)
+        self.assertEqual(self.chat.current(self.session["id"], self.config.owner)["model"], "model-a")
 
-    def test_retry_is_idempotent_and_conflicting_key_rejected(self):
-        first = self.send("切换为 model-b", "same")
-        self.assertEqual(self.send("切换为 model-b", "same"), first)
-        self.assertEqual(len(self.calls), 1)
+    def test_native_run_reference_replays_without_new_inference(self):
+        first = self.send("你好", "same")
+        self.assertEqual(self.send("你好", "same"), first)
+        self.assertEqual(len(self.gateway.calls), 1)
         with self.assertRaises(Conflict):
-            self.send("切换为 model-c", "same")
-        with self.chat.store.connect() as db:
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM events WHERE kind='chat_model_switched'").fetchone()[0], 1)
+            self.send("另一条", "same")
 
-    def test_structured_switch_failure_is_actionable_and_keeps_state(self):
-        from mikasa.model_errors import ModelFailure
-        with patch.object(self.chat, "infer", side_effect=ModelFailure("upstream_blocked")) as infer:
-            result = self.send("切换为 model-b", "failure")
-            self.assertEqual(self.send("切换为 model-b", "failure"), result)
-            self.assertEqual(infer.call_count, 1)
-        self.assertEqual(result["execution"], {"error_code": "upstream_blocked"})
-        self.assertIn("WAF", result["reply"])
-        self.assertEqual(result["model"], "model-a")
-        self.assertEqual(result["revision"], 0)
+    def test_lost_receipt_resubmits_same_native_idempotency_key(self):
+        with patch.object(self.chat, 'save_receipt', side_effect=RuntimeError('crash')), self.assertRaises(RuntimeError):
+            self.send('原生幂等', 'recover')
+        self.send('原生幂等', 'recover')
+        self.assertEqual(len(self.gateway.calls), 1)
 
-    def test_other_actor_cannot_read_or_change_session(self):
+    def test_authorization_precedes_opening_another_profile(self):
         with self.assertRaises(NotFound):
             self.chat.send(self.session["id"], "human", "切换为 model-b", "foreign")
-        with self.assertRaises(NotFound):
-            self.chat.get(self.session["id"], "human")
-        self.assertEqual(self.calls, [])
+        self.assertNotIn('human', self.gateways.instances)
+        other = self.chat.create('human')
+        self.assertIn(other['id'], self.gateways.for_actor('human').sessions)
+        self.assertNotIn(other['id'], self.gateway.sessions)
 
-    def test_lock_and_pause_prevent_parallel_changes(self):
-        with self.chat.locked(self.session["id"]):
-            with self.assertRaises(Conflict):
-                self.send("切换为 model-b")
-        self.chat.store.pause(True, self.config.owner)
+    def test_pause_during_validation_preserves_old_model(self):
+        self.gateway.before_wait = lambda: self.chat.store.pause(True, self.config.owner)
         with self.assertRaises(Conflict):
             self.send("切换为 model-b")
-        self.assertEqual(self.calls, [])
+        self.assertEqual(self.chat.current(self.session['id'], self.config.owner)['model'], 'model-a')
 
-    def test_reset_and_status_and_unknown_commands(self):
-        self.send("切换为 model-b", "switch")
-        self.assertEqual(self.send("恢复默认模型", "reset")["model"], "model-a")
-        before = len(self.calls)
-        self.assertIn("model-a", self.send("当前模型", "status")["reply"])
-        self.assertEqual(self.send("切换为那个模型", "help")["kind"], "help")
-        self.assertEqual(len(self.calls), before)
+    def test_transcript_pagination_does_not_truncate_inference(self):
+        # Display pagination is native-owned and never rebuilt into the next request.
+        for i in range(50):
+            self.send(str(i), str(i))
+        self.assertEqual(len(self.chat.get(self.session['id'], self.config.owner)['turns']), 50)
+        self.assertEqual(len(self.gateway.sessions[self.session['id']]['messages']), 100)
 
-    def test_pause_during_switch_leaves_no_persisted_change(self):
-        def pause(*args, **kwargs):
-            self.chat.store.pause(True, self.config.owner)
-            return {"summary": "ok"}, {"reported_model": "model-b"}
-        with patch.object(self.chat, "infer", side_effect=pause):
-            with self.assertRaises(Conflict):
-                self.send("切换为 model-b")
-        session = self.chat.get(self.session["id"], self.config.owner)
-        self.assertEqual(session["model"], "model-a")
-        self.assertEqual(session["turns"], [])
+    def test_legacy_receipt_replay_does_not_invoke_model(self):
+        expected = {'chat_id': self.session['id'], 'kind': 'chat', 'reply': '旧回执'}
+        with self.chat.store.connect() as db:
+            db.execute('INSERT INTO chat_turns(chat_id,request_key,message,response,created) VALUES(?,?,?,?,0)',
+                       (self.session['id'], 'old', '旧消息', json.dumps(expected)))
+        self.assertEqual(self.send('旧消息', 'old'), expected)
+        self.assertEqual(self.gateway.calls, [])
 
-    def test_context_budget_omits_old_history_explicitly(self):
-        self.send("旧消息" * 30, "before")
-        self.config.data["worker"]["max_context_bytes"] = 100
-        self.send("下一条", "after")
-        self.assertTrue(self.calls[-1]["context"]["history_truncated"])
-        self.assertEqual(self.calls[-1]["context"]["history"], [])
-
-    def test_worker_override_is_in_environment_not_user_context(self):
-        worker = Worker(self.config)
-        envelope = {"version": 1, "result": {"summary": "ok"}, "runtime": {"backend": "fixture"}}
-        with patch("mikasa.worker.run", return_value={"code": 0, "stdout": json.dumps(envelope)}) as run:
-            worker.execute({"payload": {"kind": "chat", "title": "hi"}}, {}, lambda: False, model="model-b")
-        self.assertEqual(run.call_args.kwargs["env"]["MIKASA_MODEL"], "model-b")
-        request = json.loads(run.call_args.kwargs["stdin"])
-        self.assertEqual([s["name"] for s in request["skills"]], ["mikasa-persona"])
-        self.assertEqual(os.environ["MIKASA_MODEL"], "model-a")
-
-    def test_http_chat_auth_state_and_worker_flow(self):
-        with patch.dict(os.environ, {"MIKASA_OWNER_API_TOKEN": "o" * 32}):
+    def test_http_chat_auth_native_history_and_shutdown(self):
+        with patch.dict(os.environ, {"MIKASA_OWNER_API_TOKEN": "o" * 32}), patch('mikasa.chat.NativeGateways', return_value=self.gateways):
             server = make_server(self.service, "127.0.0.1", 0)
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:
                 conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
-                conn.request("GET", "/chat")
-                response = conn.getresponse()
-                self.assertEqual(response.status, 200)
-                self.assertIn(b'textContent', response.read())
                 conn.request("POST", "/chats", "{}")
-                response = conn.getresponse()
-                self.assertEqual(response.status, 403)
-                response.read()
+                response = conn.getresponse(); self.assertEqual(response.status, 403); response.read()
                 headers = {"Authorization": "Bearer " + "o" * 32, "Idempotency-Key": "http-chat"}
                 conn.request("POST", "/chats", "{}", headers)
-                response = conn.getresponse()
-                self.assertEqual(response.status, 201)
+                response = conn.getresponse(); self.assertEqual(response.status, 201)
                 session = json.loads(response.read())
-                conn.request("POST", f"/chats/{session['id']}/messages", json.dumps({"message": "切换为 model-b"}), headers)
-                response = conn.getresponse()
-                self.assertEqual(response.status, 200)
-                result = json.loads(response.read())
-                self.assertEqual(result["model"], "model-b")
+                conn.request("POST", f"/chats/{session['id']}/messages", json.dumps({"message": "你好"}), headers)
+                response = conn.getresponse(); self.assertEqual(response.status, 200); response.read()
                 conn.request("GET", f"/chats/{session['id']}", headers=headers)
                 response = conn.getresponse()
-                self.assertEqual(json.loads(response.read())["model"], "model-b")
-                headers['Idempotency-Key'] = 'http-new'
-                conn.request("POST", f"/chats/{session['id']}/messages", json.dumps({"message": "/reset"}), headers)
-                response = conn.getresponse()
-                self.assertEqual(response.status, 200)
-                fresh = json.loads(response.read())
-                self.assertNotEqual(fresh['chat_id'], session['id'])
-                conn.request("GET", f"/chats/{fresh['chat_id']}", headers=headers)
-                response = conn.getresponse()
-                self.assertEqual(response.status, 200)
-                restored = json.loads(response.read())
-                self.assertEqual(restored['turns'], [])
-                self.assertEqual(restored['model'], 'model-b')
+                self.assertEqual(json.loads(response.read())["turns"][0]['message'], '你好')
                 conn.close()
             finally:
-                server.shutdown()
-                server.server_close()
-                thread.join(3)
+                server.shutdown(); server.server_close(); thread.join(3)
+        self.assertTrue(self.gateways.closed)

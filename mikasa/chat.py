@@ -1,4 +1,5 @@
 """Conversation-local model selection; CCH owns provider routing and rewriting."""
+import hashlib
 import fcntl
 import json
 import re
@@ -8,9 +9,9 @@ from contextlib import contextmanager
 
 from .errors import Conflict, MikasaError, NotFound
 from .model_settings import default_model, model_choices
-from .model_errors import ModelFailure
 from .store import Store
 from .worker import Worker
+from .native import NativeGateways
 
 
 # Only a complete direct user command can change state. Quoted text, questions,
@@ -45,150 +46,179 @@ def command(message, resolve):
 
 
 class Chat:
-    def __init__(self, config, worker_factory=Worker):
+    """Business authorization and command receipts; Hermes owns conversation state."""
+    def __init__(self, config, native_gateways=None):
         self.config = config
         self.store = Store(config.runtime)
-        self.worker_factory = worker_factory
+        self.gateways = native_gateways or NativeGateways(config)
+
+    def close(self):
+        self.gateways.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
 
     def create(self, actor):
         self.config.authorize(actor)
-        model = default_model(self.config)
-        chat_id = uuid.uuid4().hex
-        with self.store.connect() as db:
-            db.execute("INSERT INTO chats(id,actor,model,created) VALUES(?,?,?,?)", (chat_id, actor, model, time.time()))
-        return self.get(chat_id, actor)
+        session = uuid.uuid4().hex
+        self.gateways.for_actor(actor).ensure_session(session, default_model(self.config))
+        self.bind(session, actor)
+        return self.get(session, actor)
 
-    def get(self, chat_id, actor):
+    def bind(self, session, actor):
+        with self.store.connect() as db:
+            db.execute("INSERT OR IGNORE INTO chat_links(id,actor,created) VALUES(?,?,?)", (session, actor, time.time()))
+
+    def owned(self, session, actor):
         self.config.authorize(actor)
-        if not isinstance(chat_id, str) or not re.fullmatch(r"[0-9a-f]{32}", chat_id):
+        if not isinstance(session, str) or not re.fullmatch(r"[0-9a-f]{32}", session):
             raise NotFound("聊天不存在")
         with self.store.connect() as db:
-            row = db.execute("SELECT * FROM chats WHERE id=? AND actor=?", (chat_id, actor)).fetchone()
-            if row is None:
-                raise NotFound("聊天不存在或不属于当前账号")
-            turns = db.execute("SELECT message,response FROM chat_turns WHERE chat_id=? ORDER BY seq DESC LIMIT 41", (chat_id,)).fetchall()
-        return {**dict(row), "history_truncated": len(turns) > 40,
-                "turns": [{"message": t["message"], "response": json.loads(t["response"])} for t in reversed(turns[:40])]}
+            row = db.execute("SELECT * FROM chat_links WHERE id=? AND actor=?", (session, actor)).fetchone()
+            legacy = db.execute("SELECT * FROM chats WHERE id=? AND actor=?", (session, actor)).fetchone() if row is None else None
+        if row is None and legacy is None:
+            raise NotFound("聊天不存在或不属于当前账号")
+        # Gateway startup imports the actor's legacy transcripts before accepting requests.
+        if row is None:
+            self.gateways.for_actor(actor)
+            self.bind(session, actor)
+            return self.owned(session, actor)
+        return dict(row)
+
+    def current(self, session, actor):
+        owned = self.owned(session, actor)
+        gateway = self.gateways.for_actor(actor)
+        native = gateway.session(session)
+        return {**owned, "model": native["model"]}
+
+    def get(self, session, actor):
+        current = self.current(session, actor)
+        native = self.gateways.for_actor(actor).messages(session)
+        turns, pending = [], None
+        # Native "latest" chooses a tail page, but returns it in chronological order.
+        for item in native["data"]:
+            if item.get("role") == "user":
+                pending = item.get("content", "")
+            elif item.get("role") == "assistant" and item.get("content") and not item.get("tool_calls") and pending is not None:
+                turns.append({"message": pending, "response": {"kind": "chat", "reply": item["content"]}})
+                pending = None
+        return {**current, "native_session_id": native["session_id"], "turns": turns,
+                "history_truncated": len(native["data"]) >= native["pagination"]["limit"]}
 
     @contextmanager
-    def locked(self, chat_id):
+    def locked(self, session):
         directory = self.config.runtime / "chat-locks"
         directory.mkdir(exist_ok=True, mode=0o700)
-        with (directory / (chat_id + ".lock")).open("a") as lock:
+        with (directory / (session + ".lock")).open("a") as lock:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as exc:
                 raise Conflict("当前聊天正在处理上一条消息，请稍后重试") from exc
             yield
 
-    def send(self, chat_id, actor, message, key):
-        self.get(chat_id, actor)  # Validate ownership and path before locking.
+    def replay(self, receipt, gateway):
+        response = json.loads(receipt)
+        if "run_id" in response:
+            status = gateway.wait(response["run_id"], self.store.paused)
+            response["reply"] = status.get("output", "")
+            response["execution"] = {"backend": "hermes-gateway", "run_id": response.pop("run_id"),
+                                     **status.get("runtime", {})}
+        return response
+
+    def send(self, session, actor, message, key):
+        self.owned(session, actor)  # Authenticate before opening an actor's native profile.
         if not isinstance(message, str) or not message.strip() or len(message) > 10000:
             raise MikasaError("消息需要 1–10000 字符")
         if not isinstance(key, str) or not 1 <= len(key) <= 200:
             raise MikasaError("聊天请求需要 1–200 字符的 Idempotency-Key")
-        with self.locked(chat_id):
-            current = self.get(chat_id, actor)
+        digest = hashlib.sha256(message.encode()).hexdigest()
+        native_key = hashlib.sha256((session + "\0" + key).encode()).hexdigest()
+        with self.locked(session):
+            gateway = self.gateways.for_actor(actor)
             with self.store.connect() as db:
-                previous = db.execute("SELECT message,response FROM chat_turns WHERE chat_id=? AND request_key=?", (chat_id, key)).fetchone()
+                previous = db.execute("SELECT * FROM chat_requests WHERE chat_id=? AND request_key=?", (session, key)).fetchone()
+                legacy = db.execute("SELECT message,response FROM chat_turns WHERE chat_id=? AND request_key=?", (session, key)).fetchone()
             if previous:
-                if previous["message"] != message:
+                if previous["digest"] != digest:
                     raise Conflict("幂等键已用于另一条消息")
-                return json.loads(previous["response"])
+                if previous["receipt"]:
+                    return self.replay(previous["receipt"], gateway)
+            elif legacy:
+                if legacy["message"] != message:
+                    raise Conflict("幂等键已用于另一条消息")
+                return json.loads(legacy["response"])
             if self.store.paused():
                 raise Conflict("运行已暂停")
             parsed = command(message, lambda text: Worker(self.config).command(text, self.store.paused))
-            kind, target = parsed["kind"], parsed["target"]
-            model = current["model"]
-            execution = None
-            changed = False
-            next_id = uuid.uuid4().hex if kind == "new" else chat_id
+            if self.store.paused():
+                raise Conflict("运行已暂停")
+            current = self.current(session, actor)
+            kind, target, model = parsed["kind"], parsed["target"], current["model"]
+            if previous and previous["kind"] != kind:
+                raise Conflict("未完成请求的命令语义已变化；请核对后使用新的幂等键")
+            with self.store.connect() as db:
+                db.execute("INSERT OR IGNORE INTO chat_requests(chat_id,request_key,digest,kind,request_model,request_revision) VALUES(?,?,?,?,?,?)",
+                           (session, key, digest, kind, model, current["revision"]))
+            if previous and kind == "chat" and previous["request_model"]:
+                model = previous["request_model"]
+                current["revision"] = previous["request_revision"]
+            response = {"chat_id": session, "kind": kind, "model": model, "revision": current["revision"], "execution": None}
+            if kind == "chat":
+                run = gateway.start(session, message, model, native_key)
+                response["run_id"] = run["run_id"]
+                # Store only the native run reference, never another copy of the transcript.
+                self.save_receipt(session, key, response)
+                return self.replay(json.dumps(response), gateway)
             if kind == "reset":
                 target = default_model(self.config)
             if kind in {"switch", "reset"}:
-                if target == model:
-                    reply = f"当前会话已经使用请求模型 {model}。"
-                else:
+                if target != model:
+                    probe = uuid.uuid5(uuid.NAMESPACE_URL, "mikasa-probe:" + native_key).hex
+                    gateway.ensure_session(probe, target)
                     try:
-                        _, execution = self.infer(target, "请简短回复：模型连接验证完成。", [])
+                        run = gateway.start(probe, "请简短回复：模型连接验证完成。", target, "probe-" + native_key)
+                        completed = gateway.wait(run["run_id"], self.store.paused)
+                    except MikasaError:
                         if self.store.paused():
-                            raise MikasaError("验证期间运行已暂停")
-                    except MikasaError as exc:
-                        kind = "switch_failed"
-                        reply = f"未能验证 {target}，当前会话仍使用 {model}。请检查模型 ID、CCH 权限和路由后重试。"
-                        if isinstance(exc, ModelFailure):
-                            reply = f"未能验证 {target}，当前会话仍使用 {model}。{exc}。"
-                            execution = {"error_code": exc.code}
+                            raise Conflict("运行已暂停") from None
+                        response.update(kind="switch_failed", reply=f"未能验证 {target}，当前聊天仍使用 {model}。请检查 CCH 模型 ID、权限及路由。")
                     else:
-                        model, changed = target, True
-                        reply = f"当前聊天的请求模型已切换为 {model}，后续消息使用此模型；聊天记录已保留。"
-                        observed = execution.get("reported_model")
-                        if observed and observed != model:
-                            reply += f" CCH 返回的模型标识为 {observed}；请求已成功，但不能确认底层就是 {model}。"
-                        elif not observed:
-                            reply += " 网关未提供可记录的模型标识，实际路由以 CCH 为准。"
-            elif kind == "status":
-                reply = f"当前聊天的请求模型是 {model}。实际上游由 CCH 路由，其他聊天与工程任务不受本会话选择影响。"
-                reply += "\n" + self.model_menu()
-            elif kind == "help":
-                reply = (parsed["reply"] + "\n" if parsed["reply"] else "") + HELP
+                        if self.store.paused():
+                            raise Conflict("验证期间运行已暂停，模型未切换")
+                        gateway.set_model(session, target)
+                        response.update(model=target, revision=current["revision"] + 1,
+                                        execution={"backend": "hermes-gateway", **completed.get("runtime", {})},
+                                        reply=f"当前聊天已切换请求模型为 {target}，原生历史保留。实际供应商和分组以 CCH 为准。")
+                else:
+                    response["reply"] = f"当前聊天已经使用请求模型 {model}。"
             elif kind == "new":
-                reply = f"已开始新聊天 {next_id}，继续使用 {model}；后续消息不带入旧上下文，旧聊天 {chat_id} 可通过 ID 恢复。"
+                next_id = uuid.uuid5(uuid.NAMESPACE_URL, "mikasa-new:" + native_key).hex
+                gateway.ensure_session(next_id, model)
+                self.bind(next_id, actor)
+                response.update(chat_id=next_id, revision=0, reply=f"已开始新聊天 {next_id}，继续使用 {model}；旧聊天 {session} 可恢复，账号长期记忆保留。")
+            elif kind == "status":
+                response.update(reply=f"当前聊天的请求模型是 {model}。\n" + self.model_menu(),
+                                model_options=model_choices(self.config.data.get("worker", {})))
+            elif kind == "help":
+                response["reply"] = (parsed["reply"] + "\n" if parsed["reply"] else "") + HELP
             elif kind in {"version", "deferred_command"}:
-                reply = parsed["reply"]
-            elif kind == "unsupported_command":
-                reply = "这个系统命令尚未接入 Mikasa，未执行任何操作。" + HELP
+                response["reply"] = parsed["reply"]
             else:
-                result, execution = self.infer(model, message, current["turns"], current["history_truncated"])
-                reply = result["summary"]
-            response = {"chat_id": next_id, "kind": kind, "reply": reply, "model": model,
-                        "revision": 0 if kind == "new" else current["revision"] + int(changed), "execution": execution}
-            if kind == "status":
-                response["model_options"] = model_choices(self.config.data.get("worker", {}))
-            with self.store.connect() as db:
-                db.execute("BEGIN IMMEDIATE")
-                paused = db.execute("SELECT value FROM settings WHERE key='paused'").fetchone()
-                if paused and paused[0] == "true":
-                    raise Conflict("运行已暂停，本条回复和模型变更未保存")
-                if kind == "new":
-                    db.execute("INSERT INTO chats(id,actor,model,created) VALUES(?,?,?,?)", (next_id, actor, model, time.time()))
-                    self.store.event(db, None, "chat_session_created", actor,
-                                     {"from": chat_id, "to": next_id, "request_key": key})
-                if changed:
-                    db.execute("UPDATE chats SET model=?,revision=revision+1 WHERE id=?", (model, chat_id))
-                    self.store.event(db, None, "chat_model_switched", actor,
-                                     {"chat_id": chat_id, "from": current["model"], "to": model,
-                                      "reported_model": execution.get("reported_model"), "request_key": key})
-                db.execute("INSERT INTO chat_turns(chat_id,request_key,message,response,created) VALUES(?,?,?,?,?)",
-                           (chat_id, key, message, json.dumps(response, ensure_ascii=False), time.time()))
+                response["reply"] = "这个系统命令尚未接入 Mikasa，未执行操作。" + HELP
+            self.save_receipt(session, key, response)
             return response
+
+    def save_receipt(self, session, key, response):
+        with self.store.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("UPDATE chat_requests SET receipt=? WHERE chat_id=? AND request_key=?", (json.dumps(response, ensure_ascii=False), session, key))
+            if response["kind"] in {"switch", "reset"} and response["model"]:
+                db.execute("UPDATE chat_links SET revision=? WHERE id=?", (response["revision"], session))
+            self.store.event(db, None, "chat_" + response["kind"], "runtime", {"chat_id": session, "request_key": key})
 
     def model_menu(self):
         choices = model_choices(self.config.data.get("worker", {}))
-        lines = ["已配置候选（可用性以切换验证为准，不是 CCH 完整目录）："] if choices else []
-        lines.extend("/model " + name for name in choices)
-        lines.append(HELP)
-        return "\n".join(lines)
-
-    def infer(self, model, message, turns, history_truncated=False):
-        # One worker per call: runtime evidence cannot race across HTTP threads.
-        worker = self.worker_factory(self.config)
-        history, used = [], len(message.encode())
-        cap = self.config.data.get("worker", {}).get("max_context_bytes", 200000)
-        if used > cap:
-            raise MikasaError("消息超出配置的上下文上限")
-        for turn in reversed(turns):
-            if turn["response"]["kind"] != "chat":
-                continue  # Control receipts are not model conversation messages.
-            pair = [{"role": "user", "content": turn["message"]},
-                    {"role": "assistant", "content": turn["response"]["reply"]}]
-            size = len(json.dumps(pair, ensure_ascii=False).encode())
-            if used + size > cap:
-                break
-            history[0:0] = pair
-            used += size
-        task = {"payload": {"kind": "chat", "title": message,
-                            "acceptance": "按当前 Mikasa 身份直接回复用户。聊天不执行仓库、审批或配置操作；模型选择以宿主 model_selection 为准，不根据自我介绍猜测模型。"}}
-        result = worker.execute(task, {"history": history, "history_truncated": history_truncated or len(history) < 2 * sum(t["response"]["kind"] == "chat" for t in turns),
-                                       "model_selection": {"requested_model": model}}, self.store.paused, model=model)
-        return result, worker.last_runtime or {}
+        return "已配置候选（可用性以切换验证为准，不是 CCH 完整目录）：\n" + "\n".join("/model " + name for name in choices) + "\n" + HELP

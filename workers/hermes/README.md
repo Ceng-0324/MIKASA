@@ -69,3 +69,17 @@ Hermes 通过官方 `PluginContext.register_tool` 加载宿主提供的工具。
 模型聊天使用 `AIAgent.run_conversation(conversation_history=...)` 传入原生 user/assistant 历史，context 中不再重复携带 history。运行证据记录 `history_messages` 和 `session_owner=mikasa`。SQLite 的聊天归属、模型和幂等记录由 Mikasa 唯一管理，agent 显式 `session_db=None`；命令回执不进入模型历史。`/new` 的事务和客户端切换在宿主适配，未声称调用依赖完整 Gateway 的重置处理器。依据见 [命令与会话决定](../../docs/decisions/0003-hermes-commands-sessions.md)。
 
 不耗模型额度的兼容探针：`python3.12 scripts/probe_commands.py --config config/local/hermes-cch.json`。真实跨协议与新会话验收使用 `probe_chat.py --slash --commands`，其余参数见 [验证记录](../../docs/VALIDATION.md)。
+
+## 原生聊天 Gateway
+
+聊天统一调用未修改的 `gateway.run`、`/api/sessions` 和 `/v1/runs`。账号 profile 位于 runtime/native，`native_gateway.py` 校验 Mikasa plugin 成功加载后启动官方生命周期。Mikasa 原生适配不实现另一套 agent loop。
+
+Gateway 需要固定版本的额外依赖：
+
+```sh
+uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/bin/python aiohttp==3.14.3 lark-oapi==1.6.8
+```
+
+`worker.native_python` 可指定 Gateway 解释器，默认 runtime/cache/hermes-venv/bin/python；`worker.hermes_source` 指向固定源码。配置沿用现有 model_source/model_routes，所有已配置来源须可读取。生成的 Hermes providers 只包含 Key 环境变量名，无实际 Key。当前 profile 只启用 memory 与 skills，plugin 拒绝任何未授予的工具；这不是允许原生 shell 执行的沙箱。
+
+`bridge.py` 仍承担工程任务的结构化交付、受限工作区工具和固定版本证据。其退出条件是原生文件/终端在 OS/容器隔离、检查和审批链路上完成等价验收，不能仅打开工具权限后删除业务约束。

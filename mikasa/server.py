@@ -57,6 +57,8 @@ def make_server(service, host=None, port=None):
     tokens = [os.environ.get(v, "") for v in config.get("tokens", {}).values()]
     if not tokens or any(len(t) < 32 for t in tokens) or len(set(tokens)) != len(tokens):
         raise MikasaError("启动 API 前必须为每个账号配置不同的至少 32 字符 token")
+    from .chat import Chat
+    chat = Chat(service.config)
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "Mikasa"
@@ -110,15 +112,12 @@ def make_server(service, host=None, port=None):
                 if not isinstance(data, dict):
                     raise MikasaError("body 必须为对象")
                 if path == "/chats" and method == "POST":
-                    from .chat import Chat
                     if data:
                         raise MikasaError("创建聊天不接受身份或模型覆盖字段")
-                    return self.respond(201, Chat(service.config).create(actor))
+                    return self.respond(201, chat.create(actor))
                 chat_match = re.fullmatch(r"/chats/([0-9a-f]{32})(/messages)?", path)
                 if chat_match:
-                    from .chat import Chat
                     chat_id, messages = chat_match.groups()
-                    chat = Chat(service.config)
                     if method == "GET" and messages is None:
                         return self.respond(200, chat.get(chat_id, actor))
                     if method == "POST" and messages:
@@ -172,7 +171,12 @@ def make_server(service, host=None, port=None):
         def do_POST(self):
             self.handle_request("POST")
 
-    server = ThreadingHTTPServer((host if host is not None else config.get("host", "127.0.0.1"),
+    class Server(ThreadingHTTPServer):
+        def server_close(self):
+            super().server_close()
+            chat.close()
+
+    server = Server((host if host is not None else config.get("host", "127.0.0.1"),
                                  port if port is not None else config.get("port", 8765)), Handler)
     server.daemon_threads = True
     return server

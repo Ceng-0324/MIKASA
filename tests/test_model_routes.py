@@ -84,31 +84,23 @@ class ModelRouteTests(BaseTest):
             list(pool.map(execute, ['gpt-test', 'claude-test'] * 5))
         self.assertEqual(set(seen), {('gpt-test', 'gpt-secret', 'codex_responses'), ('claude-test', 'claude-secret', 'anthropic_messages')})
 
-    def test_model_menu_and_switch_via_real_worker_boundary(self):
-        # Fixture subprocess echoes the selected transport, not a mocked Chat.infer.
-        script = self.path / 'worker.py'
-        script.write_text('''import json, os, sys
-request = json.load(sys.stdin)
-print(json.dumps({'version':1, 'result':{'summary':'ok'}, 'runtime':{
-    'backend':'fixture', 'requested_model':os.environ['MIKASA_MODEL'],
-    'api_mode':os.environ['MIKASA_MODEL_API_MODE'],
-    'history':request['context'].get('history',[])}}))
-''')
-        self.settings['command'][1] = str(script)
-        chat = Chat(self.config)
+    def test_model_menu_and_switch_use_native_boundary(self):
+        from tests.native_support import Gateways
+        gateways = Gateways()
+        chat = Chat(self.config, gateways)
         session = chat.create(self.config.owner)
         def send(message, key):
             return chat.send(session['id'], self.config.owner, message, key)
         menu = send('/model', 'menu')
-        self.assertIn('/model claude-test', menu['reply'])
         self.assertEqual(menu['model_options'], ['claude-test'])
         self.assertNotIn('secret', menu['reply'])
         send('记住代号蓝鲸', 'before')
         switched = send('/model claude-test', 'switch')
-        self.assertEqual(switched['execution']['api_mode'], 'anthropic_messages')
-        after = send('代号是什么', 'after')
-        self.assertIn('蓝鲸', json.dumps(after['execution']['history'], ensure_ascii=False))
-        self.assertEqual(send('/model default', 'reset')['execution']['api_mode'], 'codex_responses')
+        self.assertEqual(switched['model'], 'claude-test')
+        send('代号是什么', 'after')
+        self.assertEqual(gateways.for_actor(self.config.owner).calls[-1]['model'], 'claude-test')
+        self.assertIn('蓝鲸', chat.get(session['id'], self.config.owner)['turns'][0]['message'])
+        self.assertEqual(send('/model default', 'reset')['model'], 'gpt-test')
         self.assertEqual(chat.create(self.config.owner)['model'], 'gpt-test')
         with patch.object(Worker, 'execute') as call:
             report = doctor(self.config, selected_model='claude-test')
@@ -117,7 +109,8 @@ print(json.dumps({'version':1, 'result':{'summary':'ok'}, 'runtime':{
         self.assertEqual(report['model']['api_mode'], 'anthropic_messages')
 
     def test_unimplemented_system_commands_never_reach_model(self):
-        chat = Chat(self.config)
+        from tests.native_support import Gateways
+        chat = Chat(self.config, Gateways())
         session = chat.create(self.config.owner)
         with patch.object(Worker, 'execute') as call:
             for message in ['/init', '/unknown value']:

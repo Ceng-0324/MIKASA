@@ -38,6 +38,16 @@ class Store:
                     request_key TEXT NOT NULL, message TEXT NOT NULL, response TEXT NOT NULL,
                     created REAL NOT NULL, UNIQUE(chat_id, request_key)
                 );
+                CREATE TABLE IF NOT EXISTS chat_links (
+                    id TEXT PRIMARY KEY, actor TEXT NOT NULL,
+                    revision INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS chat_requests (
+                    chat_id TEXT NOT NULL, request_key TEXT NOT NULL,
+                    digest TEXT NOT NULL, kind TEXT NOT NULL, receipt TEXT,
+                    request_model TEXT, request_revision INTEGER,
+                    UNIQUE(chat_id, request_key)
+                );
                 CREATE TABLE IF NOT EXISTS deliveries (id TEXT PRIMARY KEY, received REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS reviews (
                     repo TEXT NOT NULL, number INTEGER NOT NULL, head TEXT NOT NULL,
@@ -49,6 +59,11 @@ class Store:
                 );
                 PRAGMA user_version=1;
             """)
+            # Additive upgrade of the early native migration; old transcripts remain archives.
+            columns = {r[1] for r in db.execute("PRAGMA table_info(chat_requests)")}
+            for name, kind in (("request_model", "TEXT"), ("request_revision", "INTEGER")):
+                if name not in columns:
+                    db.execute(f"ALTER TABLE chat_requests ADD COLUMN {name} {kind}")
         self.path.chmod(0o600)
 
     @contextmanager

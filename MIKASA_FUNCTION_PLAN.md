@@ -77,7 +77,7 @@ Mikasa 是与人类成员共同开发的仿生程序员，同时负责工程监�
 - **工程 skills**：已从固定版本 mattpocock/skills 适配拆解、实现/TDD 和审查方法，并加入人格路由 skill；来源、MIT 许可和差异见 [skills/SOURCES.md](skills/SOURCES.md)。真实调用已验证注入与代表性行为，不等同于安装并执行完整上游工具工作流。
 - **模型执行**：Hermes 0.21.3 与 CCH Responses 已完成真实联调，可显式只读选用本地 Codex provider 配置，认证仅在内存传递。请求模型名与服务端返回标识存在差异，见 [联调记录](docs/HERMES_CCH_VALIDATION.md)。Codex/Claude 执行器仍为可选项。
 - **GitHub 身份与审批门禁**：Mikasa 的 GitHub 账号已创建为 [`Mikasa-0910`](https://github.com/Mikasa-0910)；其仓库权限、token 管理、是否需要 GitHub App、正式 Review、仓库保护或受控检查的组合待定。
-- **事实源与记忆**：当前采用 SQLite 任务与事件记录实现跨进程连续性；未接入 Hermes Kanban 或其他外部看板。人格变化、权限变化及非任务长期记忆仍遵守 canonical 边界。
+- **事实源与记忆**：任务与审批使用 SQLite；聊天已迁移原生 Hermes SessionDB、MEMORY/USER，按账号隔离，旧对话一次性导入。未接入 Hermes Kanban 或其他外部看板。人格变化、权限变化及非任务长期记忆仍遵守 canonical 边界。
 - **成员协作**：实现了负责人派发和成员查询；成员名单与真实 token 绑定需配置。周期审计默认关闭，消息提醒与升级节奏仍待决定。
 - **VM 运行**：已提供 Linux systemd、隔离验证和操作手册；目标 VM、模型服务、预装检查镜像、TLS 和平台权限尚未部署验收。
 - **飞书接入**：负责人真实账号绑定、机器人形式、消息权限与事件处理安排在 VM 部署前；聊天工程任务转换安排在最后验收。
