@@ -20,7 +20,7 @@ Mikasa 是与人类成员共同开发的仿生程序员，同时负责工程监�
 负责人已调整优先级：先搭好底层与接入，再部署 VM；聊天工程任务与试点仓库一起放在最后。
 
 1. **Hermes 底层 agent**：完善主动检索、分段上下文、实现/检查/修复循环、运行证据、取消与失败恢复；扩大合成任务验收，明确资源上限。直接采用官方 Hermes harness 负责推理、上下文管理和工具调度，Mikasa 宿主负责权限、任务事实与副作用校验。后续扩展以协作开发、质量监督和交付推进为判断依据；优先官方扩展点，不因能力可用而自动扩大范围。
-   命令入口已收敛到官方 registry、model 参数解析及 version executor；聊天采用原生 conversation_history。Mikasa 唯一持久化会话，/new 与 /reset 创建新 ID 并由 CLI/网页跟随；/init 随最后的工程接入落地。此范围不等于开放全部 Hermes CLI/Gateway 命令，详见 [命令与会话归属](docs/decisions/0003-hermes-commands-sessions.md)。
+   命令入口复用官方 registry、model 参数解析及 version executor；聊天由原生 Gateway 保存 SessionDB、记忆、运行状态和取消。/new 与 /reset 创建原生新会话；/init 随最后的工程接入落地。工程任务使用原生 Docker 文件/终端、SOUL、任务记忆和 skills；Mikasa 保留快照与独立验收、审批边界。详见 [会话归属](docs/decisions/0004-native-hermes-runtime.md) 和 [工程工具归属](docs/decisions/0005-native-engineering-tools.md)。
 2. **CCH 模型路由**：继续采用 CCH 提供模型路由，收口模型配置、故障行为和路由验证。`default` 是网关 Key 的 provider 分组，不是模型名；当前分组尚未取得网关侧证据，不能标记为已切换。不新增重复路由网关。
 
    本地已补齐 Codex/Claude/环境来源的统一校验、`doctor --probe-model --model MODEL_ID` 连接诊断与 Hermes 官方错误钩子的固定故障反馈；`/model` 作为宿主系统命令按受信任路由同步选择模型、协议和凭据，GPT Responses ↔ Claude Messages 已完成真实会话切换与上下文保留验收。连接成功、响应标识与分组证据分开报告。剩余为网关侧 `default` 分组确认，具体见 [CCH 诊断](docs/runbooks/CCH.md)。后续可继续外部身份/权限接入的独立准备。

@@ -50,23 +50,29 @@ bridge 是单次进程：stdin 接收 version=1、rules、instruction、skills�
 
 失败时 bridge 以非零码退出，stdout 只返回 `{"version":1,"error":{"code":"固定错误码"}}`。使用官方 `api_request_error` hook 的结构化 reason/status 分类；不复制 error.message、request 或原始 SDK 异常。宿主再次按固定词表校验，并将可识别的 `error_code` 写入失败进度。恢复成功后的 API 错误不会继续当作最终失败；未知原因仍为泛化错误，不猜测网关故障来源。
 
-Hermes 通过官方 `PluginContext.register_tool` 加载宿主提供的工具。`plan/review` 获得 `mikasa_list_files`、`mikasa_read_file`、`mikasa_search`；`implement` 另获得 `mikasa_apply_changes`、`mikasa_run_checks`。没有工作区的直接探针与聊天仍无工具。固定上游默认通过 Tool Search 渐进披露插件工具，所以模型可见的是 `tool_search/tool_describe/tool_call`；`runtime.tools` 记录这个入口集合，`granted_tools` 记录实际授权集合，宿主核对两者。
+工程工作区使用 Hermes 原生 `read_file/search_files/write_file/patch/terminal`、MEMORY/USER、SOUL 和 skills.auto_load。bridge 只适配结构化任务交付、模型来源、工具授权与宿主证据；推理和工具循环由官方 AIAgent harness 执行，上游源码不修改。聊天另由原生 Gateway 持久化会话，工程调用不重建聊天上下文。
 
-工具经继承的专用 socket FD 请求宿主，串行处理，不能选择其他工作区、任意命令或扩展权限。审查读取固定 PR head 的 Git blob，实现读取当前工作树。文件应用沿用规则、凭据、执行配置和符号链接保护；检查只接受配置中的命令，生产仍需隔离镜像。检查修改 Git 索引、HEAD 或已暂存内容会中止交付。超时/取消会结束模型进程组、取消正在执行的检查并关闭通道。`runtime.tool_events` 由宿主记录工具名称、路径、读取版本/摘要与检查退出码，不采信模型自报。运行中宿主同步把工具开始/完成事件写入 SQLite；即使模型未返回最终 JSON，已执行证据仍可通过任务 events 查询。
+Mikasa 将当前暂存树（实现/修复）或固定 PR head（计划/审查）的普通 UTF-8 文件导出到隔离快照；不导出凭据、链接、二进制、`.git`、`.hermes` 等执行配置。单文件最多 1 MB，总计最多 5000 文件/50 MB。省略项明确保留为未覆盖范围。原生终端使用 Docker，无网络、只读根目录、资源限制，只挂载快照及 Hermes 受信任 skills；模型认证保留在宿主 SDK。只读任务的快照挂载为 ro，不授权 write_file/patch。
 
-上下文自动发现、原生记忆、soul、trajectory 和后台 review 关闭。三个 canonical 规则及对应 [项目 skill](../../skills/README.md) 明确注入 system message。SDK stdout/stderr 不进入协议或持久化诊断；专用 home 仍有 SDK 自身日志/SQLite，联调后检查认证值是否落盘。GitHub/控制面 token 不传入 worker。
+默认工程镜像固定为 Python 3.12 slim 的 digest，见 [snapshot 配置](../../mikasa/sandbox.py)。需预先启动 Docker 并拉取镜像；其他语言可在仓库配置 `agent_image`，镜像应预装依赖。它与 `check_image` 分开：前者用于原生探索，后者执行独立验收。离线容器内不能临时联网安装包。
 
-有工作区时，Hermes 最多 20 次内部迭代、64 次宿主工具请求、单次输出 8192 tokens，时间预算遵守 `worker.timeout`。它可在一次会话内探索、应用修改、观察检查失败并修复。工具已应用最终修改时返回 `changes: []`，宿主要求真实变更证据；也支持直接返回 `changes` 的结构化文件交付。宿主最终仍独立执行配置检查，再创建本地提交并停在 `awaiting_review`。会话外失败修复上限仍由 `max_attempts` 控制，默认 3 轮；每轮保存 execution。聊天无工作区，保持 2 次迭代、4096 tokens。
+仅 `mikasa_run_checks` 是自研业务工具，不能指定命令。执行时宿主暂停本任务容器，验收并导入快照差异，再运行既定检查；随后恢复容器供模型修复。最终先清理本任务容器，再导入最后差异、独立复验并创建本地提交。规则、认证、执行配置、符号/硬链接、特殊文件、超大产物或权限变更均不能进入真实工作区。检查修改 Git 索引、HEAD 或暂存内容会拒绝交付。超时或取消也清理任务容器；不清理他人的 Docker 资源。
 
-初始上下文优先保留规则与变更文件，被截断内容列入 omitted。Hermes 可分段读取最多 1000000 字节的 UTF-8 文件，每页最多 16000 个 Unicode 字符，按 `next_offset` 继续；内容 SHA-256 与已读区间由宿主记录，`complete=true` 表示同一内容已完整覆盖。列表每页 200 项；搜索每次最多扫描 100 个文件/约 1 MB，返回最多 100 个匹配，按宿主生成的 `next_cursor` 可继续到后续文件或同一文件的后续匹配。游标绑定查询与仓库版本，应用变更后失效；跳过的文件明确报告。宿主只接受同一 PR head 的成功完整读取证据来消除未读变更限制；搜索命中不等于完整读取。尚未读到的变更文件仍阻止批准。
+原生 `post_tool_call` hook 经专用 FD 将实际工具结果交给宿主。宿主把 read_file 的带行号内容逐行对照固定快照，累积相同 PR head 的完整覆盖证据；仅读尾页、搜索命中或模型宣称读过不能消除审查限制。SQLite 持久化元数据，不保存读取正文、shell 命令或认证值。真实输出协议的失败诊断只记录异常类型和栈位置，不复制 SDK 错误正文。
 
-真实工具循环证据与复现命令见 [工具覆盖验证](../../docs/HERMES_TOOLS_VALIDATION.md)。小型合成任务成功不证明任意规模仓库都可完成。requested_model 是请求值，reported_model 是 SDK 响应标识（未观察到时为 null），均不能独立保证供应商底层模型身份。聊天切换见 [聊天手册](../../docs/runbooks/CHAT.md)。
+工程 profile 位于 `runtime/engineering/<task-id>`，原生记忆与 SessionDB 按任务隔离，修复轮沿用任务记忆；不会污染日常聊天账号记忆。SOUL 和任务对应 skills 由 canonical 与受信任 manifest 生成，pre_api_request 验证实际请求内的完整身份、规则与 skill 正文。只准加载本任务的可信 skills，不开放 skill_manage、委派、浏览器、外部消息或发布工具。每次至多 24 次原生迭代、128 个工具证据事件；时间仍由 worker.timeout 限制。
+
+工程返回严格 JSON，原生实现必须通过工具修改快照并返回 `changes: []`。宿主保留任务、固定 revision、检查、产出归属、独立审批和发布责任；不会自动批准或合并自己的产出。没有工作区的诊断调用仍为无工具结构化请求，不代表工程执行。
+
+可配置的第三方 worker 暂保留 version=1 的宿主 RPC 协议（旧 mikasa_list/read/search/apply）；它是已公开进程协议的兼容对象，内置 Hermes 工程路径不使用它。待第三方协议升级、调用方与协议测试一起迁移后删除该兼容实现，不提供 Hermes 新旧后端切换开关。
+
+原生容器、工程循环与分页证据见 [原生验收](../../docs/NATIVE_HERMES_VALIDATION.md)。旧自研工具的验证保留为 [历史记录](../../docs/HERMES_TOOLS_VALIDATION.md)，不能当作当前实现的验收结果。
 
 ## 命令与会话接口
 
 现有进程协议另支持 `{"version":1,"operation":"command","text":"/model ..."}`，返回 `version` 与 `result`（name、kind、target、reply）。宿主只提供专用 home 和源码位置，不读取模型配置、不注入任何模型/平台认证。bridge 在模型环境校验之前调用官方命令注册表、model 参数解析器及 version 执行器；错误仍返回固定错误信封，不转交模型。
 
-模型聊天使用 `AIAgent.run_conversation(conversation_history=...)` 传入原生 user/assistant 历史，context 中不再重复携带 history。运行证据记录 `history_messages` 和 `session_owner=mikasa`。SQLite 的聊天归属、模型和幂等记录由 Mikasa 唯一管理，agent 显式 `session_db=None`；命令回执不进入模型历史。`/new` 的事务和客户端切换在宿主适配，未声称调用依赖完整 Gateway 的重置处理器。依据见 [命令与会话决定](../../docs/decisions/0003-hermes-commands-sessions.md)。
+聊天使用原生 Gateway 的 SessionDB、运行幂等和取消；Mikasa 只保存账号与 session/run 引用。`/new` 创建原生新会话，保留模型和账号长期记忆。见 [原生运行决定](../../docs/decisions/0004-native-hermes-runtime.md)，它取代旧决定中的 Mikasa 会话持久化方案。
 
 不耗模型额度的兼容探针：`python3.12 scripts/probe_commands.py --config config/local/hermes-cch.json`。真实跨协议与新会话验收使用 `probe_chat.py --slash --commands`，其余参数见 [验证记录](../../docs/VALIDATION.md)。
 
@@ -82,4 +88,4 @@ uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/b
 
 `worker.native_python` 可指定 Gateway 解释器，默认 runtime/cache/hermes-venv/bin/python；`worker.hermes_source` 指向固定源码。配置沿用现有 model_source/model_routes，所有已配置来源须可读取。生成的 Hermes providers 只包含 Key 环境变量名，无实际 Key。当前 profile 只启用 memory 与 skills，plugin 拒绝任何未授予的工具；这不是允许原生 shell 执行的沙箱。
 
-`bridge.py` 仍承担工程任务的结构化交付、受限工作区工具和固定版本证据。其退出条件是原生文件/终端在 OS/容器隔离、检查和审批链路上完成等价验收，不能仅打开工具权限后删除业务约束。
+`bridge.py` 保留工程结构化协议、原生 harness 配置和业务证据适配；文件、搜索、修改与 shell 已使用官方原生工具，业务门禁仍由 Mikasa 承担。

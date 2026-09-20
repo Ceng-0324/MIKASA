@@ -16,6 +16,7 @@ from mikasa.worker import Worker
 from mikasa.process import git, run
 from mikasa.service import Service
 from mikasa.workspace import Workspace
+from mikasa.sandbox import IMAGE
 
 
 ORIGINAL = "def clamp(value):\n    return 0\n"
@@ -36,9 +37,9 @@ def fixture_config(config):
     data["github"]["publish_enabled"] = False
     data["schedules"]["audit_interval_seconds"] = 0
     data["repositories"] = {"local/synthetic-probe": {
-        "source": str(source), "base": "main", "allow_local_checks": True,
-        "checks": [[sys.executable, "-m", "unittest", "discover", "-v"],
-                   [sys.executable, "-c", INDEPENDENT_CHECK]]}}
+        "source": str(source), "base": "main", "check_image": IMAGE,
+        "checks": [["python", "-m", "unittest", "discover", "-v"],
+                   ["python", "-c", INDEPENDENT_CHECK]]}}
     return Config(config.root, data)
 
 
@@ -95,7 +96,7 @@ def tool_loop(config):
     service = Service(local)
     task = service.submit({"kind": "implement", "repo": "local/synthetic-probe",
         "title": "修复 clamp，使它使用 bounds.py 中的边界常量并添加回归测试。",
-        "acceptance": "先用工具列出文件，搜索 clamp 并读取相关源码；先运行预配置检查观察原始失败，再应用修复和标准库 unittest 测试，运行检查确认通过。必须使用宿主工具，不在最终 JSON 重复文件内容。"},
+        "acceptance": "先用原生 terminal 列出文件，search_files 搜索 clamp，read_file 读取相关源码；先调用 mikasa_run_checks 观察原始失败，再用原生 write_file 或 patch 修复并添加标准库 unittest 测试，再调用 mikasa_run_checks 确认通过。最终 changes=[]。"},
         local.owner, "live-tool-loop")
     finished = service.run_once()
     result = finished.get("result") or {}
@@ -103,7 +104,8 @@ def tool_loop(config):
     names = {e["tool"] for e in events if e["ok"]}
     codes = [c["code"] for e in events for c in e.get("checks", [])]
     checks = {"awaiting_independent_review": finished["state"] == "awaiting_review",
-        "all_five_tools_used": names == {"mikasa_list_files", "mikasa_read_file", "mikasa_search", "mikasa_apply_changes", "mikasa_run_checks"},
+        "native_tools_used": {'terminal', 'search_files', 'read_file', 'mikasa_run_checks'} <= names and bool(names & {'write_file', 'patch'}),
+        "native_injection": result.get('execution', {}).get('native_injection') is True,
         "observed_red_then_green": any(c != 0 for c in codes) and bool(codes) and codes[-1] == 0,
         "host_final_checks_pass": bool(result.get("checks")) and all(c["code"] == 0 for c in result["checks"]),
         "commit_created": bool(result.get("head")) and result.get("head") != result.get("base")}
@@ -149,9 +151,9 @@ def readonly_tools(config, kind):
     result = finished.get("result") or {}
     execution = result.get("execution", {})
     events = execution.get("tool_events", [])
-    expected = {"mikasa_list_files", "mikasa_read_file", "mikasa_search"}
+    expected = {'read_file', 'search_files', 'terminal', 'memory', 'skills_list', 'skill_view'}
     checks = {"completed": finished["state"] == "done", "readonly_grants": set(execution.get("granted_tools", [])) == expected,
-              "all_read_tools_used": {e["tool"] for e in events if e["ok"]} == expected,
+              "native_read_tools_used": {'read_file', 'search_files'} <= {e['tool'] for e in events if e['ok']},
               "pinned_read": any(e.get("path") == "calc.py" and e.get("revision") == head for e in events),
               "behavior": result.get("verdict") == "CHANGES_REQUESTED" if kind == "review" else bool(result.get("tasks"))}
     progress = service.store.events(task["id"])
@@ -176,14 +178,14 @@ def paged_context(config):
     service = Service(local)
     service.submit({"kind": "plan", "repo": "local/synthetic-probe",
         "title": "搜索 pagination_target 所在需求文件，完整阅读后拆解 clamp 修复任务。",
-        "acceptance": "必须使用搜索工具找到目标；返回 next_cursor 时用同一 query 继续搜索。读取目标全文：next_offset 非空时继续读取直到 complete=true。再读取 calc.py，根据需求尾部的边界示例形成可验收任务，不修改文件。"},
+        "acceptance": "用原生 search_files 找到目标；用 read_file 完整阅读需求文件，超过 2000 行时用 offset/limit 分页继续，直到覆盖 total_lines。再读取 calc.py，根据需求尾部的边界示例形成可验收任务，不修改文件。"},
         local.owner, "live-paged-context")
     finished = service.run_once()
     result = finished.get("result") or {}
     execution = result.get("execution", {})
     events = execution.get("tool_events", [])
     reads = [e for e in events if e.get("path") == "z-spec.txt" and e.get("ok")]
-    checks = {"completed": finished["state"] == "done", "search_continued": any(e.get("continued") and e.get("ok") for e in events),
+    checks = {"completed": finished["state"] == "done", "native_search_used": any(e.get('tool') == 'search_files' and e.get('ok') for e in events),
               "multiple_read_pages": len(reads) > 1, "full_read_coverage": any(e.get("complete") for e in reads),
               "produced_tasks": bool(result.get("tasks"))}
     return {"case": "paged-context", "passed": all(checks.values()), "checks": checks,

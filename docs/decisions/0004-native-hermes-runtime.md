@@ -16,6 +16,6 @@ Mikasa 为每个已授权账号准备独立的 Hermes profile，并启动未修�
 
 每账号一个受控 Gateway 实例，HTTP 服务共享管理器，CLI 退出时关闭子进程。原生 API key 为本机随机生成的服务凭据，权限 0600，重启沿用以保留 Hermes 幂等命名空间。固定源码支持 Git checkout 和带既有 Git blob 验证来源标记的归档；标记不是每次启动重新进行远端完整性核验。
 
-聊天目前只开放原生记忆和只读 skills。工程任务仍走现有受控 bridge，原生 shell/文件工具必须在容器隔离和业务门禁验证后替换。源码没有 fork，上游 API 本身可能每轮重建 AIAgent；会话持久化、压缩恢复和运行生命周期仍由 Hermes 实现，不能声称所有入口共享同一个常驻 AIAgent 对象。
+聊天目前只开放原生记忆和只读 skills。工程文件/终端已迁移至原生 Docker 工具，见 [后续工程决定](0005-native-engineering-tools.md)；bridge 保留业务交付适配。源码没有 fork，上游 API 本身可能每轮重建 AIAgent；会话持久化、压缩恢复和运行生命周期仍由 Hermes 实现，不能声称所有入口共享同一个常驻 AIAgent 对象。
 
 原生 Feishu 平台和 GitHub 权限在外部账号信息确定后接入；FluxCore 试点与聊天工程任务最后验收。没有凭据时不宣称外部联调或 VM 部署完成。

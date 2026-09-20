@@ -6,7 +6,7 @@
 
 聊天路径为 CLI/HTTP → Mikasa 账号授权与命令适配 → 每账号独立 Hermes Gateway → CCH。Hermes 保存原生 SessionDB、压缩历史、MEMORY/USER 记忆，执行 skills 和工具循环；Mikasa SQLite 保存任务、审批和对 native session/run 的引用，不重建模型上下文。旧 chat_turns 只作为迁移档案保留，不再写入。见 [原生运行决定](../decisions/0004-native-hermes-runtime.md)。
 
-工程任务暂保留固定 head 读取、工作区授权及受控验证的 bridge。把它们接到原生文件/终端工具之前，必须验证容器隔离和凭据分离；本机 OrbStack 已启动，下一步验证原生容器工具。真实 GitHub/飞书权限及 VM 由负责人稍后提供，聊天工程任务与试点最后执行。
+工程路径为 Service → 结构化 bridge → 官方 AIAgent harness → 原生 Docker 文件/终端工具。Mikasa 导出受控快照、核对固定 head 完整读取证据、导入合法差异并独立检查与提交；Hermes 管理工具循环、任务记忆、SOUL 与 skills。见 [原生工程决定](../decisions/0005-native-engineering-tools.md)。真实 GitHub/飞书权限及 VM 稍后讨论，聊天工程任务与试点最后执行。
 
 ```mermaid
 flowchart LR

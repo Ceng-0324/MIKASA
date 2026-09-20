@@ -7,3 +7,7 @@
 `probe_commands.py --config CONFIG` 不调用模型，直接验证安装的 Hermes 命令注册表、别名、参数解析及 version 执行器。`probe_chat.py --slash --commands` 增加原生历史传递、/init 未执行、/new 幂等、旧记录保留与新会话上下文隔离验收。
 
 `probe_native_gateway.py` 是真实 Gateway 启动与持久化快速探针；`probe_native_state.py` 使用一次性 profile 验证真实原生记忆、skills、身份注入、账号隔离、重启、跨协议与取消。`probe_native_offline.py` 不调用模型，使用固定 SDK 验证旧库迁移、plugin 与工具策略。见 [原生验收](../docs/NATIVE_HERMES_VALIDATION.md)。
+
+`probe_native_sandbox.py --report runtime/state/hermes-cch/native-sandbox-proof.json` 使用真实 Docker 验证原生文件/终端与网络、密钥、资源和清理边界。`probe_hermes.py` 的 lifecycle、tool-loop、tool-plan、tool-review、paged-context 现使用原生工程路径，不再验证旧自研工具。
+
+`probe_native_engineering_offline.py --report runtime/state/hermes-cch/native-engineering-offline-proof.json` 不调用模型，验证原生只读文件/shell、真实读取证据和杀死 SDK 进程后的容器回收。工程联调的宿主独立检查也使用真实 Docker check_image。

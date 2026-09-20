@@ -40,18 +40,7 @@ def provider_id(source):
     return "cch-" + hashlib.sha256(json.dumps(source, sort_keys=True).encode()).hexdigest()[:16]
 
 
-def prepare_profile(config, actor):
-    """Regenerate immutable inputs only. Never overwrite native memories or sessions."""
-    config.authorize(actor)
-    home = config.runtime / "native" / hashlib.sha256(actor.encode()).hexdigest()[:24]
-    home.mkdir(parents=True, exist_ok=True, mode=0o700)
-    settings = config.data.get("worker", {})
-    source = (config.root / settings.get("hermes_source", "runtime/cache/hermes-source")).resolve()
-    python = Path(settings.get("native_python", config.root / "runtime/cache/hermes-venv/bin/python"))
-    if not python.is_absolute():
-        python = config.root / python
-    if not python.is_file() or not (source / "gateway/run.py").is_file():
-        raise MikasaError("缺少原生 Hermes 源码或 Python 环境")
+def verify_source(source):
     if (source / ".git").exists():
         revision = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"],
                                   capture_output=True, text=True, check=True).stdout.strip()
@@ -64,8 +53,25 @@ def prepare_profile(config, actor):
         provenance = json.loads(marker.read_text()) if marker.is_file() else {}
         revision = provenance.get("revision") if provenance.get("repository") == "NousResearch/hermes-agent" else None
         dirty = not provenance.get("verified_git_blobs")
-    if revision != HERMES_REVISION or dirty or (source / ".env").exists() or (home / ".env").exists():
+    if revision != HERMES_REVISION or dirty or (source / ".env").exists():
         raise MikasaError("原生 Hermes 必须使用固定且未修改的源码，无额外 .env 注入")
+
+
+def prepare_profile(config, actor):
+    """Regenerate immutable inputs only. Never overwrite native memories or sessions."""
+    config.authorize(actor)
+    home = config.runtime / "native" / hashlib.sha256(actor.encode()).hexdigest()[:24]
+    home.mkdir(parents=True, exist_ok=True, mode=0o700)
+    settings = config.data.get("worker", {})
+    source = (config.root / settings.get("hermes_source", "runtime/cache/hermes-source")).resolve()
+    python = Path(settings.get("native_python", config.root / "runtime/cache/hermes-venv/bin/python"))
+    if not python.is_absolute():
+        python = config.root / python
+    if not python.is_file() or not (source / "gateway/run.py").is_file():
+        raise MikasaError("缺少原生 Hermes 源码或 Python 环境")
+    verify_source(source)
+    if (home / ".env").exists():
+        raise MikasaError("原生 profile 不允许额外 .env 注入")
     model = default_model(config)
     sources = [(settings.get("model_source", {"type": "environment"}), model)]
     for route in settings.get("model_routes", []):

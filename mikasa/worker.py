@@ -4,6 +4,9 @@ import uuid
 
 from .errors import MikasaError
 from .agent_tools import ToolSession
+from .native_tools import NativeToolSession
+from .native import private_write, verify_source
+from .sandbox import IMAGE
 from .process import clean_env, git, run
 from .model_settings import model_environment
 from .skills import digest, load_skills
@@ -96,16 +99,52 @@ class Worker:
             if settings.get(field):
                 extra[variable] = str((self.config.root / settings[field]).resolve())
         request = self.request(task, context)
-        with ToolSession(workspace, kind, cancelled, progress=progress) as session:
+        # The bundled Hermes adapter always uses native tools for real workspaces.
+        # Protocol-v1 third-party workers retain their existing host RPC contract.
+        bundled = any((self.config.root / arg).resolve() == self.config.root / 'workers/hermes/bridge.py'
+                      for arg in settings.get('command', [])[1:])
+        native = bundled and workspace is not None
+        command = list(settings.get('command', []))
+        if native:
+            # Native runs use an isolated cwd; keep configured relative program
+            # paths anchored to the project root, as in the public v1 contract.
+            if '/' in command[0]:
+                command[0] = str((self.config.root / command[0]).resolve())
+            for index, argument in enumerate(command[1:], 1):
+                if (self.config.root / argument).resolve() == self.config.root / 'workers/hermes/bridge.py':
+                    command[index] = str(self.config.root / 'workers/hermes/bridge.py')
+        session_type = NativeToolSession if native else ToolSession
+        if native:
+            verify_source((self.config.root / settings.get('hermes_source', 'runtime/cache/hermes-source')).resolve())
+        with session_type(workspace, kind, cancelled, progress=progress) as session:
             request["tools"] = session.schemas
-            request["agent_budget"] = {"iterations": 20 if session.schemas else 2,
+            if native:
+                home = self.config.runtime / 'engineering' / task['id']
+                home.mkdir(parents=True, exist_ok=True, mode=0o700)
+                if (home / '.env').exists():
+                    raise MikasaError('原生工程 profile 不允许额外 .env 注入')
+                (home / 'workspace').mkdir(exist_ok=True)
+                private_write(home / 'SOUL.md', (self.config.root / 'identity.md').read_text())
+                native_config = {'terminal': session.snapshot.terminal_config(workspace.spec.get('agent_image', IMAGE)),
+                                 'skills': {'external_dirs': [str(self.config.root / 'skills')],
+                                            'auto_load': [s['name'] for s in request['skills']]},
+                                 'memory': {'memory_enabled': True, 'user_profile_enabled': True},
+                                 'plugins': {'enabled': []}}
+                private_write(home / 'config.yaml', json.dumps(native_config))
+                extra['HERMES_HOME'] = str(home)
+                extra['HERMES_ENABLE_PROJECT_PLUGINS'] = '0'
+                request['native'] = {'session_id': session.native_id, 'grants': session.native_grants,
+                                     'omitted': session.snapshot.omitted}
+            request["agent_budget"] = {"iterations": 24 if native else (20 if session.schemas else 2),
                                        "seconds": settings.get("timeout", 600)}
             if session.child:
                 extra["MIKASA_TOOL_FD"] = str(session.child.fileno())
-            result = run(settings.get("command", []), cwd=self.config.root, timeout=settings.get("timeout", 600),
+            result = run(command, cwd=home / 'workspace' if native else self.config.root, timeout=settings.get("timeout", 600),
                          limit=settings.get("max_output_bytes", 2000000), env=clean_env(extra),
                          stdin=json.dumps(request, ensure_ascii=False), cancelled=cancelled,
                          pass_fds=(session.child.fileno(),) if session.child else ())
+            if native and not result['code'] and not session.fatal:
+                session.finish()
         if session.fatal:
             raise MikasaError(session.fatal)
         if result["code"]:
@@ -124,15 +163,21 @@ class Worker:
             raise MikasaError("执行器响应缺少版本或运行证据")
         value = envelope.get("result")
         runtime = envelope["runtime"]
+        if native and runtime.get('backend') != 'hermes':
+            raise MikasaError('原生工程响应缺少 Hermes 运行证据')
         if runtime.get("backend") == "hermes":
             expected = [{k: s[k] for k in ("name", "sha256", "source")} for s in request["skills"]]
-            grants = sorted(s["name"] for s in session.schemas)
+            grants = sorted(session.native_grants if native else (s["name"] for s in session.schemas))
             surface = runtime.get("tools", [])
             allowed_surfaces = [grants] + ([["tool_call", "tool_describe", "tool_search"]] if grants else [])
+            if native:
+                allowed_surfaces.append(sorted([n for n in grants if not n.startswith('mikasa_')] + ['tool_call', 'tool_describe', 'tool_search']))
             if (runtime.get("rules_sha256") != digest(request["rules"]) or runtime.get("skills") != expected
                     or runtime.get("granted_tools", []) != grants or surface not in allowed_surfaces
                     or runtime.get("tool_count") != len(surface)):
                 raise MikasaError("Hermes 规则、skill 注入证据或工具隔离不匹配")
+            if native and (runtime.get('native_tools') is not True or runtime.get('native_injection') is not True):
+                raise MikasaError('原生工程工具或实际注入证据缺失')
             if model is not None and runtime.get("requested_model") != model:
                 raise MikasaError("Hermes 请求模型与会话选择不一致")
             if runtime.get("api_mode") != extra.get("MIKASA_MODEL_API_MODE", "chat_completions"):
@@ -146,6 +191,8 @@ class Worker:
         if kind == "implement" and value.get("changes") == []:
             if not session.applied or not git(["diff", "--cached", "--stat"], workspace.path):
                 raise MikasaError("空 changes 必须有宿主工具已应用的实际变更")
+        if native and kind == 'implement' and value.get('changes') != []:
+            raise MikasaError('原生工程实现必须通过容器工具产生实际变更')
         if kind == "review":
             if value.get("verdict") not in {"APPROVED", "CHANGES_REQUESTED", "INCOMPLETE"}:
                 raise MikasaError("非法审查结论")

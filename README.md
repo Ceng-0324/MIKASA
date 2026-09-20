@@ -59,7 +59,7 @@ tests/           规则、配置和集成验证支持
 scripts/         可重复的检查和运行辅助脚本
 ```
 
-运行代码集中在 `mikasa/`；聊天由未修改的 Hermes Gateway 执行，`workers/hermes/bridge.py` 暂用于受控工程任务。原生迁移与限制见 [原生运行记录](docs/NATIVE_HERMES_VALIDATION.md)。其他集成目录记录接入边界，不复制实现。代码存在、隔离测试通过与生产服务已运行是不同状态。
+运行代码集中在 `mikasa/`；聊天由未修改的 Hermes Gateway 执行，`workers/hermes/bridge.py` 适配工程交付协议，工程文件/终端与工具循环由原生 Hermes Docker harness 执行。原生迁移与限制见 [原生运行记录](docs/NATIVE_HERMES_VALIDATION.md)。其他集成目录记录接入边界，不复制实现。代码存在、隔离测试通过与生产服务已运行是不同状态。
 
 ## 使用与维护
 

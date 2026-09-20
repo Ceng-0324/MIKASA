@@ -6,7 +6,7 @@ from .process import git
 
 SECRET_NAMES = {"auth.json", ".env", "credentials", "credentials.json", "id_rsa", "id_ed25519"}
 SECRET_PATTERNS = ("*.pem", "*.key", "*.p12", "*.secret.*", "*.secrets.*", "*.local.*")
-PROTECTED = {".git", ".github", ".agents", ".codex", ".claude"}
+PROTECTED = {".git", ".github", ".agents", ".codex", ".claude", ".hermes"}
 RULES = {"AGENTS.md", "CLAUDE.md", "identity.md", "engineering-contract.md", "engineering-workflow.md"}
 
 

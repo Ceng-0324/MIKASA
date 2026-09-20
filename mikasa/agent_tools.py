@@ -56,16 +56,15 @@ def run_checks(workspace, cancelled):
     return evidence
 
 
-class ToolSession:
+class ToolChannel:
+    """Host RPC lifecycle shared by native evidence and public worker protocol."""
     def __init__(self, workspace, kind, cancelled, *, progress=None):
         self.workspace, self.kind = workspace, kind
         self.cancelled = cancelled
         self.progress = progress
         self.stopped = threading.Event()
-        self.schemas = READ_TOOLS + (WRITE_TOOLS if kind == "implement" else []) if workspace else []
+        self.schemas = []
         self.events = []
-        self.coverage = {}
-        self.cursors = {}
         self.applied = False
         self.fatal = None
         self.parent = self.child = self.thread = None
@@ -113,6 +112,14 @@ class ToolSession:
         except Exception:
             self.fatal = "宿主工具通道异常；拒绝交付"
             self.parent.shutdown(socket.SHUT_RDWR)
+
+class ToolSession(ToolChannel):
+    """Version-1 third-party worker tools; the bundled Hermes path uses native tools."""
+    def __init__(self, workspace, kind, cancelled, *, progress=None):
+        super().__init__(workspace, kind, cancelled, progress=progress)
+        self.schemas = READ_TOOLS + (WRITE_TOOLS if kind == 'implement' else []) if workspace else []
+        self.coverage = {}
+        self.cursors = {}
 
     def git(self, args, *, strip=True, decode_errors="replace"):
         return git(args, self.workspace.path, strip=strip, cancelled=self.is_cancelled, decode_errors=decode_errors)

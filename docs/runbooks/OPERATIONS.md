@@ -18,6 +18,7 @@ python3.12 -m mikasa doctor
 "repositories": {
   "owner/repository": {
     "base": "main",
+    "agent_image": "your-prepared-agent-image:version",
     "check_image": "your-prepared-test-image:version",
     "checks": [["python", "-m", "unittest", "discover", "-v"]]
   }
@@ -25,6 +26,8 @@ python3.12 -m mikasa doctor
 ```
 
 检查镜像必须提前安装且包含项目依赖，生产建议固定 digest。运行时使用 `--pull=never` 和 `--network=none`，不会在验证期间联网安装。宿主需有可用 Docker CLI；生产优先使用专用 VM 内的 rootless Docker。容器仅挂载任务工作区，不挂载 token、服务配置或 Docker socket。`allow_local_checks=true` 仅用于受信任夹具，不能用于不可信 PR。
+
+`agent_image` 用于 Hermes 原生探索/编辑容器，省略时使用固定 Python slim 镜像；`check_image` 用于独立验收。原生容器只挂载导出的快照（审查为只读），没有真实 `.git`。验收和最终提交前由宿主校验并导入变更。工程能力与实际容器验证见 [原生记录](../NATIVE_HERMES_VALIDATION.md)。
 
 公开仓库默认通过 HTTPS clone。本地绝对路径 `source` 可用于隔离测试或管理员预先准备的私有仓库镜像；当前不把 GitHub token 交给 clone 工作器。私有仓库首次拉取仍需管理员配置只读镜像获取机制。
 

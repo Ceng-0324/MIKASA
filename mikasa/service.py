@@ -151,7 +151,7 @@ class Service:
                 result["verdict"] = "INCOMPLETE"
                 result["limitations"].append("自作产出仅提供自检；未知产出归属需要负责人确认")
             read_paths = {event["path"] for event in result.get("execution", {}).get("tool_events", [])
-                          if event.get("tool") == "mikasa_read_file" and event.get("ok") and event.get("complete") is True
+                          if event.get("tool") in {"mikasa_read_file", "read_file"} and event.get("ok") and event.get("complete") is True
                           and event.get("revision") == workspace.head}
             unread = set(context["omitted"]) - read_paths
             if unread:

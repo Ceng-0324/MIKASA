@@ -38,7 +38,7 @@ class Config:
             for name, repo in repos.items():
                 if not REPO.fullmatch(name) or any(p in {".", ".."} for p in name.split("/")):
                     raise MikasaError("非法仓库名称")
-                if not isinstance(repo, dict) or set(repo) - {"source", "base", "checks", "check_image", "allow_local_checks"}:
+                if not isinstance(repo, dict) or set(repo) - {"source", "base", "checks", "check_image", "agent_image", "allow_local_checks"}:
                     raise MikasaError("仓库配置字段不合法")
                 if not isinstance(repo.get("base"), str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9/_.-]*", repo["base"]):
                     raise MikasaError("需要明确仓库 base 分支")
@@ -56,6 +56,8 @@ class Config:
                     raise MikasaError("allow_local_checks 必须为布尔值")
                 if "check_image" in repo and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./:@-]{0,255}", repo["check_image"]):
                     raise MikasaError("非法容器镜像名称")
+                if 'agent_image' in repo and (not isinstance(repo['agent_image'], str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_./:@-]{0,255}', repo['agent_image'])):
+                    raise MikasaError('非法原生工程容器镜像名称')
             worker = data.get("worker", {})
             command = worker.get("command", [])
             if not isinstance(command, list) or not all(isinstance(v, str) and v for v in command):

@@ -52,10 +52,18 @@ Hermes 适配测试使用 SDK 夹具检查 system 参数、skill 指纹、官方
 - 任意规模仓库、长上下文与长时间自主任务；模型响应标识也不能独立证明供应商实际底层模型。
 - `Mikasa-0910` 真实仓库权限、远程推送、Issue/PR/Review/status 写入与 GitHub 分支保护。
 - Linux VM、systemd、TLS、真实 Docker 检查镜像和部署恢复演练。
-- 飞书机器人、Codex/Claude 可选执行器、Hermes 原生记忆/skills 自动发现与完整上游工作流。
+- 飞书机器人、Codex/Claude 可选执行器与完整上游工作流。原生记忆/skills 已在后续迁移阶段验收，见下文。
 
 FluxCore 仍仅用于后续运行验收，本轮没有修改它，也没有发布外部内容。
 
 ## 原生运行迁移阶段
 
 2026-09-20：当前 checkout 的 116 项 unittest 通过（56.961 秒），文档链接、compileall、diff 检查通过。原生命令探针 17 项、聊天跨协议 18 项、原生记忆/隔离状态 20 项、固定 SDK 离线迁移/权限 8 项通过。详细证据与未完成边界见 [原生运行验收](NATIVE_HERMES_VALIDATION.md)。
+
+## 原生工程迁移阶段
+
+2026-09-20：基线 `b874d82` 加本轮原生工程变更，126 项 unittest 通过；文档链接、compileall 和 diff 检查通过。真实原生容器工具 11 项、只读/强制取消 8 项通过；真实 CCH 的生命周期、同会话红绿修复、拆解、审查和长文件分页均通过。另一次完整生命周期使用真实 Docker 独立验收检查，生成本地提交并停在 awaiting_review。证据见 [原生工程记录](NATIVE_HERMES_VALIDATION.md) 与 [脱敏摘要](native-engineering-evidence.json)。
+
+新增回归覆盖固定 head 导出、暂存版本修复、秘密/执行配置/链接排除、非法差异不部分应用、特殊文件/硬链接/权限拒绝、原生逐行覆盖、防止覆盖未导出文件、冻结容器后导入、清理失败保留快照、进度写入失败先于宿主副作用。固定 SDK 的旧库导入与 plugin/原生 skills 8 项离线检查再次通过。实际 CCH 密钥扫描在 Git 可纳入文件和本地运行数据中未发现匹配。
+
+工程工具与原生人格/skills 是本次真实验证范围；此前 Gateway 的跨模型聊天、长期记忆和取消结果仍保留原报告，本阶段未把这些历史真实请求冒充重新执行。Linux VM、GitHub/飞书真实权限、CCH default 分组和 FluxCore 联合验收仍未完成。早先“未验证 Docker”的说明现仅适用于正式 VM 环境；本机原生工程和独立检查容器均已实际运行。

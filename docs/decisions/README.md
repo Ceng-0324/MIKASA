@@ -9,3 +9,5 @@
 [0003：Hermes 命令复用与会话归属](0003-hermes-commands-sessions.md) 明确共享命令组件、会话事实源和各层职责。
 
 [0004：原生 Hermes Gateway](0004-native-hermes-runtime.md) 取代 0003 中的会话归属；当前聊天使用原生 SessionDB、记忆、skills 和运行取消。
+
+[0005：原生工程工具](0005-native-engineering-tools.md) 将工程文件、搜索、修改与终端交给 Hermes Docker 工具，保留 Mikasa 快照验收和独立审批。
