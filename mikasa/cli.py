@@ -137,10 +137,14 @@ def main(argv=None):
             if cmd == "serve":
                 from .server import make_server
                 server = make_server(service)
+                def stop_api(signum, frame):
+                    raise SystemExit(0)
+                previous_handler = signal.signal(signal.SIGTERM, stop_api)
                 try:
                     server.serve_forever()
                 finally:
                     server.server_close()
+                    signal.signal(signal.SIGTERM, previous_handler)
                 return 0
             if cmd == "run":
                 stopping = False

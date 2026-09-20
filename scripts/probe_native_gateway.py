@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mikasa.config import Config
-from mikasa.native import NativeGateway
+from mikasa.native import HERMES_REVISION, NativeGateway
 
 
 def run(config_path):
@@ -15,9 +15,7 @@ def run(config_path):
     evidence = {"revision": None, "identity": False, "policy_boundary": False,
                 "session_persistent": False, "runtime": None}
     with NativeGateway(config, config.owner) as gateway:
-        source = Path(config.data["worker"]["hermes_source"])
-        marker = json.loads((source / ".mikasa-source.json").read_text())
-        evidence["revision"] = marker.get("revision")
+        evidence["revision"] = HERMES_REVISION
         gateway.create(session_id, "gpt-6-astra")
         first = gateway.start(session_id,
                               "请简短回答：你是谁？负责人如何称呼？你能批准自己实现的 PR 吗？",

@@ -11,7 +11,7 @@ from .errors import Conflict, MikasaError, NotFound
 from .model_settings import default_model, model_choices
 from .store import Store
 from .worker import Worker
-from .native import NativeGateways
+from .native import NativeAPIError, NativeGateways
 
 
 # Only a complete direct user command can change state. Quoted text, questions,
@@ -101,10 +101,11 @@ class Chat:
         # Native "latest" chooses a tail page, but returns it in chronological order.
         for item in native["data"]:
             if item.get("role") == "user":
-                pending = item.get("content", "")
+                pending = {"message": item.get("content", ""), "response": {"kind": "chat", "reply": ""}}
+                turns.append(pending)
             elif item.get("role") == "assistant" and item.get("content") and not item.get("tool_calls") and pending is not None:
-                turns.append({"message": pending, "response": {"kind": "chat", "reply": item["content"]}})
-                pending = None
+                previous = pending["response"]["reply"]
+                pending["response"]["reply"] = previous + ("\n\n" if previous else "") + item["content"]
         return {**current, "native_session_id": native["session_id"], "turns": turns,
                 "history_truncated": len(native["data"]) >= native["pagination"]["limit"]}
 
@@ -123,10 +124,36 @@ class Chat:
         response = json.loads(receipt)
         if "run_id" in response:
             status = gateway.wait(response["run_id"], self.store.paused)
+            with self.store.connect() as db:
+                db.execute("UPDATE chat_requests SET active_run=NULL WHERE active_run=?", (response["run_id"],))
             response["reply"] = status.get("output", "")
             response["execution"] = {"backend": "hermes-gateway", "run_id": response.pop("run_id"),
                                      **status.get("runtime", {})}
         return response
+
+    def track_run(self, session, key, run):
+        with self.store.connect() as db:
+            db.execute("UPDATE chat_requests SET active_run=? WHERE chat_id=? AND request_key=?", (run, session, key))
+
+    def stop(self, session, actor):
+        self.owned(session, actor)
+        gateway = self.gateways.for_actor(actor)
+        with self.store.connect() as db:
+            runs = [r[0] for r in db.execute("SELECT active_run FROM chat_requests WHERE chat_id=? AND active_run IS NOT NULL", (session,))]
+        stopped = []
+        for run in runs:
+            try:
+                status = gateway.request("POST", "/v1/runs/" + run + "/stop", {})
+            except NativeAPIError as exc:
+                if exc.status != 404:
+                    raise
+                status = {"status": "expired"}
+            if status["status"] == "stopping":
+                stopped.append(run)
+            else:
+                with self.store.connect() as db:
+                    db.execute("UPDATE chat_requests SET active_run=NULL WHERE chat_id=? AND active_run=?", (session, run))
+        return {"chat_id": session, "stop_requested": bool(stopped), "runs": stopped}
 
     def send(self, session, actor, message, key):
         self.owned(session, actor)  # Authenticate before opening an actor's native profile.
@@ -168,6 +195,7 @@ class Chat:
             response = {"chat_id": session, "kind": kind, "model": model, "revision": current["revision"], "execution": None}
             if kind == "chat":
                 run = gateway.start(session, message, model, native_key)
+                self.track_run(session, key, run["run_id"])
                 response["run_id"] = run["run_id"]
                 # Store only the native run reference, never another copy of the transcript.
                 self.save_receipt(session, key, response)
@@ -180,6 +208,7 @@ class Chat:
                     gateway.ensure_session(probe, target)
                     try:
                         run = gateway.start(probe, "请简短回复：模型连接验证完成。", target, "probe-" + native_key)
+                        self.track_run(session, key, run["run_id"])
                         completed = gateway.wait(run["run_id"], self.store.paused)
                     except MikasaError:
                         if self.store.paused():
@@ -215,6 +244,8 @@ class Chat:
         with self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             db.execute("UPDATE chat_requests SET receipt=? WHERE chat_id=? AND request_key=?", (json.dumps(response, ensure_ascii=False), session, key))
+            if response["kind"] != "chat":
+                db.execute("UPDATE chat_requests SET active_run=NULL WHERE chat_id=? AND request_key=?", (session, key))
             if response["kind"] in {"switch", "reset"} and response["model"]:
                 db.execute("UPDATE chat_links SET revision=? WHERE id=?", (response["revision"], session))
             self.store.event(db, None, "chat_" + response["kind"], "runtime", {"chat_id": session, "request_key": key})

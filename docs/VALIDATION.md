@@ -55,3 +55,7 @@ Hermes 适配测试使用 SDK 夹具检查 system 参数、skill 指纹、官方
 - 飞书机器人、Codex/Claude 可选执行器、Hermes 原生记忆/skills 自动发现与完整上游工作流。
 
 FluxCore 仍仅用于后续运行验收，本轮没有修改它，也没有发布外部内容。
+
+## 原生运行迁移阶段
+
+2026-09-20：当前 checkout 的 116 项 unittest 通过（56.961 秒），文档链接、compileall、diff 检查通过。原生命令探针 17 项、聊天跨协议 18 项、原生记忆/隔离状态 20 项、固定 SDK 离线迁移/权限 8 项通过。详细证据与未完成边界见 [原生运行验收](NATIVE_HERMES_VALIDATION.md)。

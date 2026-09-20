@@ -66,7 +66,7 @@ class Config:
             model_source = worker.get("model_source", {"type": "environment"})
             validate_source(model_source)
             validate_routes(worker.get("model_routes", []))
-            for field in ("hermes_source", "home"):
+            for field in ("hermes_source", "home", "native_python"):
                 if field in worker and (not isinstance(worker[field], str) or not worker[field]):
                     raise MikasaError(f"worker.{field} 必须为路径")
             if "native_gateway" in worker:

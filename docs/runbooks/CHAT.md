@@ -70,6 +70,8 @@ CLI 生命周期与 HTTP 服务共同管理原生 Gateway，每个账号使用�
 
 首次打开账号 profile，会用 Hermes SessionDB 的原生接口导入旧聊天的全部普通消息；命令回执不进入模型历史。原 SQLite 保留，导入标记防止重复；冲突会阻止启动，不覆盖数据。新请求只保存摘要与 native run 引用，不复制正文。已接受但中断的请求先检查原生状态，重试使用同一幂等键，不重新推理。
 
-`/new` 清空会话上下文，保留同账号长期记忆。不同账号的 SessionDB、MEMORY、USER 和 home 独立。身份由 canonical 生成 SOUL，工程规则经官方插件注入。聊天目前仅授权原生 memory、skills_list、skill_view；skill_manage 和仓库/终端能力被阻止，`/init` 随聊天工程任务在最后接入。
+`/new` 清空会话上下文，保留同账号长期记忆。不同账号的 SessionDB、MEMORY、USER 和 home 独立。身份由 canonical 生成 SOUL，工程规则经官方插件注入。人格 skill 通过原生 `skills.auto_load` 必需加载，缺失时拒绝启动；工程 skills 由原生索引与 skill_view 加载。聊天目前仅授权原生 memory、skills_list、skill_view；skill_manage 和仓库/终端能力被阻止，`/init` 随聊天工程任务在最后接入。
 
 原有 `backup PATH` 只备份业务 SQLite，不能作为原生会话/记忆的完整恢复点。维护前停服并保留整个受限 runtime；不把它上传到 Git 或公开存储。
+
+网页发送时可以点击“停止”，或调用 `POST /chats/{id}/stop`（空 JSON、所属账号鉴权）。返回 `stop_requested` 仅说明已向 Hermes 发出取消；原生运行进入终态后才能确认停止。取消不会回滚已经写入的长期记忆或已发生的工具副作用。

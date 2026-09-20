@@ -45,7 +45,7 @@ class Store:
                 CREATE TABLE IF NOT EXISTS chat_requests (
                     chat_id TEXT NOT NULL, request_key TEXT NOT NULL,
                     digest TEXT NOT NULL, kind TEXT NOT NULL, receipt TEXT,
-                    request_model TEXT, request_revision INTEGER,
+                    request_model TEXT, request_revision INTEGER, active_run TEXT,
                     UNIQUE(chat_id, request_key)
                 );
                 CREATE TABLE IF NOT EXISTS deliveries (id TEXT PRIMARY KEY, received REAL NOT NULL);
@@ -61,7 +61,7 @@ class Store:
             """)
             # Additive upgrade of the early native migration; old transcripts remain archives.
             columns = {r[1] for r in db.execute("PRAGMA table_info(chat_requests)")}
-            for name, kind in (("request_model", "TEXT"), ("request_revision", "INTEGER")):
+            for name, kind in (("request_model", "TEXT"), ("request_revision", "INTEGER"), ("active_run", "TEXT")):
                 if name not in columns:
                     db.execute(f"ALTER TABLE chat_requests ADD COLUMN {name} {kind}")
         self.path.chmod(0o600)

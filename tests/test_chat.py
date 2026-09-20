@@ -144,6 +144,26 @@ class ChatTests(BaseTest):
         self.assertEqual(self.send('旧消息', 'old'), expected)
         self.assertEqual(self.gateway.calls, [])
 
+    def test_native_interim_and_final_messages_are_both_visible(self):
+        self.gateway.sessions[self.session['id']]['messages'] = [
+            {'role':'user','content':'检查记录'}, {'role':'assistant','content':'先核对。'},
+            {'role':'assistant','content':'', 'tool_calls':[{'name':'memory'}]},
+            {'role':'tool','content':'internal'}, {'role':'assistant','content':'核对完成。'}]
+        result = self.chat.get(self.session['id'], self.config.owner)
+        self.assertEqual(result['turns'][0]['response']['reply'], '先核对。\n\n核对完成。')
+
+    def test_stop_bypasses_busy_lock_but_enforces_ownership(self):
+        self.send('一个任务', 'active')
+        with self.chat.store.connect() as db:
+            db.execute("UPDATE chat_requests SET active_run='run_fixture' WHERE chat_id=?", (self.session['id'],))
+        with patch.object(self.gateway, 'request', create=True, return_value={'status':'stopping'}) as request:
+            with self.chat.locked(self.session['id']):
+                response = self.chat.stop(self.session['id'], self.config.owner)
+            self.assertTrue(response['stop_requested'])
+            request.assert_called_once_with('POST','/v1/runs/run_fixture/stop',{})
+            with self.assertRaises(NotFound):
+                self.chat.stop(self.session['id'], 'human')
+
     def test_http_chat_auth_native_history_and_shutdown(self):
         with patch.dict(os.environ, {"MIKASA_OWNER_API_TOKEN": "o" * 32}), patch('mikasa.chat.NativeGateways', return_value=self.gateways):
             server = make_server(self.service, "127.0.0.1", 0)

@@ -86,7 +86,7 @@ def prepare_profile(config, actor):
         "providers": providers,
         "platform_toolsets": {"api_server": ["memory", "skills"]},
         "memory": {"memory_enabled": True, "user_profile_enabled": True},
-        "skills": {"external_dirs": [str(config.root / "skills")]},
+        "skills": {"external_dirs": [str(config.root / "skills")], "auto_load": ["mikasa-persona"]},
         "plugins": {"enabled": ["mikasa"]},
         "agent": {"max_turns": 12},
         "terminal": {"cwd": str(home / "workspace")},
@@ -99,6 +99,7 @@ def prepare_profile(config, actor):
     # Snapshots are generated from the canonical files, never maintained separately.
     for name in ("engineering-contract.md", "engineering-workflow.md"):
         private_write(home / "policy" / name, (config.root / name).read_text())
+    private_write(home / "policy/actor.json", json.dumps({"actor": actor}, ensure_ascii=False))
     plugin = config.root / "workers/hermes/plugin"
     for name in ("plugin.yaml", "__init__.py"):
         private_write(home / "plugins/mikasa" / name, (plugin / name).read_text())
@@ -217,7 +218,7 @@ class NativeGateway:
                 if evidence_path.exists():
                     evidence = json.loads(evidence_path.read_text())
                     status.setdefault("runtime", {}).update({k: evidence[k] for k in
-                        ("api_mode", "reported_model", "identity", "policy", "skills_index") if k in evidence})
+                        ("api_mode", "reported_model", "identity", "policy", "skills_index", "persona_skill") if k in evidence})
                 return status
             if status["status"] in {"failed", "cancelled", "interrupted"}:
                 raise MikasaError("Hermes 原生运行失败或已中止；历史保留，未重新发起请求")

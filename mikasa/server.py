@@ -115,11 +115,15 @@ def make_server(service, host=None, port=None):
                     if data:
                         raise MikasaError("创建聊天不接受身份或模型覆盖字段")
                     return self.respond(201, chat.create(actor))
-                chat_match = re.fullmatch(r"/chats/([0-9a-f]{32})(/messages)?", path)
+                chat_match = re.fullmatch(r"/chats/([0-9a-f]{32})(/messages|/stop)?", path)
                 if chat_match:
                     chat_id, messages = chat_match.groups()
                     if method == "GET" and messages is None:
                         return self.respond(200, chat.get(chat_id, actor))
+                    if method == "POST" and messages == "/stop":
+                        if data:
+                            raise MikasaError("停止请求不接受参数")
+                        return self.respond(200, chat.stop(chat_id, actor))
                     if method == "POST" and messages:
                         if set(data) != {"message"}:
                             raise MikasaError("聊天请求只接受 message")
