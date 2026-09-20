@@ -4,7 +4,7 @@ import threading
 import time
 
 from mikasa.errors import Conflict
-from mikasa.store import Store
+from mikasa.kanban import Kanban
 from tests.support import BaseTest
 
 
@@ -30,16 +30,16 @@ call('mikasa_read_file', {'path':'app.py'})
         deadline = time.monotonic() + 10
         observed = None
         while time.monotonic() < deadline:
-            events = self.service.store.events(task['id'])
+            events = self.service.tasks.events(task['id'])
             if any(e['kind'] == 'execution' and e['data'].get('phase') == 'tool' and e['data']['status'] == 'completed' for e in events):
-                observed = self.service.store.get(task['id'])['state']
+                observed = self.service.tasks.get(task['id'])['state']
                 break
             time.sleep(.02)
         self.assertEqual(observed, 'running')
         thread.join(10)
         self.assertFalse(thread.is_alive())
-        self.assertEqual(self.service.store.get(task['id'])['state'], 'failed')
-        events = Store(self.config.runtime).events(task['id'])
+        self.assertEqual(self.service.tasks.get(task['id'])['state'], 'failed')
+        events = Kanban(self.config).events(task['id'])
         data = [e['data'] for e in events if e['kind'] == 'execution']
         self.assertEqual(data[-1]['phase'], 'worker')
         self.assertEqual(data[-1]['status'], 'failed')
@@ -54,32 +54,32 @@ call('mikasa_read_file', {'path':'app.py'})
         result = self.service.run_once()
         self.assertEqual(result['state'], 'failed')
         self.assertIn('超时', result['error'])
-        events = self.service.store.events(task['id'])
+        events = self.service.tasks.events(task['id'])
         self.assertTrue(any(e['data'].get('tool') == 'mikasa_read_file' and e['data'].get('ok') for e in events))
 
     def test_stale_runner_cannot_append_after_cancel_or_retry(self):
         task = self.submit()
-        _, old_token = self.service.store.claim(self.config.bot)
-        self.service.store.record_execution(task['id'], old_token, {'phase':'worker','status':'started'})
+        _, old_token = self.service.tasks.claim(self.config.bot)
+        self.service.tasks.record_execution(task['id'], old_token, {'phase':'worker','status':'started'})
         self.service.action(task['id'], 'cancel', self.config.owner)
         with self.assertRaises(Conflict):
-            self.service.store.record_execution(task['id'], old_token, {'phase':'tool'})
+            self.service.tasks.record_execution(task['id'], old_token, {'phase':'tool'})
         self.service.action(task['id'], 'retry', self.config.owner)
-        _, new_token = self.service.store.claim(self.config.bot)
+        _, new_token = self.service.tasks.claim(self.config.bot)
         with self.assertRaises(Conflict):
-            self.service.store.record_execution(task['id'], old_token, {'phase':'tool'})
-        self.service.store.record_execution(task['id'], new_token, {'phase':'worker','status':'started'})
-        self.assertEqual(len([e for e in self.service.store.events(task['id']) if e['kind']=='execution']), 2)
+            self.service.tasks.record_execution(task['id'], old_token, {'phase':'tool'})
+        self.service.tasks.record_execution(task['id'], new_token, {'phase':'worker','status':'started'})
+        self.assertEqual(len([e for e in self.service.tasks.events(task['id']) if e['kind']=='execution']), 2)
 
     def test_recovery_retains_last_observed_phase(self):
         task = self.submit()
-        _, token = self.service.store.claim(self.config.bot)
-        self.service.store.record_execution(task['id'], token, {'phase':'tool','status':'started','tool':'mikasa_run_checks'})
-        self.service.store.recover('runtime')
-        events = self.service.store.events(task['id'])
-        self.assertEqual(events[-2]['data']['status'], 'started')
+        _, token = self.service.tasks.claim(self.config.bot)
+        self.service.tasks.record_execution(task['id'], token, {'phase':'tool','status':'started','tool':'mikasa_run_checks'})
+        self.service.tasks.recover('runtime')
+        events = self.service.tasks.events(task['id'])
+        self.assertEqual([e for e in events if e['kind'] == 'execution'][-1]['data']['status'], 'started')
         self.assertEqual(events[-1]['kind'], 'interrupted')
-        self.assertEqual(self.service.store.get(task['id'])['state'], 'failed')
+        self.assertEqual(self.service.tasks.get(task['id'])['state'], 'failed')
 
     def test_success_records_validation_commit_and_unforgeable_tool_events(self):
         self.install_worker('''call('mikasa_apply_changes', {'changes':[{'path':'app.py','content':'VALUE = 2\\n'}]})
@@ -88,7 +88,7 @@ print(json.dumps({'version':1,'runtime':{'backend':'fixture','tool_events':['fak
         task = self.submit()
         result = self.service.run_once()
         self.assertEqual(result['state'], 'awaiting_review', result.get('error'))
-        events = self.service.store.events(task['id'])
+        events = self.service.tasks.events(task['id'])
         data = [e['data'] for e in events if e['kind']=='execution']
         self.assertEqual(data[-1]['phase'], 'commit')
         self.assertEqual(data[-1]['head'], result['result']['head'])
@@ -117,15 +117,15 @@ print(json.dumps({'version':1,'runtime':{'backend':'fixture','tool_events':['fak
         self.addCleanup(lambda: thread.join(10))
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
-            events = self.service.store.events(task['id'])
+            events = self.service.tasks.events(task['id'])
             if any(e['data'].get('tool') == 'mikasa_read_file' and e['data'].get('ok') for e in events):
                 break
             time.sleep(.02)
         else:
             self.fail('worker did not emit progress')
         self.service.action(task['id'], 'cancel', self.config.owner)
-        count = len(self.service.store.events(task['id']))
+        count = len(self.service.tasks.events(task['id']))
         thread.join(5)
         self.assertFalse(thread.is_alive())
-        self.assertEqual(self.service.store.get(task['id'])['state'], 'cancelled')
-        self.assertEqual(len(self.service.store.events(task['id'])), count)
+        self.assertEqual(self.service.tasks.get(task['id'])['state'], 'cancelled')
+        self.assertEqual(len(self.service.tasks.events(task['id'])), count)

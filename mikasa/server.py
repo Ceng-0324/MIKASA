@@ -117,7 +117,7 @@ def make_server(service, host=None, port=None):
                             raise MikasaError("聊天请求只接受 message")
                         return self.respond(200, chat.send(chat_id, actor, data["message"], self.headers.get("Idempotency-Key", "")))
                 if path == "/tasks" and method == "GET":
-                    return self.respond(200, service.store.list())
+                    return self.respond(200, service.tasks.list())
                 if path == "/tasks" and method == "POST":
                     return self.respond(201, service.submit(data, actor, self.headers.get("Idempotency-Key", "")))
                 if path == "/control" and method == "POST":
@@ -126,11 +126,11 @@ def make_server(service, host=None, port=None):
                         raise MikasaError("paused 必须为布尔值")
                     service.store.pause(data["paused"], actor)
                     return self.respond(200, {"paused": data["paused"]})
-                match = re.fullmatch(r"/tasks/([0-9a-f]{32})(?:/(events|cancel|retry|assign|complete|expand|publish))?", path)
+                match = re.fullmatch(r"/tasks/([0-9a-f]{32}|t_[0-9a-f]{8,64})(?:/(events|cancel|retry|assign|complete|expand|publish))?", path)
                 if match:
                     task, action = match.groups()
                     if method == "GET" and action in {None, "events"}:
-                        return self.respond(200, service.store.events(task) if action else service.store.get(task))
+                        return self.respond(200, service.tasks.events(task) if action else service.tasks.get(task))
                     if method == "POST" and action:
                         if action == "expand":
                             value = service.expand(task, actor)

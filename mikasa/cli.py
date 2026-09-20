@@ -6,7 +6,6 @@ import signal
 import sys
 import time
 import uuid
-from pathlib import Path
 
 from .config import Config, KINDS
 from .errors import MikasaError
@@ -50,7 +49,7 @@ def parser():
     resolve.add_argument("external_id", type=int)
     commands.add_parser("pause")
     commands.add_parser("resume")
-    backup = commands.add_parser("backup")
+    backup = commands.add_parser("backup", help="备份任务与回执到新目录；不含原生账号会话/记忆和工作区")
     backup.add_argument("destination")
     return p
 
@@ -60,6 +59,7 @@ def doctor(config, *, probe_model=False, selected_model=None):
     from .model_settings import model_diagnostics
     from .model_errors import ModelFailure
     from .worker import Worker
+    from .kanban import Kanban
     command = config.data.get("worker", {}).get("command", [])
     model = model_diagnostics(config.data.get("worker", {}), selected_model)
     if probe_model and model["configuration"] == "valid":
@@ -79,7 +79,7 @@ def doctor(config, *, probe_model=False, selected_model=None):
                           "model_match": "unreported" if not reported else "same" if reported == model["requested_model"] else "different",
                           "identity_note": "响应标识不能独立证明底层模型身份"})
     return {"python": sys.version.split()[0], "git": bool(shutil.which("git")),
-            "rules": "loaded", "skills": skill_inventory(config.root), "repositories": list(config.data.get("repositories", {})),
+            "rules": "loaded", "tasks": Kanban(config).diagnostics(), "skills": skill_inventory(config.root), "repositories": list(config.data.get("repositories", {})),
             "worker_configured": bool(command), "worker_executable": bool(command and shutil.which(command[0])),
             "github_token_present": bool(os.environ.get(config.data.get("github", {}).get("token_env", "MIKASA_GITHUB_TOKEN"))),
             "publishing_enabled": config.data.get("github", {}).get("publish_enabled", False), "model": model,
@@ -144,11 +144,11 @@ def main(argv=None):
                     payload["assignee"] = args.assignee
                 value = service.submit(payload, actor, args.key or uuid.uuid4().hex)
             elif cmd == "list":
-                value = service.store.list()
+                value = service.tasks.list()
             elif cmd == "show":
-                value = service.store.get(args.task)
+                value = service.tasks.get(args.task)
             elif cmd == "events":
-                value = service.store.events(args.task)
+                value = service.tasks.events(args.task)
             elif cmd in {"cancel", "retry", "assign", "complete"}:
                 value = service.action(args.task, cmd, actor, {k: getattr(args, k) for k in ("assignee", "evidence") if hasattr(args, k)})
             elif cmd in {"expand", "publish"}:
@@ -159,15 +159,8 @@ def main(argv=None):
             elif cmd == "resolve-publication":
                 value = service.resolve_publication(args.task, args.external_id, actor)
             elif cmd == "backup":
-                import sqlite3
-                target = Path(args.destination).resolve()
-                if target.exists():
-                    raise MikasaError("备份目标已存在，拒绝覆盖")
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with service.store.connect() as source, sqlite3.connect(target) as destination:
-                    source.backup(destination)
-                target.chmod(0o600)
-                value = {"backup": str(target)}
+                from .backup import backup_tasks
+                value = backup_tasks(service, args.destination)
         print(json.dumps(value, ensure_ascii=False, indent=2))
         return 0
     except MikasaError as exc:

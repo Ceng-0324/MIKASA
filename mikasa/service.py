@@ -9,6 +9,7 @@ from .errors import Conflict, Forbidden, MikasaError
 from .github import GitHub
 from .process import clean_env, git
 from .store import Store
+from .kanban import Kanban
 from .worker import Worker
 from .workspace import Workspace
 from .agent_tools import run_checks
@@ -18,6 +19,7 @@ class Service:
     def __init__(self, config, github=None, worker=None):
         self.config = config
         self.store = Store(config.runtime)
+        self.tasks = Kanban(config)
         self.github = github or GitHub(config)
         self.worker = worker or Worker(config)
 
@@ -42,7 +44,7 @@ class Service:
             raise MikasaError("执行者未配置")
         if actor != self.config.owner and (assignee != self.config.bot or payload["kind"] == "implement"):
             raise Forbidden("成员可提交分析需求；实现和任务派发需负责人授权")
-        return self.store.create(payload, actor, assignee, key)
+        return self.tasks.create(payload, actor, assignee, key)
 
     def action(self, task_id, action, actor, data=None):
         self.config.authorize(actor, owner=True)
@@ -56,11 +58,11 @@ class Service:
         if action == "complete":
             if not isinstance(data.get("evidence"), str) or not data["evidence"].strip():
                 raise MikasaError("完成任务必须记录证据")
-        return self.store.transition(task_id, action, actor, assignee=data.get("assignee"), evidence=data.get("evidence"))
+        return self.tasks.transition(task_id, action, actor, assignee=data.get("assignee"), evidence=data.get("evidence"))
 
     def expand(self, task_id, actor):
         self.config.authorize(actor, owner=True)
-        task = self.store.get(task_id)
+        task = self.tasks.get(task_id)
         if task["state"] != "done" or task["payload"]["kind"] != "plan":
             raise Conflict("只有已完成的拆解任务可以转成实施任务")
         children = []
@@ -71,35 +73,39 @@ class Service:
         return children
 
     def run_once(self):
+        self.tasks.call('prepare')  # First migration takes its own runner lock.
         lock_path = self.config.runtime / "runner.lock"
         with lock_path.open("a") as lock:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as exc:
                 raise Conflict("已有任务执行进程运行") from exc
-            self.store.recover("runtime")
+            self.tasks.recover("runtime")
             self.schedule()
-            claimed = self.store.claim(self.config.bot)
+            claimed = self.tasks.claim(self.config.bot)
             if not claimed:
                 return None
             task, token = claimed
             try:
-                result, state = self.execute(task, token)
-                self.store.finish(task["id"], token, state, result)
+                with self.tasks.lease(task["id"], token) as lease_lost:
+                    result, state = self.execute(task, token, lease_lost)
+                    if lease_lost():
+                        raise Conflict("执行租约已失效")
+                    self.tasks.finish(task["id"], token, state, result)
             except Exception as exc:
                 error = str(exc) if isinstance(exc, MikasaError) else f"内部错误 {type(exc).__name__}；保留工作区供诊断"
                 try:
-                    self.store.finish(task["id"], token, "failed", error=error)
+                    self.tasks.finish(task["id"], token, "failed", error=error)
                 except Conflict:
                     pass
-            return self.store.get(task["id"])
+            return self.tasks.get(task["id"])
 
     def schedule(self):
         interval = self.config.data.get("schedules", {}).get("audit_interval_seconds", 0)
         if not interval or self.store.paused():
             return
         slot = int(time.time() // interval)
-        active = {t["payload"]["repo"] for t in self.store.list()
+        active = {t["payload"]["repo"] for t in self.tasks.list()
                   if t["payload"]["kind"] == "audit" and t["state"] in {"queued", "running"}}
         for repo in self.config.data["repositories"]:
             if repo not in active:
@@ -107,19 +113,19 @@ class Service:
                              "acceptance": "记录当前 Issue、PR、CI 与可定位的交付风险"},
                             self.config.owner, f"audit:{repo}:{slot}")
 
-    def execute(self, task, token):
+    def execute(self, task, token, lease_lost=None):
         payload = task["payload"]
         repo, kind = payload["repo"], payload["kind"]
         if kind == "audit":
             return self.github.audit(repo), "done"
         if kind == "followup":
-            tasks = [t for t in self.store.list() if t["payload"]["repo"] == repo and t["id"] != task["id"]]
+            tasks = [t for t in self.tasks.list() if t["payload"]["repo"] == repo and t["id"] != task["id"]]
             return {"summary": f"当前记录 {len(tasks)} 个任务", "tasks": [
                 {"id": t["id"], "title": t["payload"]["title"], "assignee": t["assignee"], "state": t["state"],
                  "blocker": t["error"], "depends_on": t["payload"].get("depends_on", []),
                  "updated": t["updated"], "result": t["result"]} for t in tasks]}, "done"
         pr = self.github.pr(repo, payload["pr"]) if kind == "review" else None
-        progress = lambda data: self.store.record_execution(task["id"], token, data)
+        progress = lambda data: self.tasks.record_execution(task["id"], token, data)
         progress({"phase": "workspace", "status": "started"})
         workspace = Workspace(self.config, task, token).prepare(pr)
         progress({"phase": "workspace", "status": "completed", "base": workspace.base, "head": workspace.head})
@@ -129,7 +135,7 @@ class Service:
             context['previous_validation'] = {
                 'checks': previous['checks'], 'head': previous.get('head'), 'base': previous.get('base'),
                 'note': '这是上次执行的最终验收结果；当前工作区重新准备，先读取当前源码，不假定旧改动仍在。'}
-        cancelled = lambda: self.store.paused() or self.store.get(task["id"])["state"] != "running"
+        cancelled = lambda: self.store.paused() or (lease_lost() if lease_lost else not self.tasks.active(task["id"], token))
         if pr:
             context["pr"] = {"number": payload["pr"], "title": pr["title"], "body": pr.get("body"), "author": pr["user"]["login"]}
             context["ci"] = self.github.checks(repo, workspace.head)
@@ -192,7 +198,7 @@ class Service:
         self.config.authorize(actor, owner=True)
         if self.store.paused():
             raise Conflict("运行已暂停")
-        task = self.store.get(task_id)
+        task = self.tasks.get(task_id)
         payload, result = task["payload"], task["result"]
         kind, repo = payload["kind"], payload["repo"]
         if not result or kind not in {"plan", "implement", "review"}:
@@ -240,7 +246,7 @@ class Service:
 
     def resolve_publication(self, task_id, external_id, actor):
         self.config.authorize(actor, owner=True)
-        task = self.store.get(task_id)
+        task = self.tasks.get(task_id)
         payload = task["payload"]
         kind, repo = payload["kind"], payload["repo"]
         if type(external_id) is not int or external_id < 1:

@@ -228,5 +228,5 @@ class AIAgent:
         task = json.loads(captured.getvalue())
         self.assertEqual(task["state"], "queued")
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(main(["--config", str(self.config_path), "backup", str(self.path / "backup.sqlite3")]), 0)
-        self.assertEqual((self.path / "backup.sqlite3").stat().st_mode & 0o777, 0o600)
+            self.assertEqual(main(["--config", str(self.config_path), "backup", str(self.path / "backup")]), 0)
+        self.assertEqual((self.path / "backup/mikasa.sqlite3").stat().st_mode & 0o777, 0o600)

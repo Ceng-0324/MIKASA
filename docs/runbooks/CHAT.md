@@ -76,6 +76,6 @@ CLI 启动原生 CLI 子进程，HTTP 启动原生 Gateway 子进程；同一账
 
 工程任务与提交账号共用原生 MEMORY/USER，聊天中经确认并写入长期记忆的约定会在新的工程 Agent 实例加载；工程写入的长期约定也可由新聊天实例读取。同一实例的系统提示记忆快照不立即重建，不承诺热刷新。普通聊天正文不会自动成为工程上下文，临时安排须随任务提供；工程完整工具历史仍按任务隔离。旧工程记忆留在任务 profile 的 `memories.legacy`，不自动并入账号记忆；详见 [工程会话与迁移](../decisions/0008-engineering-state.md)。这不代表聊天已经开放仓库执行工具。
 
-原有 `backup PATH` 只备份业务 SQLite，不能作为原生会话/记忆的完整恢复点。维护前停服并保留整个受限 runtime；不把它上传到 Git 或公开存储。
+`backup DIRECTORY` 备份业务回执和原生 Kanban 两个 SQLite，不能作为原生会话/记忆的完整恢复点。维护前停服并保留整个受限 runtime；不把它上传到 Git 或公开存储。
 
 通过 HTTP 调用 `POST /chats/{id}/stop`（空 JSON、所属账号鉴权）。返回 `stop_requested` 仅说明已向 Hermes 发出取消；原生运行进入终态后才能确认停止。取消不会回滚已经写入的长期记忆或已发生的工具副作用。

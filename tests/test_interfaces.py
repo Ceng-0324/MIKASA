@@ -75,8 +75,8 @@ class InterfaceTests(BaseTest):
 
     def test_publish_rejects_stale_review(self):
         task = self.submit("review", pr=1)
-        _, token = self.service.store.claim(self.config.bot)
-        self.service.store.finish(task["id"], token, "done", {
+        _, token = self.service.tasks.claim(self.config.bot)
+        self.service.tasks.finish(task["id"], token, "done", {
             "summary": "Review", "head": SHA, "base": "c" * 40, "verdict": "APPROVED"})
         with self.assertRaises(Conflict):
             self.service.publish(task["id"], self.config.owner)

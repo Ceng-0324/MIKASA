@@ -13,3 +13,5 @@
 工程 profile 测试覆盖账号绑定、共享原生记忆但隔离会话、旧数据留档、同任务互斥与异常释放、链接及路径越界拒绝。`scripts/probe_engineering_state.py` 独立验证固定 SDK 与真实 Docker 的续话、压缩链和跨进程记忆，不以模拟 SDK 替代依赖兼容证据，详见 [0008](../docs/decisions/0008-engineering-state.md)。
 
 修复循环回归确认最终检查失败只调用一次 worker、不自动重试、不提交失败版本；显式 retry 获得上次最终验收证据，旧 max_attempts 不恢复外层循环。真实 SDK/Docker 实施链验证见 [0009](../docs/decisions/0009-native-repair-loop.md)。
+
+任务测试现在直接使用固定 Hermes Kanban SDK，先按 [worker 安装](../workers/hermes/README.md) 准备源码与 Python 环境。CI 仅安装 requirements-kanban.txt 的控制面依赖，完整模型/Docker 探针另用完整环境。迁移与并发场景见 [0010](../docs/decisions/0010-native-kanban.md)；缺少 SDK 时任务测试明确失败，不退回自研队列。

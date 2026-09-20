@@ -13,6 +13,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: f9524d3f119c672e4a4444f56d582e7475716ba3
+          path: runtime/cache/hermes-source
+          persist-credentials: false
+      - run: python -m venv runtime/cache/hermes-venv
+      - run: runtime/cache/hermes-venv/bin/python -m pip install -r workers/hermes/requirements-kanban.txt
       - run: python -m unittest discover -v
       - run: python scripts/check_docs.py
       - run: python -m mikasa doctor

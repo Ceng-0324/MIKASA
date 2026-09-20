@@ -27,7 +27,7 @@ Mikasa 是基于原生 Hermes 运行、通过 CCH 使用模型、拥有持续身
 | 聊天 plugin 的固定政策文字 | 改为协作约定与记忆使用说明 | 已更新为可通过原生 memory 保存和替换经负责人确认的长期协作约定 |
 | `chat.py`、`command_adapter.py`、每账号 Gateway 管理 | 迁往原生交互入口与 profile 生命周期 | 终端已直接启动官方 CLI、删除自研输入循环，见 [0007](0007-native-cli.md)；HTTP/--message 暂保留既有 API 的鉴权、回执与取消契约，原生渠道覆盖并迁移调用方后删除 |
 | 旧任务 API 的负责人角色限制 | 随原生交互/任务入口迁移退出 | 仍限制直接 API 的实现/派发/发布/控制操作；该入口不经过 Agent 判断，本轮未把所有 API 写权限开放给成员 |
-| `service.py` runner、`store.py` 任务队列与恢复 | 迁往 Hermes Kanban，只保留一个任务事实源 | 尚未迁移；先验证任务依赖、取消、崩溃恢复、历史数据映射和执行接入，不双写两套任务状态 |
+| `service.py` runner、`store.py` 任务队列与恢复 | 迁往 Hermes Kanban，只保留一个任务事实源 | 已迁移任务事实源、依赖与原生 dispatcher 认领；旧 API/ID、同步工程交接和宿主周期唤醒暂留，迁移、租约及真实 SDK/Docker 验证见 [0010](0010-native-kanban.md) |
 | `service.py` 固定外层修复循环、结构化 worker 交付 | 随工程生命周期迁移删除 | 持续会话与账号记忆已接通；外层修复循环已删除，失败反馈在原生工具调用中消费，见 [0009](0009-native-repair-loop.md)。结构化交付及最终独立验收暂留，随任务执行接入 Kanban 继续迁移 |
 | 自研周期审计、运行轮询、仅业务 SQLite 备份 | 迁往 Hermes Cron、runs 事件与原生 backup | 尚未接入；验收重启、幂等、取消、SQLite WAL 恢复及备份私密性 |
 | GitHub REST、webhook、飞书接入 | 复用原生工具/渠道，保留必要配置 | GitHub 当前适配仍工作；飞书使用原生 adapter。平台真实凭据和权限后续讨论 |

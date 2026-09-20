@@ -4,7 +4,7 @@ CLI：`python3.12 -m mikasa --config <配置路径> <命令>`。本地 CLI 仅�
 
 `chat`（不带 `--message`）直接启动 Hermes 原生 CLI，不创建 Mikasa 业务服务或输入循环。`--session` 接受原生会话 ID，命令、全局模型偏好与会话恢复由 Hermes 处理。下文聊天 JSON 字段、幂等回执及命令限制仅适用于 HTTP 和 `chat --message`；原生 CLI 新会话不会自动注册为旧 API chat_id。两种入口的行为见 [聊天手册](../runbooks/CHAT.md)。
 
-`doctor` 包含脱敏的本地模型配置状态，默认不联网。显式 `doctor --probe-model` 发起一次模型验证，失败退出码为 1；不建立聊天或工程任务。诊断字段与限制见 [CCH 手册](../runbooks/CCH.md)。
+`doctor` 包含脱敏的本地模型配置状态，默认不联网；tasks 字段仅检查 Kanban 源码/Python 是否存在，不打开数据库或执行迁移。显式 `doctor --probe-model` 发起一次模型验证，失败退出码为 1；不建立聊天或工程任务。诊断字段与限制见 [CCH 手册](../runbooks/CCH.md)。
 
 `doctor --model MODEL_ID` 按指定模型诊断配置，结合 `--probe-model` 验证实际协议。聊天 `/model` 和 `/models` 回复可包含 `model_options` 数组，仅列受信任配置中的候选 ID，交互客户端通过消息 API 发送 `/model MODEL_ID`；不增加任意端点/配置修改接口。未接入的斜杠命令返回 `kind=unsupported_command`，`/init` 返回 `deferred_command`，均不调用模型。`/new`（别名 `/reset`）返回 `kind=new` 和新 `chat_id`，客户端须跟随新 ID；在旧会话重放同一幂等键可取回同一结果。当前模型保留，新会话 revision=0、无历史；旧会话不删除。
 
@@ -55,10 +55,12 @@ POST 请求体最多 1 MB，必须使用 Content-Length；错误分别返回 400
 
 `server.auto_review=true` 时，PR opened/reopened/synchronize/ready_for_review 事件创建只读审查任务，结果先留为本地草稿。webhook 文本不会自动触发代码实施或发布。定期审计由 `schedules.audit_interval_seconds` 控制，默认 0 关闭。
 
-发布歧义恢复仅提供本地 CLI `resolve-publication TASK EXTERNAL_ID`，读取外部记录并核对作者、任务标记和提交，不盲目重发。`gate`、`provenance`、`reconcile` 及对应 HTTP 接口已移除；旧接口返回 404，旧归属数据仅保留为档案。`backup PATH` 使用 SQLite 一致性备份。
+发布歧义恢复仅提供本地 CLI `resolve-publication TASK EXTERNAL_ID`，读取外部记录并核对作者、任务标记和提交，不盲目重发。`gate`、`provenance`、`reconcile` 及对应 HTTP 接口已移除；旧接口返回 404，旧归属数据仅保留为档案。`backup DIRECTORY` 创建任务与回执双库备份目录，包含 manifest；不覆盖已存在目标，不包含完整原生会话/记忆或工作区，见 [备份说明](../decisions/0010-native-kanban.md)。
 
 执行时无需等待最终结果即可读取 `GET /tasks/{id}/events` 或 CLI `events TASK_ID`。`kind=execution` 的 `data` 包含 `phase`（workspace/worker/tool/validation/commit）、`status`（started/completed，worker 还可能 failed）。worker 与其工具事件共享 `invocation`，工具另有 `call` 序号；completed 表示该调用已返回，是否成功看 `ok` 或检查退出码，不代表任务已交付。
 
 宿主记录工具名称、已验证路径、读取版本/摘要/覆盖范围和检查退出码，不写入模型推理、原始工具参数、源码正文或 SDK 错误文本。开始事件先于工具副作用落库；完成事件在返回模型前落库。进程被突然终止时可能只有 started，不能推断副作用未发生，必须核对保留工作区。取消或重试会失效运行令牌，禁止旧执行者追加记录；历史事件继续保留。该机制提供追踪，不实现会话自动续跑。
 
 可识别的模型故障在 `worker/failed` 事件附加固定词表 `error_code`。聊天切换失败时 `execution` 可仅含 `error_code`，不能当作成功的模型运行证据；原模型和 revision 保持不变。
+
+任务由 Hermes Kanban 保存并调度。新 ID 形如 `t_<hex>`，迁移旧 ID 保持可用；返回值新增 `native_id`、`native_status`，旧 state 标签作为兼容视图保留。events 包含原生生命周期事件，seq 改为原生事件序号；发布回执另由业务库管理。取消不会解除子任务依赖，手动 complete 也须满足原生父任务条件；详见 [0010](../decisions/0010-native-kanban.md)。

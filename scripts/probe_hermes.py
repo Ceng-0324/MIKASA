@@ -109,7 +109,7 @@ def tool_loop(config):
         "observed_red_then_green": any(c != 0 for c in codes) and bool(codes) and codes[-1] == 0,
         "host_final_checks_pass": bool(result.get("checks")) and all(c["code"] == 0 for c in result["checks"]),
         "commit_created": bool(result.get("head")) and result.get("head") != result.get("base")}
-    phases = [e["data"] for e in service.store.events(task["id"]) if e["kind"] == "execution"]
+    phases = [e["data"] for e in service.tasks.events(task["id"]) if e["kind"] == "execution"]
     checks["durable_progress"] = (any(e.get("phase") == "validation" and e.get("status") == "completed" for e in phases)
                                   and phases[-1].get("phase") == "commit" and phases[-1].get("status") == "completed")
     return {"case": "tool-loop", "passed": all(checks.values()), "checks": checks,
@@ -155,7 +155,7 @@ def readonly_tools(config, kind):
               "native_read_tools_used": {'read_file', 'search_files'} <= {e['tool'] for e in events if e['ok']},
               "pinned_read": any(e.get("path") == "calc.py" and e.get("revision") == head for e in events),
               "behavior": result.get("verdict") == "CHANGES_REQUESTED" if kind == "review" else bool(result.get("tasks"))}
-    progress = service.store.events(task["id"])
+    progress = service.tasks.events(task["id"])
     phases = [e["data"] for e in progress if e["kind"] == "execution"]
     checks["durable_progress"] = (any(e.get("phase") == "tool" and e.get("status") == "completed" for e in phases)
                                   and phases[-1].get("phase") == "worker" and phases[-1].get("status") == "completed")

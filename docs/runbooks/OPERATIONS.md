@@ -82,10 +82,10 @@ python3.12 -m mikasa --config config/local/mikasa.json events TASK_ID
 一致性备份：
 
 ```sh
-python3.12 -m mikasa --config config/local/mikasa.json backup /secure/backups/mikasa.sqlite3
+python3.12 -m mikasa --config config/local/mikasa.json backup /secure/backups/mikasa-tasks
 ```
 
-目标文件必须不存在，备份权限为 0600。数据库包含任务上下文，工作区需按相同访问级别另行备份。恢复前停止 API 和 runner，用备份替换运行数据库并恢复相应工作区；不要在服务活跃时覆盖 WAL 数据库。保留当前数据库副本用于回滚。恢复后先运行 doctor，检查中断任务和发布回执，再 resume。
+目标目录必须不存在，目录 0700、文件 0600；含 mikasa.sqlite3、kanban/kanban.db 和 manifest.json。manifest 缺失表示不完整；任务运行时拒绝备份。这里只覆盖任务与回执，原生账号/工程 profile 的会话、记忆及工作区须按相同访问级别另行备份。恢复前停止 API 和 runner，同时恢复两份数据库及相应 profile/工作区；不要在服务活跃时覆盖 WAL 数据库。保留当前数据库副本用于回滚。恢复后先运行 doctor，检查中断任务和发布回执，再 resume。
 
 ## VM 部署
 
@@ -94,3 +94,5 @@ python3.12 -m mikasa --config config/local/mikasa.json backup /secure/backups/mi
 模板包含只读系统目录、PrivateTmp、NoNewPrivileges、0077 umask 和进程组终止。模板尚未在目标 Linux VM 验证；部署时运行 `systemd-analyze verify`，确认 Python 路径、Docker 访问、可写目录、网络和 TLS 后再安装启用。停止服务由 systemd 杀死完整控制组；容器异常残留需按 `mikasa-check-` 前缀检查清理。
 
 本体本地测试通过后再将 FluxCore 加入运行配置，执行只读审计和无破坏性任务验收。真实模型响应、GitHub 写权限、协作审查流程和 VM 恢复分别验收，不以夹具结果替代。
+
+旧任务首次访问会迁入原生 Kanban，原表改名为只读 legacy_tasks。升级前停止旧 API/runner 并保留整套 runtime；不混跑新旧版本，不仅恢复业务 SQLite。迁移校验与回滚边界见 [0010](../decisions/0010-native-kanban.md)。

@@ -51,23 +51,23 @@ class RuntimeTests(BaseTest):
     def test_concurrent_claim_exactly_once(self):
         self.submit()
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            results = list(pool.map(lambda _: self.service.store.claim(self.config.bot), range(8)))
+            results = list(pool.map(lambda _: self.service.tasks.claim(self.config.bot), range(8)))
         self.assertEqual(sum(r is not None for r in results), 1)
 
     def test_cancel_invalidates_running_result(self):
         task = self.submit()
-        _, token = self.service.store.claim(self.config.bot)
+        _, token = self.service.tasks.claim(self.config.bot)
         self.service.action(task["id"], "cancel", self.config.owner)
         with self.assertRaises(Conflict):
-            self.service.store.finish(task["id"], token, "done", {})
-        self.assertEqual(self.service.store.get(task["id"])["state"], "cancelled")
+            self.service.tasks.finish(task["id"], token, "done", {})
+        self.assertEqual(self.service.tasks.get(task["id"])["state"], "cancelled")
 
     def test_recover_does_not_retry_side_effects(self):
         task = self.submit()
-        self.service.store.claim(self.config.bot)
-        self.assertEqual(self.service.store.recover("test"), 1)
-        self.assertEqual(self.service.store.get(task["id"])["state"], "failed")
-        self.assertIsNone(self.service.store.claim(self.config.bot))
+        self.service.tasks.claim(self.config.bot)
+        self.assertEqual(self.service.tasks.recover("test"), 1)
+        self.assertEqual(self.service.tasks.get(task["id"])["state"], "failed")
+        self.assertIsNone(self.service.tasks.claim(self.config.bot))
 
     def test_pause_blocks_claim(self):
         self.submit()

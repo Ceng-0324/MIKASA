@@ -1,5 +1,9 @@
 # 本体开发验证记录
 
+最新 Kanban 迁移验收见 [0010](decisions/0010-native-kanban.md)：2026-09-21，基线 `f4c930f` 加本阶段变更，`python3.12 -m unittest discover -v` **154 项通过（215.819 秒）**，其中 13 项直接使用固定 Hermes SDK 验证任务迁移、唯一认领、依赖、取消、过期租约、心跳、旧 runner 互斥、数据库配对与双库备份恢复。真实 SDK/Docker/本地模型夹具 `probe_engineering_state.py` **47 项全部通过**，覆盖 Kanban 认领后的工程修复、最终验收、身份/skills、账号记忆与原生续话。HTTP 已验证新原生 ID 的查询与取消，旧 ID 映射保持可读。
+
+本阶段 `python3.12 scripts/check_docs.py`、`python3.12 -m mikasa doctor`、变更 Python 语法与 `git diff --check` 通过。doctor 报告 Kanban 源码/Python 存在，connection=not_checked、migration=not_run；默认示例模型未配置符合预期。CI 已改为安装固定上游源码及控制面依赖，尚未运行远端 Linux/Python 3.13 矩阵。本次未调用真实 CCH、未写入 GitHub/飞书、未迁移或重启正式 profile；VM、CCH default 分组证据与 FluxCore 联合验收仍未完成。当前仅迁移任务事实源和认领调度，宿主周期唤醒、Cron/事件及完整原生备份继续推进。
+
 最新原生修复循环验收见 [0009](decisions/0009-native-repair-loop.md)：2026-09-21，基线 `c9aa456` 加本阶段变更，全量 unittest 141 项通过（67.319 秒），SDK/真实 Docker/本地模型夹具 44 项通过；文档、doctor 和 diff 检查通过。覆盖同次执行修复成功、未完成及检查后再次改坏，宿主均只验收一次，不启动外层修复轮。未调用真实 CCH 或外部平台。
 
 最新工程续话与账号记忆验收见 [0008](decisions/0008-engineering-state.md)：2026-09-21，基线 `21d7b54` 加本阶段变更，全量 unittest 140 项通过（68.247 秒），固定 SDK/真实 Docker/本地模型夹具 26 项通过，原生迁移与身份/skills/记忆离线探针 12 项通过；文档、doctor 和 diff 检查通过。默认示例未配置模型，本机 CCH 配置有效但未联网检查。未调用真实 CCH 或外部平台，旧真实联调记录不替代当前版本验收。

@@ -2,11 +2,11 @@
 
 Mikasa 是基于原生 Hermes 运行、通过 CCH 使用模型、拥有持续身份和协作记忆的仿生程序员。身份、工程 skills 和记忆承载协作约定，不另建强制审批业务引擎。
 
-当前包含人格与工程规则 1.1 和 Python 运行时 0.1。专属审批引擎已移除；终端聊天直接使用原生 Hermes CLI，HTTP 聊天使用原生 Gateway，工程使用原生 Docker harness。工程已接入原生持续会话，并与提交账号共用长期记忆，见 [工程会话决定](docs/decisions/0008-engineering-state.md)；宿主外层修复循环已移除，检查与修复由 Hermes 工具循环完成，见 [原生修复决定](docs/decisions/0009-native-repair-loop.md)。任务调度仍按 [收窄决定](docs/decisions/0006-hermes-native-mikasa.md) 迁移。此前 Hermes 0.21.3/CCH 已完成合成任务真实联调；GitHub、飞书和 VM 尚未完成运行验收。
+当前包含人格与工程规则 1.1 和 Python 运行时 0.1。专属审批引擎已移除；终端聊天直接使用原生 Hermes CLI，HTTP 聊天使用原生 Gateway，工程使用原生 Docker harness。工程已接入原生持续会话，并与提交账号共用长期记忆，见 [工程会话决定](docs/decisions/0008-engineering-state.md)；宿主外层修复循环已移除，检查与修复由 Hermes 工具循环完成，见 [原生修复决定](docs/decisions/0009-native-repair-loop.md)。任务事实源、依赖与认领已接入 Hermes Kanban 原生 dispatcher，旧 API 及同步工程执行由适配层承接，见 [Kanban 决定](docs/decisions/0010-native-kanban.md)。周期唤醒、Cron、事件与完整备份继续迁移。此前 Hermes 0.21.3/CCH 已完成合成任务真实联调；GitHub、飞书和 VM 尚未完成运行验收。
 
 ## 本地运行
 
-需要 Python 3.12+、Git；核心运行时仅使用 Python 标准库，无需安装第三方依赖即可执行：
+需要 Python 3.12+、Git；宿主使用 Python 标准库；doctor、文档检查和帮助无需 SDK。任务功能及全量测试需要先安装 [固定 Hermes 环境](workers/hermes/README.md)，仅任务控制面测试可采用 CI 中的 requirements-kanban.txt：
 
 ```sh
 python3.12 -m mikasa doctor
@@ -79,7 +79,7 @@ GitHub 主人为 `Ceng-0324`，Mikasa 称其为 `Shawn` 或 `Ceng`，`origin` �
 
 默认由 Mikasa 审查人类 PR、负责人审查 Mikasa 的产出；该分工是可通过已确认交互更新的协作约定，默认不自动合并。
 
-试点仓库 [Ceng-0324/FluxCore](https://github.com/Ceng-0324/FluxCore) 仅用于 Mikasa 开发完成后的运行验收，不作为先行开发对象。当前顺序为 Hermes 底层 → CCH 路由 → GitHub/飞书权限接入 → VM 部署 → 聊天工程任务与 FluxCore 联合验收，见 [功能规划](MIKASA_FUNCTION_PLAN.md)。任务事实源目前仍是本地 SQLite，计划迁往 Hermes Kanban；GitHub/飞书实际权限与 VM 尚未验收。不把平台强制审批门禁作为本体开发前置。CCH 返回模型标识与请求名的差异见联调记录。
+试点仓库 [Ceng-0324/FluxCore](https://github.com/Ceng-0324/FluxCore) 仅用于 Mikasa 开发完成后的运行验收，不作为先行开发对象。当前顺序为 Hermes 底层 → CCH 路由 → GitHub/飞书权限接入 → VM 部署 → 聊天工程任务与 FluxCore 联合验收，见 [功能规划](MIKASA_FUNCTION_PLAN.md)。任务事实源已迁往 Hermes Kanban，业务 SQLite 仅保留发布/聊天回执、控制设置和历史档案；GitHub/飞书实际权限与 VM 尚未验收。不把平台强制审批门禁作为本体开发前置。CCH 返回模型标识与请求名的差异见联调记录。
 
 ## Git 工程状态
 

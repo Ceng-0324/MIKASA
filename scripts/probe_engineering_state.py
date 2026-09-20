@@ -222,11 +222,13 @@ d.close(); print(json.dumps(True))''')
                     task = service.submit({'kind': 'implement', 'repo': 'local/probe', 'title': scenario,
                                            'acceptance': 'VALUE equals 2'}, config.owner, scenario)
                     finished = service.run_once()
+                    checks[scenario + '_native_kanban_lease'] = (finished['native_id'].startswith('t_')
+                        and finished['native_status'] == ('review' if scenario == 'repair' else 'blocked'))
                     result = finished.get('result') or {}
                     checks[scenario + '_expected_outcome'] = finished['state'] == ('awaiting_review' if scenario == 'repair' else 'blocked')
                     if not result:
                         raise RuntimeError('Implementation probe failed: ' + str(finished.get('error')))
-                    events = [e['data'] for e in service.store.events(task['id']) if e['kind'] == 'execution']
+                    events = [e['data'] for e in service.tasks.events(task['id']) if e['kind'] == 'execution']
                     checks[scenario + '_one_worker_invocation'] = len([e for e in events if e.get('phase') == 'worker' and e['status'] == 'started']) == 1
                     checks[scenario + '_one_final_validation'] = len([e for e in events if e.get('phase') == 'validation' and e['status'] == 'completed']) == 1
                     codes = [c['code'] for e in result['execution']['tool_events'] for c in e.get('checks', [])]

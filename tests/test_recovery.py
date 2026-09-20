@@ -66,13 +66,13 @@ class RecoveryTests(BaseTest):
         with patch("mikasa.service.time.time", return_value=120):
             service.schedule()
             service.schedule()
-            self.assertEqual(len(service.store.list()), 1)
+            self.assertEqual(len(service.tasks.list()), 1)
             self.assertEqual(service.run_once()["state"], "done")
             self.assertIsNone(service.run_once())
         service.store.pause(True, self.config.owner)
         with patch("mikasa.service.time.time", return_value=180):
             service.schedule()
-        self.assertEqual(len(service.store.list()), 1)
+        self.assertEqual(len(service.tasks.list()), 1)
 
     def test_publication_recovery_validates_marker(self):
         task = self.submit("plan")

@@ -1,10 +1,9 @@
 import json
 import sqlite3
 import time
-import uuid
 from contextlib import contextmanager
 
-from .errors import Conflict, NotFound, MikasaError
+from .errors import Conflict, MikasaError
 
 
 class Store:
@@ -12,17 +11,9 @@ class Store:
         runtime.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.path = runtime / "mikasa.sqlite3"
         with self.connect() as db:
-            if db.execute("PRAGMA user_version").fetchone()[0] not in {0, 1}:
-                raise MikasaError("数据库版本不兼容；需要明确迁移后才能运行")
+            db.execute("PRAGMA journal_mode=WAL")
             db.executescript("""
-                PRAGMA journal_mode=WAL;
-                CREATE TABLE IF NOT EXISTS tasks (
-                    id TEXT PRIMARY KEY, request_key TEXT UNIQUE NOT NULL,
-                    payload TEXT NOT NULL, actor TEXT NOT NULL,
-                    assignee TEXT NOT NULL, state TEXT NOT NULL,
-                    result TEXT, error TEXT, run_token TEXT,
-                    updated REAL NOT NULL, created REAL NOT NULL
-                );
+                BEGIN IMMEDIATE;
                 CREATE TABLE IF NOT EXISTS events (
                     seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT,
                     kind TEXT NOT NULL, actor TEXT NOT NULL, data TEXT NOT NULL,
@@ -52,8 +43,18 @@ class Store:
                 CREATE TABLE IF NOT EXISTS publications (
                     task_id TEXT PRIMARY KEY, state TEXT NOT NULL, result TEXT, updated REAL NOT NULL
                 );
-                PRAGMA user_version=1;
+
             """)
+            version = db.execute("PRAGMA user_version").fetchone()[0]
+            if version not in {0, 1, 2}:
+                raise MikasaError("数据库版本不兼容；需要明确迁移后才能运行")
+            if version < 2:
+                # Empty legacy schema is only a migration input, never a queue.
+                db.execute("""CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY, request_key TEXT UNIQUE NOT NULL, payload TEXT NOT NULL,
+                    actor TEXT NOT NULL, assignee TEXT NOT NULL, state TEXT NOT NULL,
+                    result TEXT, error TEXT, run_token TEXT, updated REAL NOT NULL, created REAL NOT NULL)""")
+                db.execute("PRAGMA user_version=1")
             # Old reviews tables and transcripts remain archives; no governance reads/writes.
             # Additive upgrade of the early native migration.
             columns = {r[1] for r in db.execute("PRAGMA table_info(chat_requests)")}
@@ -80,52 +81,6 @@ class Store:
         db.execute("INSERT INTO events(task_id,kind,actor,data,created) VALUES(?,?,?,?,?)",
                    (task, kind, actor, json.dumps(data, ensure_ascii=False), time.time()))
 
-    @staticmethod
-    def decode(row):
-        if row is None:
-            raise NotFound("任务不存在")
-        result = dict(row)
-        for key in ("payload", "result"):
-            if result[key] is not None:
-                result[key] = json.loads(result[key])
-        result.pop("run_token", None)
-        return result
-
-    def create(self, payload, actor, assignee, key):
-        if not isinstance(key, str) or not 1 <= len(key) <= 200:
-            raise MikasaError("request_key 必须为 1–200 字符")
-        encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False)
-        with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            existing = db.execute("SELECT * FROM tasks WHERE request_key=?", (key,)).fetchone()
-            if existing:
-                if existing["payload"] != encoded or existing["actor"] != actor:
-                    raise Conflict("幂等键已用于另一请求")
-                return self.decode(existing)
-            for dep in payload.get("depends_on", []):
-                if not db.execute("SELECT 1 FROM tasks WHERE id=?", (dep,)).fetchone():
-                    raise MikasaError("依赖任务不存在")
-            task = uuid.uuid4().hex
-            now = time.time()
-            db.execute("INSERT INTO tasks VALUES(?,?,?,?,?,?,NULL,NULL,NULL,?,?)",
-                       (task, key, encoded, actor, assignee, "queued", now, now))
-            self.event(db, task, "created", actor, payload)
-            return self.decode(db.execute("SELECT * FROM tasks WHERE id=?", (task,)).fetchone())
-
-    def get(self, task):
-        with self.connect() as db:
-            return self.decode(db.execute("SELECT * FROM tasks WHERE id=?", (task,)).fetchone())
-
-    def list(self):
-        with self.connect() as db:
-            return [self.decode(r) for r in db.execute("SELECT * FROM tasks ORDER BY created DESC LIMIT 500")]
-
-    def events(self, task):
-        self.get(task)
-        with self.connect() as db:
-            return [{**dict(r), "data": json.loads(r["data"])} for r in
-                    db.execute("SELECT * FROM events WHERE task_id=? ORDER BY seq", (task,))]
-
     def paused(self):
         with self.connect() as db:
             row = db.execute("SELECT value FROM settings WHERE key='paused'").fetchone()
@@ -135,78 +90,6 @@ class Store:
         with self.connect() as db:
             db.execute("INSERT OR REPLACE INTO settings VALUES('paused',?)", (json.dumps(paused),))
             self.event(db, None, "pause", actor, {"paused": paused})
-
-    def claim(self, bot):
-        with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            paused = db.execute("SELECT value FROM settings WHERE key='paused'").fetchone()
-            if paused and paused[0] == "true":
-                return None
-            for row in db.execute("SELECT * FROM tasks WHERE state='queued' AND assignee=? ORDER BY created", (bot,)).fetchall():
-                task = self.decode(row)
-                deps = task["payload"].get("depends_on", [])
-                if any(db.execute("SELECT state FROM tasks WHERE id=?", (d,)).fetchone()[0] != "done" for d in deps):
-                    continue
-                token = uuid.uuid4().hex
-                db.execute("UPDATE tasks SET state='running',run_token=?,updated=? WHERE id=?",
-                           (token, time.time(), task["id"]))
-                self.event(db, task["id"], "started", bot, {})
-                task["state"] = "running"
-                return task, token
-            return None
-
-    def record_execution(self, task, token, data):
-        """Append host evidence only while this runner still owns the task lease."""
-        with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT state,run_token FROM tasks WHERE id=?", (task,)).fetchone()
-            if not row or row["state"] != "running" or row["run_token"] != token:
-                raise Conflict("执行令牌失效；拒绝写入旧执行进度")
-            self.event(db, task, "execution", "runtime", data)
-            db.execute("UPDATE tasks SET updated=? WHERE id=?", (time.time(), task))
-
-    def finish(self, task, token, state, result=None, error=None):
-        if state not in {"done", "failed", "awaiting_review", "blocked"}:
-            raise MikasaError("非法执行结束状态")
-        with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            changed = db.execute("UPDATE tasks SET state=?,result=?,error=?,run_token=NULL,updated=? WHERE id=? AND state='running' AND run_token=?",
-                                 (state, json.dumps(result, ensure_ascii=False), error, time.time(), task, token)).rowcount
-            if not changed:
-                raise Conflict("任务已取消或执行令牌失效，结果未提交")
-            self.event(db, task, state, "runtime", {"error": error})
-
-    def transition(self, task, action, actor, *, assignee=None, evidence=None):
-        with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT * FROM tasks WHERE id=?", (task,)).fetchone()
-            current = self.decode(row)
-            state = current["state"]
-            target = state
-            if action == "cancel" and state not in {"done", "cancelled"}:
-                target = "cancelled"
-            elif action == "retry" and state in {"failed", "blocked", "cancelled"}:
-                target = "queued"
-            elif action == "assign" and state in {"queued", "blocked"} and assignee:
-                target = "queued"
-            elif action == "complete" and state in {"queued", "awaiting_review", "blocked"} and evidence:
-                target = "done"
-            else:
-                raise Conflict("当前状态不允许此操作，或缺少交付证据")
-            db.execute("UPDATE tasks SET state=?,assignee=?,run_token=NULL,updated=? WHERE id=?",
-                       (target, assignee or row["assignee"], time.time(), task))
-            self.event(db, task, action, actor, {"assignee": assignee, "evidence": evidence})
-        return self.get(task)
-
-    def recover(self, actor):
-        """Only call under the runner's exclusive process lock."""
-        with self.connect() as db:
-            rows = db.execute("SELECT id FROM tasks WHERE state='running'").fetchall()
-            for row in rows:
-                db.execute("UPDATE tasks SET state='failed',run_token=NULL,error=?,updated=? WHERE id=?",
-                           ("执行进程中断；检查保留的工作区后显式重试", time.time(), row[0]))
-                self.event(db, row[0], "interrupted", actor, {})
-            return len(rows)
 
     def delivery(self, delivery_id, data):
         with self.connect() as db:
