@@ -36,7 +36,7 @@ uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/b
 
 默认 `model_source.type=environment` 不读取个人工具配置。生产通过专用环境注入 `MIKASA_MODEL`、`MIKASA_MODEL_BASE_URL`、`MIKASA_MODEL_API_KEY`、`MIKASA_MODEL_API_MODE`，并在 `worker.env_allowlist` 中列出；API 模式支持 `chat_completions`（默认）、`codex_responses` 和 `anthropic_messages`。home/source 也可用 `HERMES_HOME`/`MIKASA_HERMES_SOURCE` 白名单环境变量设置。专用 home 不可等于个人 home 或 `~/.hermes`。
 
-跨 GPT/Claude 的 `/model` 切换通过 `worker.model_routes` 按完整模型 ID 或前缀选择来源，示例见 [CCH 手册](../../docs/runbooks/CCH.md)。`model_source.type=claude` 显式只读 `~/.claude/settings.json` 或指定 `config_path` 的 env.ANTHROPIC_BASE_URL、env.ANTHROPIC_AUTH_TOKEN（优先）/env.ANTHROPIC_API_KEY，使用 Hermes 原生 `anthropic_messages`。不执行 apiKeyHelper，不读取 OAuth/keychain，不合并其他 Claude 设置文件或继承未经允许的全局认证变量。`opus[1m]` 等客户端别名不作为模型 ID；切换命令传入完整网关模型名。默认请求模型仍来自 worker.model_source；路由内 models 是菜单候选，不是可用性承诺。
+跨 GPT/Claude 的配置来源由 `worker.model_routes` 选择，示例见 [CCH 手册](../../docs/runbooks/CCH.md)。工程和旧 API 按完整 ID 或前缀匹配；原生 CLI 将默认模型及显式 models 生成精确别名，由 Hermes 选择对应 provider，不复刻前缀解析。`model_source.type=claude` 显式只读 `~/.claude/settings.json` 或指定 `config_path` 的 env.ANTHROPIC_BASE_URL、env.ANTHROPIC_AUTH_TOKEN（优先）/env.ANTHROPIC_API_KEY，使用 Hermes 原生 `anthropic_messages`。不执行 apiKeyHelper，不读取 OAuth/keychain，不合并其他 Claude 设置文件或继承未经允许的全局认证变量。`opus[1m]` 等客户端别名不作为模型 ID；切换命令传入完整网关模型名。默认请求模型首次来自 worker.model_source；原生 CLI 可以用 `--global` 保存自己的默认选择，models 不是可用性承诺。
 
 Anthropic 协议依赖 Hermes 官方声明的 `anthropic==0.87.0`，已纳入安装快照；缺失时返回 missing_dependency。请求保持 provider=custom，避免触发原生 Anthropic OAuth 或个人凭据回退，SDK 请求、工具和响应转换由 Hermes 官方 transport 完成。
 
@@ -70,15 +70,19 @@ Mikasa 将当前暂存树（实现/修复）或固定 PR head（计划/审查）
 
 ## 命令与会话接口
 
-现有进程协议另支持 `{"version":1,"operation":"command","text":"/model ..."}`，返回 `version` 与 `result`（name、kind、target、reply）。宿主只提供专用 home 和源码位置，不读取模型配置、不注入任何模型/平台认证。bridge 在模型环境校验之前调用官方命令注册表、model 参数解析器及 version 执行器；错误仍返回固定错误信封，不转交模型。
+终端 `mikasa chat` 由 `native_cli.py` 调用官方 `cli.main()`；TTY、输入循环和完整命令分派由 Hermes 拥有。身份/工程规则、Mikasa plugin 与 persona 加载检查在启动前完成；`/model` 使用 Hermes providers/model_aliases 和官方 scope 语义，`/new` 确认后新建会话，`/resume` 恢复原生会话。固定版本 `/new` 恢复默认模型的路径对自定义 CCH provider 有上游限制，当前保留原模型；详见 0007。
 
-聊天使用原生 Gateway 的 SessionDB、运行幂等和取消；Mikasa 只保存账号与 session/run 引用。`/new` 创建原生新会话，保留模型和账号长期记忆。见 [原生运行决定](../../docs/decisions/0004-native-hermes-runtime.md)，它取代旧决定中的 Mikasa 会话持久化方案。
+HTTP 和 `chat --message` 暂留既有进程协议 `{"version":1,"operation":"command","text":"/model ..."}`，返回 `version` 与 `result`（name、kind、target、reply）。该命令解析进程只接收专用 home 和源码位置，不读取模型配置、不注入模型/平台认证。bridge 在模型环境校验之前调用官方命令注册表、model 参数解析器及 version 执行器；错误仍返回固定错误信封，不转交模型。此适配将在原生渠道接管既有 API 的鉴权、幂等和取消并迁移调用方后删除。
+
+HTTP 聊天使用原生 Gateway 的 SessionDB、运行幂等和取消；Mikasa 只保存账号与 session/run 引用。API 的 `/new` 明确保留模型和账号长期记忆，客户端须跟随返回的新 chat_id。见 [原生运行决定](../../docs/decisions/0004-native-hermes-runtime.md) 和 [原生 CLI 决定](../../docs/decisions/0007-native-cli.md)。
 
 不耗模型额度的兼容探针：`python3.12 scripts/probe_commands.py --config config/local/hermes-cch.json`。真实跨协议与新会话验收使用 `probe_chat.py --slash --commands`，其余参数见 [验证记录](../../docs/VALIDATION.md)。
 
+原生 CLI 的本地 SDK 验收：`python3.12 scripts/probe_native_cli.py`，使用一次性 profile、本机模型目录和合成 Key，验证官方命令分派、跨协议路由、历史恢复、偏好重载与入口启动退出，不调用真实模型。
+
 ## 原生聊天 Gateway
 
-聊天统一调用未修改的 `gateway.run`、`/api/sessions` 和 `/v1/runs`。账号 profile 位于 runtime/native，`native_gateway.py` 校验 Mikasa plugin 成功加载后启动官方生命周期。Mikasa 原生适配不实现另一套 agent loop。
+HTTP/单条消息调用未修改的 `gateway.run`、`/api/sessions` 和 `/v1/runs`。账号 profile 位于 runtime/native，与原生 CLI 共用会话与记忆；CLI/Gateway 通过同一进程锁互斥。`native_gateway.py` 校验 Mikasa plugin 成功加载后启动官方生命周期。Mikasa 原生适配不实现另一套 agent loop。
 
 Gateway 需要固定版本的额外依赖：
 
@@ -86,6 +90,6 @@ Gateway 需要固定版本的额外依赖：
 uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/bin/python aiohttp==3.14.3 lark-oapi==1.6.8
 ```
 
-`worker.native_python` 可指定 Gateway 解释器，默认 runtime/cache/hermes-venv/bin/python；`worker.hermes_source` 指向固定源码。配置沿用现有 model_source/model_routes，所有已配置来源须可读取。生成的 Hermes providers 只包含 Key 环境变量名，无实际 Key。当前 profile 只启用 memory 与 skills，plugin 拒绝任何未授予的工具；这不是允许原生 shell 执行的沙箱。
+`worker.native_python` 可指定 CLI/Gateway 解释器，默认 runtime/cache/hermes-venv/bin/python；`worker.hermes_source` 指向固定源码。配置沿用现有 model_source/model_routes，所有已配置来源须可读取。生成的 Hermes providers 只包含 Key 环境变量名，无实际 Key。`profile_config.py` 在该解释器中解析 YAML/JSON，刷新集成配置并保留 Hermes 原生偏好；格式错误不覆盖文件。当前模型工具只启用 memory 与 skills，plugin 拒绝未授予的工具；本地 CLI 系统命令仍采用原生行为，这不是操作系统沙箱。
 
-`bridge.py` 保留工程结构化协议、原生 harness 配置和业务证据适配；文件、搜索、修改与 shell 已使用官方原生工具，业务门禁仍由 Mikasa 承担。
+`bridge.py` 保留工程结构化协议、原生 harness 配置和交付证据适配；文件、搜索、修改与 shell 已使用官方原生工具。审批引擎已移除，工程 profile 与账号长期记忆的继承仍待迁移。

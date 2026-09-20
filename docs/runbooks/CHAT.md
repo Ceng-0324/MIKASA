@@ -8,35 +8,35 @@
 python3.12 -m mikasa --config config/local/hermes-cch.json chat
 ```
 
-进入后可以直接说：
+终端输入、命令分派、菜单与会话全部由未修改的 Hermes CLI 处理：
 
 ```text
 记住这个项目的验收代号是蓝鲸。
 /model
-/model claude-opus-4-6
+/model claude-opus-4-6 --session
 刚才的验收代号是什么？
-/model gpt-6-astra
-当前模型
-恢复默认模型
+/model gpt-6-astra --global
+/status
+/new
+/resume
 /exit
 ```
 
-切换前会检查连接，成功后对当前聊天生效；保留聊天记录，其他会话及工程任务不受影响。模型名称使用 CCH 支持的完整 ID，不知道名称时查 CCH 配置；`/models` 提供使用说明，不伪造可用模型列表。首次切换会额外消耗一次小型验证调用。
+使用 CCH 提供的完整模型 ID。`/model` 打开原生选择器；`--session` 只改变当前会话，`--once` 覆盖下一轮，`--global` 保存 profile 默认值，provider/reasoning 参数按 Hermes 官方语义处理。切换保留当前上下文；原工程任务仍读取 Mikasa worker 配置，不跟随 CLI 的全局偏好。
 
-GPT/Claude 跨协议切换需要配置 [模型来源路由](CCH.md)，本机已接入现有 Codex/CCH 和 Claude Code/CCH 配置。裸 `/model` 与 `/models` 显示本地配置候选；菜单不是 CCH 实时目录。仍可直接输入未列入菜单但符合配置前缀的完整模型 ID。Hermes 官方组件解析命令与参数，Mikasa 验证权限、连接和持久化范围，无须模型理解命令。
+GPT/Claude 跨协议切换需要配置 [模型来源路由](CCH.md)。启动时将默认模型与 `model_routes.models` 转为 Hermes providers 和精确模型别名，凭据仅进入子进程环境。未列入配置的模型应先加入相应 models，或在原生命令中显式选择对应 provider；CLI 不执行旧适配器的前缀路由。菜单/目录结果不构成真实推理可用性承诺。
 
-支持 `/model ID --session`；全局切换、单轮覆盖、provider/reasoning 和目录刷新参数尚未开放，会明确拒绝。`/help` 显示已接入的命令，`/version`（别名 `/v`）执行 Hermes 官方版本查询。命令解析不调用模型；原生 Gateway 启动时加载已授权的模型凭据，实际切换验证会调用目标模型。
+原生 `/model` 校验参数、提供商与模型目录，不额外发送推理探针。参数或路由解析失败保留旧选择；切换后的真实请求仍可能因服务状态失败，不能承诺推理失败自动回滚。此前 CCH 目录入口出现过 WAF 拒绝，本轮使用本地目录验证 SDK 路由，未重复请求该入口。真实调用诊断使用 `doctor --model MODEL_ID --probe-model`。
 
-`/new`（别名 `/reset`）创建新聊天并保留当前模型，旧聊天记录保留，可通过旧 ID 恢复。CLI 自动改用新 ID，HTTP 客户端需跟随响应中的 chat_id，下一条消息从空上下文开始。`/init` 会生成或修改仓库规则，当前返回 `deferred_command`；它随最后的聊天工程任务与试点接入，当前不执行文件写入。
+`/new` 使用 Hermes 自带确认流程，清空会话上下文，保留长期记忆和旧会话。固定版本尝试恢复启动时加载的默认模型，但对自定义 CCH provider 缺少配置传递，已复现保留当前模型的行为；需要确定模型时再执行 `/model ID`。`--global` 写入磁盘的选择在重启后正常加载。`/resume`、`/sessions`、`/memory`、`/help` 等直接沿用原生实现。本地系统命令由受信任的操作系统用户操作，可执行管理和工作区动作；模型工具白名单不等于这些命令的沙箱。初始工作目录为专用 profile 的 workspace，尚未接入工程仓库。
 
-终端会打印会话 ID，可跨进程继续：
+使用原生会话 ID 跨进程恢复：
 
 ```sh
-python3.12 -m mikasa --config config/local/hermes-cch.json chat --session CHAT_ID
-python3.12 -m mikasa --config config/local/hermes-cch.json chat --session CHAT_ID --message '当前模型'
+python3.12 -m mikasa --config config/local/hermes-cch.json chat --session NATIVE_SESSION_ID
 ```
 
-本地 CLI 使用当前受信任操作系统账号，按负责人身份执行；多人使用应走鉴权 HTTP。
+本地 CLI 按负责人身份执行；多人使用应走鉴权 HTTP。中文“切换为……”在原生 CLI 是普通模型消息，可靠的系统切换使用 `/model`。`chat --message` 暂保留下面的 JSON API 语义，使用旧 API 聊天 ID；原生 CLI 新建的会话不会自动登记成 HTTP chat_id。
 
 ## HTTP
 
@@ -47,6 +47,8 @@ python3.12 -m mikasa --config config/local/hermes-cch.json serve
 ```
 
 服务提供鉴权 JSON API，不提供自研网页聊天入口。系统命令只解析用户的直接交互消息，不扫描仓库文件或工具输出。跨机器访问需要可信 TLS 反向代理。
+
+HTTP 和单条 `chat --message` 仍使用旧命令适配：支持中文切换、`/model ID --session`、`/model default`，真实推理探针成功后才保存选择；`/new`/`/reset` 保留当前模型，`/init` 返回 `deferred_command`。尚未开放的原生参数和命令明确拒绝。兼容层服务于既有 API 客户端，将在原生渠道覆盖账号鉴权、幂等回执与停止请求并迁移调用方后删除。
 
 - `POST /chats`，body `{}`：建立属于认证账号的聊天。
 - `GET /chats/{id}`：读取当前请求模型、revision 和原生历史的最近一页（最多 500 条消息）。
@@ -62,11 +64,15 @@ python3.12 -m mikasa --config config/local/hermes-cch.json serve
 
 ## 原生运行与数据迁移
 
-CLI 生命周期与 HTTP 服务共同管理原生 Gateway，每个账号使用独立 profile。不要同时以 CLI 和 HTTP 管理同一账号 profile；锁冲突会明确报错。关闭入口会关闭子 Gateway，重新打开继续使用原生会话与记忆。模型凭据只从显式 CCH 来源读取到子进程环境，不复制个人认证文件。
+CLI 启动原生 CLI 子进程，HTTP 启动原生 Gateway 子进程；同一账号使用同一 profile、SessionDB 和 MEMORY/USER。不能同时以 CLI 和 HTTP 管理同一账号 profile，锁冲突会在更新配置前报错。退出会收回对应子进程，重新打开继续使用原生数据。模型凭据只从显式 CCH 来源读取到子进程环境，不复制个人认证文件。
+
+初始化更新身份/规则、必需 skills/plugin 和生成的 CCH 配置，保留 Hermes 自己保存的默认模型、推理和显示偏好。`config.yaml` 的 YAML/JSON 都可读取，刷新写为 JSON（合法 YAML），不保留 YAML 注释；格式错误时保留原文件并阻止启动。长期记忆和原生数据库不由配置初始化覆盖。
+
+被删除的 CCH 来源不再留在生成的 provider/别名列表。若该来源仍是原生默认 provider，启动会保留旧配置并报错；恢复来源或修正 profile 的默认 provider 后再启动，不自动回退到其他模型。
 
 首次打开账号 profile，会用 Hermes SessionDB 的原生接口导入旧聊天的全部普通消息；命令回执不进入模型历史。原 SQLite 保留，导入标记防止重复；冲突会阻止启动，不覆盖数据。新请求只保存摘要与 native run 引用，不复制正文。已接受但中断的请求先检查原生状态，重试使用同一幂等键，不重新推理。
 
-`/new` 清空会话上下文，保留同账号长期记忆。不同账号的 SessionDB、MEMORY、USER 和 home 独立。身份由 canonical 生成 SOUL，工程规则经官方插件注入。人格 skill 通过原生 `skills.auto_load` 必需加载，缺失时拒绝启动；工程 skills 由原生索引与 skill_view 加载。聊天目前仅授权原生 memory、skills_list、skill_view；skill_manage 和仓库/终端能力被阻止，`/init` 随聊天工程任务在最后接入。
+不同账号的 SessionDB、MEMORY、USER 和 home 独立。身份由 canonical 生成 SOUL，工程规则经官方插件注入。人格 skill 通过原生 `skills.auto_load` 必需加载，缺失时拒绝启动；工程 skills 由原生索引与 skill_view 加载。模型目前仅授权 memory、skills_list、skill_view，plugin 阻止其他模型工具。CLI 系统命令与模型工具调用是不同通道；HTTP 的 `/init` 仍暂缓。工程每任务 profile 尚未继承聊天账号记忆，这将在工程生命周期迁移中落实。
 
 原有 `backup PATH` 只备份业务 SQLite，不能作为原生会话/记忆的完整恢复点。维护前停服并保留整个受限 runtime；不把它上传到 Git 或公开存储。
 

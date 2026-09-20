@@ -1,4 +1,4 @@
-"""Isolated native Hermes Gateway lifecycle; no agent loop or transcript replication."""
+"""Isolated native Hermes CLI/Gateway lifecycle; no agent loop or transcript replication."""
 import fcntl
 import hashlib
 import json
@@ -14,7 +14,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener, ProxyHandler
 
 from .errors import Conflict, MikasaError
-from .model_settings import default_model, model_environment, select_source, validate_environment
+from .model_settings import default_model, model_choices, model_environment, select_source, validate_environment
 
 HERMES_REVISION = "f9524d3f119c672e4a4444f56d582e7475716ba3"
 
@@ -87,10 +87,14 @@ def prepare_profile(config, actor):
         credentials[variable] = values["MIKASA_MODEL_API_KEY"]
         providers[name] = {"base_url": values["MIKASA_MODEL_BASE_URL"], "key_env": variable,
                            "api_mode": values.get("MIKASA_MODEL_API_MODE", "chat_completions")}
+    choices = sorted({model, *model_choices(settings)})
+    for name, provider in providers.items():
+        provider["models"] = {m: {} for m in choices if provider_id(select_source(settings, m)) == name}
     native_config = {
         "model": {"default": model, "provider": provider_id(select_source(settings, model))},
         "providers": providers,
-        "platform_toolsets": {"api_server": ["memory", "skills"]},
+        "model_aliases": {m: {"model": m, "provider": provider_id(select_source(settings, m))} for m in choices},
+        "platform_toolsets": {"api_server": ["memory", "skills"], "cli": ["memory", "skills"]},
         "memory": {"memory_enabled": True, "user_profile_enabled": True},
         "skills": {"external_dirs": [str(config.root / "skills")], "auto_load": ["mikasa-persona"]},
         "plugins": {"enabled": ["mikasa"]},
@@ -100,7 +104,11 @@ def prepare_profile(config, actor):
         "fallback_providers": [],
     }
     (home / "workspace").mkdir(exist_ok=True, mode=0o700)
-    private_write(home / "config.yaml", json.dumps(native_config, ensure_ascii=False, indent=2))
+    refreshed = subprocess.run([str(python), str(config.root / "workers/hermes/profile_config.py"), str(home / "config.yaml")],
+                               input=json.dumps(native_config), capture_output=True, text=True, timeout=30,
+                               env={k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL", "TMPDIR") if k in os.environ})
+    if refreshed.returncode:
+        raise MikasaError("原生配置更新失败；原有配置保留，请检查配置结构及所选 CCH provider 是否仍在配置中")
     private_write(home / "SOUL.md", (config.root / "identity.md").read_text())
     # Snapshots are generated from the canonical files, never maintained separately.
     for name in ("engineering-contract.md", "engineering-workflow.md"):
@@ -115,6 +123,57 @@ def prepare_profile(config, actor):
     if key_path.is_symlink() or key_path.stat().st_mode & 0o077:
         raise MikasaError("原生 API 本机凭据必须为独立的 0600 文件")
     return home, source, python, credentials
+
+
+def interactive(config, session=None):
+    """TTY is owned by Hermes. No Mikasa command parser or conversation loop."""
+    actor = config.owner
+    home = config.runtime / "native" / hashlib.sha256(actor.encode()).hexdigest()[:24]
+    home.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (home / "mikasa.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise Conflict("该账号的原生 profile 正在使用；先关闭对应 CLI 或 Gateway") from None
+        home, source, python, credentials = prepare_profile(config, actor)
+        env = {k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL", "TMPDIR", "TERM", "COLORTERM", "SSL_CERT_FILE") if k in os.environ}
+        env.update(credentials)
+        env.update(HERMES_HOME=str(home), MIKASA_HERMES_SOURCE=str(source),
+                   HERMES_ENABLE_PROJECT_PLUGINS="0", PYTHONUNBUFFERED="1")
+        # Import only existing legacy state; starting native CLI needs no Mikasa database.
+        database = config.runtime / "mikasa.sqlite3"
+        if database.exists():
+            imported = subprocess.run([str(python), str(config.root / "workers/hermes/import_legacy.py"), str(database), actor],
+                                      cwd=home / "workspace", env=env, capture_output=True, timeout=60)
+            if imported.returncode:
+                raise MikasaError("旧会话导入失败；原数据库保留，CLI 未启动")
+        command = [str(python), str(config.root / "workers/hermes/native_cli.py")]
+        if session:
+            command += ["--resume", session]
+        def terminate(signum, frame):
+            raise SystemExit(128 + signum)
+
+        previous = signal.signal(signal.SIGTERM, terminate)
+        process = None
+        try:
+            process = subprocess.Popen(command, cwd=home / "workspace", env=env)
+            return process.wait()
+        except KeyboardInterrupt:
+            # The foreground process group already received Ctrl-C; Hermes handles it.
+            if process is None:
+                raise
+            return process.wait()
+        finally:
+            try:
+                if process is not None and process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait()
+            finally:
+                signal.signal(signal.SIGTERM, previous)
 
 
 class NativeGateway:

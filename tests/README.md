@@ -7,3 +7,5 @@
 隔离测试不能证明真实模型效果；本轮额外执行了 [Hermes/CCH 联调](../docs/HERMES_CCH_VALIDATION.md)。GitHub 账号权限、分支保护、真实 Docker 镜像和 systemd 部署仍待验收。
 
 命令/会话测试覆盖 `/new` 原子创建与重放、暂停回滚、跨账号隔离、控制回执不进入模型历史、命令进程不读或继承凭据。普通 Chat 测试使用明确的命令回执夹具；真实 Hermes 参数语义由 `scripts/probe_commands.py` 单独验收，不用夹具替代官方兼容证据。
+
+以上 Chat 回执测试对应暂留的 HTTP/`--message` API。终端入口另验证直接启动原生 CLI、不创建业务服务、TTY 与凭据隔离、profile 互斥、SIGTERM 清理、配置偏好保留与坏文件保护。`scripts/probe_native_cli.py` 通过真实固定 SDK 和本地模型目录验证原生命令、跨协议解析及会话恢复，不消耗模型额度，不代替真实 CCH 可用性验收。

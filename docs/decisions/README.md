@@ -13,3 +13,5 @@
 [0005：原生工程工具](0005-native-engineering-tools.md) 将工程文件、搜索、修改与终端交给 Hermes Docker 工具，保留 Mikasa 快照验收；当时的独立审批引擎现已由 0006 替代。
 
 [0006：原生 Hermes 与 Mikasa 身份配置](0006-hermes-native-mikasa.md) 是当前目标架构，记录自研收窄清单、规则与记忆的职责及逐步迁移验收。
+
+[0007：终端直接使用 Hermes CLI](0007-native-cli.md) 移除终端自研输入循环，复用完整原生命令与偏好持久化；明确 HTTP 兼容层的保留对象和退出条件。

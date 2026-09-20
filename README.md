@@ -2,7 +2,7 @@
 
 Mikasa 是基于原生 Hermes 运行、通过 CCH 使用模型、拥有持续身份和协作记忆的仿生程序员。身份、工程 skills 和记忆承载协作约定，不另建强制审批业务引擎。
 
-当前包含人格与工程规则 1.1 和 Python 运行时 0.1。专属审批引擎已移除；聊天使用原生 Gateway，工程使用原生 Docker harness，任务调度与部分入口仍在迁移。保留、迁移、删除清单及本次验证见 [收窄决定](docs/decisions/0006-hermes-native-mikasa.md)。此前 Hermes 0.21.3/CCH 已完成合成任务真实联调；GitHub、飞书和 VM 尚未完成运行验收。
+当前包含人格与工程规则 1.1 和 Python 运行时 0.1。专属审批引擎已移除；终端聊天直接使用原生 Hermes CLI，HTTP 聊天使用原生 Gateway，工程使用原生 Docker harness。任务调度与工程会话仍在迁移，见 [收窄决定](docs/decisions/0006-hermes-native-mikasa.md) 和 [原生 CLI 决定](docs/decisions/0007-native-cli.md)。此前 Hermes 0.21.3/CCH 已完成合成任务真实联调；GitHub、飞书和 VM 尚未完成运行验收。
 
 ## 本地运行
 
@@ -32,7 +32,7 @@ API 和 runner 分别运行。默认示例不启用仓库、模型、定期审�
 python3.12 -m mikasa --config config/local/hermes-cch.json chat
 ```
 
-输入 `/model 完整模型ID`，或直接说“切换为 gpt-5.6-luna”“恢复默认模型”。`/new` 开始新聊天并保留当前模型，`/help` 查看已接入命令。Hermes 共享组件负责通用命令解析，Hermes Gateway 负责会话、记忆、skills 和取消，Mikasa 负责授权、命令适配及业务回执，详见 [职责边界](docs/decisions/0004-native-hermes-runtime.md)。切换经真实调用验证后对当前聊天生效，保留上下文；原工程任务仍使用运行配置。配置、会话恢复和鉴权见 [聊天用法](docs/runbooks/CHAT.md)，调研依据见 [CCH 路由决定](docs/decisions/0002-chat-model-switching.md)，真实结果见 [聊天验证](docs/CHAT_VALIDATION.md)。
+终端直接进入 Hermes：`/model 完整模型ID` 切换当前会话，`--global` 保存默认选择，`/new` 确认后新建会话，`/resume` 恢复历史，`/help` 查看原生命令。Hermes 负责交互、会话、记忆和 skills；Mikasa 准备身份、工程规则和 CCH providers。原生命令校验配置与模型目录，不额外发送推理探针；实际模型可用性由请求验证。固定版本的 `/new` 对自定义 CCH provider 会保留当前模型，自动恢复默认值存在上游限制。HTTP 与 `chat --message` 暂保留旧 API 的命令和回执契约，包括中文切换指令，不能与原生 CLI 的行为混用。详见 [聊天用法](docs/runbooks/CHAT.md) 和 [当前验证](docs/decisions/0007-native-cli.md)。
 
 ## 规则文件
 
@@ -61,7 +61,7 @@ tests/           规则、配置和集成验证支持
 scripts/         可重复的检查和运行辅助脚本
 ```
 
-运行代码集中在 `mikasa/`；聊天由未修改的 Hermes Gateway 执行，`workers/hermes/bridge.py` 适配工程交付协议，工程文件/终端与工具循环由原生 Hermes Docker harness 执行。原生迁移与限制见 [原生运行记录](docs/NATIVE_HERMES_VALIDATION.md)。其他集成目录记录接入边界，不复制实现。代码存在、隔离测试通过与生产服务已运行是不同状态。
+运行代码集中在 `mikasa/`；终端由未修改的 Hermes CLI 执行，HTTP 聊天调用原生 Gateway，`workers/hermes/bridge.py` 适配工程交付协议，工程文件/终端与工具循环由原生 Hermes Docker harness 执行。原生迁移与限制见 [原生运行记录](docs/NATIVE_HERMES_VALIDATION.md)。其他集成目录记录接入边界，不复制实现。代码存在、隔离测试通过与生产服务已运行是不同状态。
 
 ## 使用与维护
 

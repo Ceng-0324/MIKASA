@@ -75,14 +75,21 @@ class ChatTests(BaseTest):
         self.assertEqual(len(self.gateway.calls), 1)
         self.assertEqual(self.chat.get(self.session['id'], self.config.owner)['turns'][0]['message'], "私有用户消息")
 
-    def test_cli_follows_new_session_id_and_closes_runtime(self):
+    def test_interactive_cli_uses_native_launcher_without_business_service(self):
         from mikasa.cli import main
-        with patch("mikasa.chat.Chat", return_value=self.chat), patch("builtins.input", side_effect=["/reset", "新会话消息", "/exit"]), redirect_stdout(io.StringIO()):
+        with patch("mikasa.native.interactive", return_value=0) as launch, \
+                patch("mikasa.cli.Service", side_effect=AssertionError("interactive CLI must not open business state")):
             code = main(["--config", str(self.config_path), "chat", "--session", self.session["id"]])
         self.assertEqual(code, 0)
+        self.assertEqual(launch.call_args.args[1], self.session["id"])
+
+    def test_message_cli_keeps_existing_api_contract_and_closes_runtime(self):
+        from mikasa.cli import main
+        with patch("mikasa.chat.Chat", return_value=self.chat), redirect_stdout(io.StringIO()) as output:
+            code = main(["--config", str(self.config_path), "chat", "--session", self.session["id"], "--message", "消息"])
+        self.assertEqual(code, 0)
         self.assertTrue(self.gateways.closed)
-        self.assertNotEqual(self.gateway.calls[-1]["session"], self.session["id"])
-        self.assertEqual(self.gateway.calls[-1]["message"], "新会话消息")
+        self.assertEqual(json.loads(output.getvalue())["chat_id"], self.session["id"])
 
     def test_switch_persists_in_native_session_only(self):
         self.send("记住蓝鲸", "before")

@@ -20,7 +20,7 @@ Mikasa 是基于原生 Hermes、通过 CCH 使用模型、拥有持续身份和�
 负责人已调整优先级：先搭好底层与接入，再部署 VM；聊天工程任务与试点仓库一起放在最后。
 
 1. **Hermes 底层 agent**：完善主动检索、分段上下文、实现/检查/修复循环、运行证据、取消与失败恢复；扩大合成任务验收，明确资源上限。直接采用官方 Hermes harness 负责推理、上下文管理和工具调度，现有宿主仍管理任务、快照及副作用校验，按收窄决定逐步迁往原生能力；身份、工程规范与记忆保持加载。后续扩展以协作开发、质量监督和交付推进为判断依据；优先官方扩展点，不因能力可用而自动扩大范围。
-   命令入口复用官方 registry、model 参数解析及 version executor；聊天由原生 Gateway 保存 SessionDB、记忆、运行状态和取消。/new 与 /reset 创建原生新会话；/init 随最后的工程接入落地。工程任务使用原生 Docker 文件/终端、SOUL、任务记忆和 skills；Mikasa 暂保留快照与独立验收，审批分工交给规则与记忆。详见 [会话归属](docs/decisions/0004-native-hermes-runtime.md) 和 [工程工具归属](docs/decisions/0005-native-engineering-tools.md)。
+   终端已直接调用 Hermes 官方 CLI，完整命令分派、会话恢复和默认偏好均由原生实现；HTTP/单条消息暂留旧 API 命令适配并通过 Gateway 运行。同账号两个入口共用 SessionDB、MEMORY/USER，进程互斥，详见 [原生 CLI](docs/decisions/0007-native-cli.md)。工程任务使用原生 Docker 文件/终端、SOUL、任务记忆和 skills；Mikasa 暂保留快照与独立验收，审批分工交给规则与记忆。下一步落实工程会话与账号长期记忆继承，再迁移 Kanban、Cron、事件和备份。聊天工程任务仍在最后接入，见 [工程工具归属](docs/decisions/0005-native-engineering-tools.md)。
 2. **CCH 模型路由**：继续采用 CCH 提供模型路由，收口模型配置、故障行为和路由验证。`default` 是网关 Key 的 provider 分组，不是模型名；当前分组尚未取得网关侧证据，不能标记为已切换。不新增重复路由网关。
 
    本地已补齐 Codex/Claude/环境来源的统一校验、`doctor --probe-model --model MODEL_ID` 连接诊断与 Hermes 官方错误钩子的固定故障反馈；`/model` 作为宿主系统命令按受信任路由同步选择模型、协议和凭据，GPT Responses ↔ Claude Messages 已完成真实会话切换与上下文保留验收。连接成功、响应标识与分组证据分开报告。剩余为网关侧 `default` 分组确认，具体见 [CCH 诊断](docs/runbooks/CCH.md)。后续可继续外部身份/权限接入的独立准备。
@@ -47,7 +47,7 @@ Mikasa 是基于原生 Hermes、通过 CCH 使用模型、拥有持续身份和�
 | 范围 | 本地产物与行为 |
 | --- | --- |
 | 任务事实源 | SQLite 保存任务、依赖、负责人、状态、事件及发布回执；幂等提交、单 runner 锁、取消、暂停与中断恢复；执行阶段和工具证据实时入库，失败与超时后保留，旧执行令牌不能污染新任务运行 |
-| 聊天与模型切换 | CLI 和鉴权 HTTP 聊天；自然语言选择当前会话模型，CCH 负责上游路由，候选模型真实验证成功后持久化；切换保留上下文，不影响工程任务 |
+| 聊天与模型切换 | 终端使用 Hermes CLI 原生 /model、/new、/resume 和全局偏好；Mikasa 仅准备 profile 与 CCH 配置。HTTP/--message 暂保留中文切换和推理验证后保存的旧契约；工程默认配置独立 |
 | 任务操作 | CLI、鉴权 HTTP API、成员查询与需求提交、负责人分配、拆解结果转实施任务、交付证据跟进 |
 | 仓库审计 | GitHub Issue、PR 和 CI 读取与风险记录；可配置周期审计；不自动重复创建 Issue |
 | 模型执行 | 固定版本 Hermes SDK 的 JSON 桥接、canonical 与按任务路由的 skill 注入、指纹证据、Responses/Chat/Messages 协议适配、按任务授予仓库工具与同会话修复循环、宿主调用证据、专用 home、模型环境变量白名单 |

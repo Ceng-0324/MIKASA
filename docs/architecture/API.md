@@ -2,6 +2,8 @@
 
 CLI：`python3.12 -m mikasa --config <配置路径> <命令>`。本地 CLI 仅供受信任的操作系统账号使用，按负责人权限执行；不能将 shell 账号交给普通成员来实现多用户鉴权。
 
+`chat`（不带 `--message`）直接启动 Hermes 原生 CLI，不创建 Mikasa 业务服务或输入循环。`--session` 接受原生会话 ID，命令、全局模型偏好与会话恢复由 Hermes 处理。下文聊天 JSON 字段、幂等回执及命令限制仅适用于 HTTP 和 `chat --message`；原生 CLI 新会话不会自动注册为旧 API chat_id。两种入口的行为见 [聊天手册](../runbooks/CHAT.md)。
+
 `doctor` 包含脱敏的本地模型配置状态，默认不联网。显式 `doctor --probe-model` 发起一次模型验证，失败退出码为 1；不建立聊天或工程任务。诊断字段与限制见 [CCH 手册](../runbooks/CCH.md)。
 
 `doctor --model MODEL_ID` 按指定模型诊断配置，结合 `--probe-model` 验证实际协议。聊天 `/model` 和 `/models` 回复可包含 `model_options` 数组，仅列受信任配置中的候选 ID，交互客户端通过消息 API 发送 `/model MODEL_ID`；不增加任意端点/配置修改接口。未接入的斜杠命令返回 `kind=unsupported_command`，`/init` 返回 `deferred_command`，均不调用模型。`/new`（别名 `/reset`）返回 `kind=new` 和新 `chat_id`，客户端须跟随新 ID；在旧会话重放同一幂等键可取回同一结果。当前模型保留，新会话 revision=0、无历史；旧会话不删除。

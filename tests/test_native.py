@@ -57,6 +57,119 @@ class NativeProfileTests(unittest.TestCase):
         with self.assertRaises(Forbidden):
             prepare_profile(self.config, 'unknown')
 
+    def test_refresh_preserves_native_preferences_and_refreshes_integration_routes(self):
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        path = home / 'config.yaml'
+        native = json.loads(path.read_text())
+        native['model'].update(default='native-selected', reasoning_effort='high')
+        native['display'] = {'compact': True}
+        provider = next(iter(native['providers']))
+        native['providers'][provider]['base_url'] = 'https://stale.invalid'
+        native['skills']['auto_load'].append('user-skill')
+        path.write_text(json.dumps(native))
+        prepare_profile(self.config, self.config.owner)
+        refreshed = json.loads(path.read_text())
+        self.assertEqual(refreshed['model'], native['model'])
+        self.assertEqual(refreshed['display'], native['display'])
+        self.assertEqual(refreshed['skills']['auto_load'], ['mikasa-persona', 'user-skill'])
+        self.assertEqual(refreshed['providers'][provider]['base_url'], 'https://cch.invalid/v1')
+
+    def test_bad_native_config_is_not_overwritten(self):
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        path = home / 'config.yaml'
+        original = '["not a mapping"]'
+        path.write_text(original)
+        with self.assertRaisesRegex(MikasaError, '原有配置保留'):
+            prepare_profile(self.config, self.config.owner)
+        self.assertEqual(path.read_text(), original)
+
+    def test_refresh_removes_obsolete_managed_routes_but_keeps_native_routes(self):
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        path = home / 'config.yaml'
+        native = json.loads(path.read_text())
+        native['providers'].update({'cch-0000000000000000': {'base_url': 'https://old.invalid'},
+                                    'local-user': {'base_url': 'http://localhost:1234'}})
+        native['model_aliases'].update({'old-model': {'provider': 'cch-0000000000000000'},
+                                       'user-alias': {'provider': 'local-user', 'model': 'local'}})
+        path.write_text(json.dumps(native))
+        prepare_profile(self.config, self.config.owner)
+        refreshed = json.loads(path.read_text())
+        self.assertNotIn('cch-0000000000000000', refreshed['providers'])
+        self.assertNotIn('old-model', refreshed['model_aliases'])
+        self.assertEqual(refreshed['providers']['local-user'], native['providers']['local-user'])
+        self.assertEqual(refreshed['model_aliases']['user-alias'], native['model_aliases']['user-alias'])
+
+    def test_removed_selected_provider_does_not_silently_reset_native_preference(self):
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        path = home / 'config.yaml'
+        native = json.loads(path.read_text())
+        native['model']['provider'] = 'cch-0000000000000000'
+        original = json.dumps(native)
+        path.write_text(original)
+        with self.assertRaisesRegex(MikasaError, '所选 CCH provider'):
+            prepare_profile(self.config, self.config.owner)
+        self.assertEqual(path.read_text(), original)
+
+    def test_native_launcher_inherits_tty_but_not_unrelated_credentials(self):
+        from mikasa.native import interactive
+        from unittest.mock import Mock
+        process = Mock()
+        process.wait.return_value = 0
+        process.poll.return_value = 0
+        prepared = prepare_profile(self.config, self.config.owner)
+        with patch.dict(os.environ, {'GH_TOKEN': 'private', 'OPENAI_API_KEY': 'unrelated'}), \
+                patch('mikasa.native.prepare_profile', return_value=prepared), \
+                patch('mikasa.native.subprocess.Popen', return_value=process) as spawn:
+            self.assertEqual(interactive(self.config, 'native-session'), 0)
+        args, kwargs = spawn.call_args
+        self.assertEqual(args[0][-2:], ['--resume', 'native-session'])
+        self.assertNotIn('stdin', kwargs)
+        self.assertNotIn('stdout', kwargs)
+        self.assertNotIn('GH_TOKEN', kwargs['env'])
+        self.assertNotIn('OPENAI_API_KEY', kwargs['env'])
+        self.assertIn('sensitive-fixture-key', kwargs['env'].values())
+        self.assertFalse((self.config.runtime / 'mikasa.sqlite3').exists())
+
+    def test_native_cli_cannot_mutate_an_active_gateway_profile(self):
+        import fcntl
+        from mikasa.native import interactive
+        from mikasa.errors import Conflict
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        before = (home / 'config.yaml').read_bytes()
+        with (home / 'mikasa.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaises(Conflict):
+                interactive(self.config)
+        self.assertEqual((home / 'config.yaml').read_bytes(), before)
+
+    def test_native_launcher_terminates_child_and_restores_handler_on_sigterm(self):
+        import fcntl
+        import signal
+        import subprocess
+        from unittest.mock import Mock
+        from mikasa.native import interactive
+        prepared = prepare_profile(self.config, self.config.owner)
+        previous = signal.getsignal(signal.SIGTERM)
+        process = Mock()
+        process.poll.return_value = None
+        def wait(timeout=None):
+            if timeout:
+                raise subprocess.TimeoutExpired('native-cli', timeout)
+            if not process.terminate.called:
+                signal.raise_signal(signal.SIGTERM)
+            return 0
+        process.wait.side_effect = wait
+        with patch('mikasa.native.prepare_profile', return_value=prepared), \
+                patch('mikasa.native.subprocess.Popen', return_value=process):
+            with self.assertRaises(SystemExit) as stopped:
+                interactive(self.config)
+        self.assertEqual(stopped.exception.code, 128 + signal.SIGTERM)
+        process.terminate.assert_called_once()
+        process.kill.assert_called_once()
+        self.assertEqual(signal.getsignal(signal.SIGTERM), previous)
+        with (prepared[0] / 'mikasa.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
     def test_dotenv_and_unsafe_service_credentials_fail_closed(self):
         home, *_ = prepare_profile(self.config, self.config.owner)
         (home/'.env').write_text('UNEXPECTED_KEY=secret')
