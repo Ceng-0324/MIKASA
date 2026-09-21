@@ -36,7 +36,7 @@ python3.12 -m mikasa --config config/local/mikasa.json run
 
 飞书渠道已改为 Hermes 原生开放准入：允许所有用户、群聊和机器人，群聊不要求 @。更新后需重启 Gateway，飞书应用可用范围和群消息权限也需就绪；群聊真实收发仍待验收。各会话共用 profile 级长期记忆与系统命令能力，聊天工程工具仍按后续计划接入。
 
-历史真实 CCH 联调已验证合成工程任务和 GPT/Claude 会话切换；`default` 分组仍缺网关侧确认。GitHub 已通过真实 token 确认 `Mikasa-0910` 账号身份，仓库读写尚未验收；Hermes 原生飞书负责人单聊已完成真实消息往返，身份、persona 与 skills 加载证据通过。微信已扫码并接入同一个 Gateway，真实入站、CCH 回复和身份/skills 加载已有记录；手机收悉、系统命令与记忆仍待确认。目标 VM、群聊和聊天工程任务仍未验收。账号、凭据、飞书与微信接入步骤见[接入手册](docs/runbooks/CONNECTIONS.md)。后续顺序为 **微信 → VM → 聊天工程任务与 FluxCore 联合验收**，详见[推进计划](MIKASA_FUNCTION_PLAN.md)与[验证边界](docs/VALIDATION.md)。
+历史真实 CCH 联调已验证合成工程任务和 GPT/Claude 会话切换；`default` 分组仍缺网关侧确认。GitHub 已通过真实 token 确认 `Mikasa-0910` 账号身份，仓库读写尚未验收；Hermes 原生飞书负责人单聊已完成真实消息往返，身份、persona 与 skills 加载证据通过。微信已扫码并接入同一个 Gateway，真实入站、CCH 回复和身份/skills 加载已有记录，负责人确认 `/help` 与普通消息均收到回复；微信模型切换、`/new` 与跨会话记忆仍待验收。目标 VM、群聊和聊天工程任务仍未验收。账号、凭据、飞书与微信接入步骤见[接入手册](docs/runbooks/CONNECTIONS.md)。后续顺序为 **微信 → VM → 聊天工程任务与 FluxCore 联合验收**，详见[推进计划](MIKASA_FUNCTION_PLAN.md)与[验证边界](docs/VALIDATION.md)。
 
 ## 开发
 
