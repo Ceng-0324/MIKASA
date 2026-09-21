@@ -84,6 +84,21 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu --
 
 已知限制：原生 `/sethome` 会保存默认投递设置并生成 profile `.env`，与当前禁止额外环境注入的启动检查冲突。本阶段只验收单聊，不依赖默认投递；遇到此情况先核对文件字段并保留原设置，不能删除未知凭据或直接放开任意 `.env`。macOS 上过长的 profile 路径还会使 Hermes 可选 liveness socket 无法创建，消息长连接仍可工作；VM 使用短路径后复验存活检测。
 
+## 微信扫码绑定
+
+微信使用固定 Hermes 的原生 iLink 适配器。先在本机执行：
+
+```sh
+python3.12 -m mikasa --config config/local/hermes-cch.json weixin-login
+python3.12 -m mikasa --config config/local/hermes-cch.json connections weixin
+```
+
+用负责人本人微信扫描终端二维码并在手机确认。扫码得到的是独立 iLink 机器人身份，不是对普通个人微信号的全面控制；第一阶段只验收本人单聊，不承诺普通微信群能力。登录不调用模型、不收发消息，也不修改正在运行的飞书 profile。账号绑定来自原生扫码返回的用户 ID，不要求你手工抄写。不要分享登录二维码。
+
+完整绑定以 0600 保存到配置 runtime 下的 `credentials/weixin.json`；登录取消、超时或返回缺字段时保留旧文件。该目录被 Git 忽略且不属于受管状态备份范围，迁到 VM 时单独安全转移或重新扫码。登录临时 home 自动清理，凭据不写入会话、记忆或生成的 Gateway 配置。`connections weixin` 只检查本地绑定，不证明 token 尚有效；微信不提供本项目使用的只读认证探针，因此拒绝 `--probe`，避免探针消费真实消息。
+
+消息启动与真实验收是下一阶段，扫码成功不等于微信已经接通。
+
 ## 本机凭据存放
 
 已有可用本机配置时在原配置中合并上述字段，保留 CCH 设置，不覆盖成默认示例。可将 [环境模板](../../config/examples/platforms.env.example) 复制为 `config/local/platforms.env`，设置 `chmod 600 config/local/platforms.env` 后，用本机编辑器填写值。该目录已被 Git 忽略；不要把整个文件内容发到聊天。

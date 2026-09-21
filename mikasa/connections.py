@@ -1,11 +1,78 @@
 """Platform configuration and explicit, non-publishing connection checks."""
 import json
+import fcntl
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
-from .errors import MikasaError
+from .errors import Conflict, MikasaError
+from .maintenance import runtime_operation
+
+
+def validate_weixin_binding(value, owner):
+    """The QR-confirming account is the sole trusted chat principal."""
+    if not isinstance(value, dict) or value.get("actor") != owner:
+        raise MikasaError("微信绑定不属于当前负责人；请重新执行 weixin-login")
+    for field in ("account_id", "user_id"):
+        if not isinstance(value.get(field), str) or not re.fullmatch(r"[A-Za-z0-9_@.-]{1,200}", value[field]) or value[field] in {".", ".."}:
+            raise MikasaError("微信扫码未返回有效账号和用户标识；原绑定保留")
+    if not isinstance(value.get("token"), str) or not value["token"].strip():
+        raise MikasaError("微信扫码未返回凭据；原绑定保留")
+    url = urlparse(value.get("base_url", ""))
+    if (url.scheme != "https" or not url.hostname or not url.hostname.endswith(".weixin.qq.com") or
+            url.username or url.password or url.port not in (None, 443) or url.query or url.fragment or url.path not in ("", "/")):
+        raise MikasaError("微信服务地址不是预期的腾讯 HTTPS 端点；原绑定保留")
+    return value
+
+
+def weixin_binding(config):
+    path = config.runtime / "credentials/weixin.json"
+    try:
+        if path.is_symlink() or path.stat().st_mode & 0o077:
+            raise MikasaError("微信凭据必须为独立的 0600 文件")
+        return validate_weixin_binding(json.loads(path.read_text()), config.owner)
+    except (OSError, ValueError, TypeError):
+        raise MikasaError("微信尚未绑定或凭据无法读取；先运行 weixin-login") from None
+
+
+@runtime_operation
+def login_weixin(config):
+    from .native import native_installation
+    source, python = native_installation(config)
+    directory = config.runtime / "credentials"
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lock_path = directory / "weixin.lock"
+    if lock_path.is_symlink():
+        raise MikasaError("微信登录锁不能为符号链接")
+    with lock_path.open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise Conflict("微信扫码登录正在进行") from None
+        # QR login is model-independent and cannot mutate the running owner's profile.
+        with tempfile.TemporaryDirectory(prefix="mikasa-weixin-login-") as temporary:
+            env = {k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL", "SSL_CERT_FILE") if k in os.environ}
+            env.update(HERMES_HOME=temporary, MIKASA_HERMES_SOURCE=str(source),
+                       HERMES_ENABLE_PROJECT_PLUGINS="0", PYTHONUNBUFFERED="1")
+            try:
+                return subprocess.run([str(python), str(config.root / "workers/hermes/weixin_login.py"),
+                                       str(directory / "weixin.json"), config.owner],
+                                      cwd=temporary, env=env, timeout=540).returncode
+            except subprocess.TimeoutExpired:
+                raise MikasaError("微信扫码超时；原绑定保留，请重试") from None
+
+
+def weixin_diagnostics(config):
+    try:
+        weixin_binding(config)
+    except MikasaError as exc:
+        return {"platform": "weixin", "configuration": "incomplete", "connection": "not_checked",
+                "owner_bound": False, "error": str(exc)}
+    return {"platform": "weixin", "configuration": "ready", "connection": "not_checked",
+            "owner_bound": True, "transport": "long_poll", "messages": "not_checked"}
 
 
 def feishu_environment(config):
@@ -34,6 +101,10 @@ def feishu_gateway_config(app_id):
 
 
 def diagnostics(config, platform, *, probe=False):
+    if platform == "weixin":
+        if probe:
+            raise MikasaError("微信认证需扫码，收发由 Gateway 验收；不以消费消息的长轮询充当只读探针")
+        return weixin_diagnostics(config)
     settings = config.data.get(platform, {})
     fields = {"token_env": "MIKASA_GITHUB_TOKEN"} if platform == "github" else {
         "app_id_env": "MIKASA_FEISHU_APP_ID", "app_secret_env": "MIKASA_FEISHU_APP_SECRET"}

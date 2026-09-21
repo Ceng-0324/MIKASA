@@ -9,12 +9,13 @@
 ## 接下来的顺序
 
 1. **GitHub 与飞书**：核实 `Mikasa-0910` 服务身份和仓库权限，验证 GitHub 事件与正式 Review；优先采用 Hermes 飞书 adapter，接应用认证、真实用户绑定与事件。消息转工程任务留到最后。
-2. **VM**：落实专用用户、固定 Hermes 环境、凭据注入、隔离镜像、systemd、TLS、停止与恢复演练。
-3. **聊天工程任务与 FluxCore**：共同验收自然语言任务入口、进度交互、真实仓库执行和协作交付。`Ceng-0324/FluxCore` 仅是试点，不以先开发其业务为前置。
+2. **微信**：复用 Hermes 原生 iLink 扫码和多平台 Gateway，与飞书共用身份、skills 和持久记忆，完成本人私聊与系统命令的真实验收。
+3. **VM**：落实专用用户、固定 Hermes 环境、凭据注入、隔离镜像、systemd、TLS、停止与恢复演练。
+4. **聊天工程任务与 FluxCore**：共同验收自然语言任务入口、进度交互、真实仓库执行和协作交付。`Ceng-0324/FluxCore` 仅是试点，不以先开发其业务为前置。
 
 CCH `default` 是 Key 的供应商分组，仍需网关管理员配置与同次路由证据；本地模型名或连接成功不能证明分组已切换。见 [CCH 手册](docs/runbooks/CCH.md)。
 
-当前已提供 `connections github|feishu [--probe]` 诊断及 `feishu` 原生长连接入口。GitHub 独立账号 `Mikasa-0910` 已通过真实 token 身份检查，无需预先指定仓库；具体仓库与操作权限按后续任务处理。飞书应用机器人、负责人单聊、原生会话、CCH 回复和身份/skills 加载已真实验收，暂不开放群聊或聊天工程任务。下一步进入 VM 部署，再做聊天工程任务与 FluxCore 联合验收。
+当前已提供 `connections github|feishu [--probe]` 诊断及 `feishu` 原生长连接入口，并补充 `weixin-login` 扫码绑定与 `connections weixin` 本地检查。GitHub 独立账号 `Mikasa-0910` 已通过真实 token 身份检查，无需预先指定仓库；具体仓库与操作权限按后续任务处理。飞书应用机器人、负责人单聊、原生会话、CCH 回复和身份/skills 加载已真实验收，暂不开放群聊或聊天工程任务。下一步完成微信真实接入，再部署 VM，最后做聊天工程任务与 FluxCore 联合验收。
 
 ## 收窄条件
 

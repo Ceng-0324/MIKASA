@@ -10,7 +10,8 @@ from unittest.mock import Mock, patch
 
 from mikasa.cli import main
 from mikasa.config import Config
-from mikasa.connections import diagnostics, feishu_environment, feishu_gateway_config, probe_feishu
+from mikasa.connections import (diagnostics, feishu_environment, feishu_gateway_config, probe_feishu,
+                                login_weixin, validate_weixin_binding, weixin_binding)
 from mikasa.errors import Forbidden, MikasaError
 from mikasa.github import GitHub
 from tests.support import ROOT
@@ -50,6 +51,67 @@ class ConnectionTests(unittest.TestCase):
         self.data["feishu"] = {}
         with self.assertRaisesRegex(MikasaError, "绑定负责人"):
             feishu_environment(self.config)
+
+    def test_weixin_binding_fails_closed_and_diagnostics_do_not_expose_credentials(self):
+        value = {"actor": self.config.owner, "account_id": "fixture@im.bot", "user_id": "owner@im.wechat",
+                 "token": "private-fixture", "base_url": "https://ilinkai.weixin.qq.com"}
+        self.assertEqual(diagnostics(self.config, "weixin")["configuration"], "incomplete")
+        self.assertFalse(self.config.runtime.exists())
+        for change in ({"user_id": ""}, {"user_id": "*"}, {"user_id": "a,b"}, {"actor": "stranger"},
+                       {"account_id": "../secret"}, {"token": ""}, {"base_url": "https://weixin.qq.com.evil.invalid"},
+                       {"base_url": "http://ilinkai.weixin.qq.com"}):
+            with self.subTest(change=change), self.assertRaises(MikasaError):
+                validate_weixin_binding({**value, **change}, self.config.owner)
+        path = self.config.runtime / "credentials/weixin.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(value))
+        path.chmod(0o600)
+        self.assertEqual(weixin_binding(self.config), value)
+        result = diagnostics(self.config, "weixin")
+        self.assertEqual(result["configuration"], "ready")
+        self.assertEqual(result["connection"], "not_checked")
+        self.assertNotIn("private-fixture", json.dumps(result))
+        self.assertNotIn("owner@im.wechat", json.dumps(result))
+        with self.assertRaises(MikasaError):
+            diagnostics(self.config, "weixin", probe=True)
+        path.chmod(0o644)
+        with self.assertRaises(MikasaError):
+            weixin_binding(self.config)
+
+    def test_weixin_login_is_model_independent_and_preserves_active_profile(self):
+        with patch.dict(os.environ, {"GH_TOKEN": "unrelated", "MIKASA_MODEL_API_KEY": "unrelated"}), \
+                patch("mikasa.connections.subprocess.run", return_value=Mock(returncode=0)) as run:
+            self.assertEqual(login_weixin(self.config), 0)
+        self.assertNotIn("GH_TOKEN", run.call_args.kwargs["env"])
+        self.assertNotIn("MIKASA_MODEL_API_KEY", run.call_args.kwargs["env"])
+        self.assertFalse(Path(run.call_args.kwargs["env"]["HERMES_HOME"]).exists())
+        self.assertFalse((self.config.runtime / "native").exists())
+
+    def test_native_qr_worker_publishes_only_complete_binding_and_preserves_previous_on_failure(self):
+        python = self.native_python("aiohttp", "cryptography")
+        destination = self.path / "binding.json"
+        code = '''
+import os, sys, runpy
+sys.path.insert(0, os.environ['MIKASA_HERMES_SOURCE'])
+from gateway.platforms import weixin
+user_id = sys.argv[3]
+async def login(home):
+    return {'account_id': 'fixture@im.bot', 'token': 'private-fixture',
+            'base_url': 'https://ilinkai.weixin.qq.com', 'user_id': user_id}
+weixin.qr_login = login
+sys.argv = [sys.argv[1], sys.argv[2], 'Ceng-0324']
+runpy.run_path(sys.argv[0], run_name='__main__')
+'''
+        env = {"PATH": os.environ.get("PATH", ""), "HERMES_HOME": str(self.path),
+               "MIKASA_HERMES_SOURCE": str(ROOT / "runtime/cache/hermes-source")}
+        for user, status in (("owner@im.wechat", 0), ("", 1)):
+            reply = subprocess.run([str(python), "-c", code, str(ROOT / "workers/hermes/weixin_login.py"),
+                                    str(destination), user], cwd=self.path, env=env,
+                                   capture_output=True, text=True, timeout=20)
+            self.assertEqual(reply.returncode, status, reply.stderr)
+            self.assertNotIn("private-fixture", reply.stdout + reply.stderr)
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(json.loads(destination.read_text())["user_id"], "owner@im.wechat")
 
     def test_default_diagnostics_never_start_services_or_use_network(self):
         path = self.path / "config.json"

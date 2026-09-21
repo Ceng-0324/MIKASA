@@ -21,9 +21,10 @@ def parser():
     diagnostic.add_argument("--model", help="诊断指定模型的路由；不改变默认模型或聊天")
     commands.add_parser("serve")
     connections = commands.add_parser("connections", help="检查平台配置；--probe 只读联网，不发消息或发布")
-    connections.add_argument("platform", choices=("github", "feishu"))
+    connections.add_argument("platform", choices=("github", "feishu", "weixin"))
     connections.add_argument("--probe", action="store_true")
     commands.add_parser("feishu", help="以前台方式启动 Hermes 原生飞书负责人单聊")
+    commands.add_parser("weixin-login", help="用 Hermes 原生二维码绑定微信；不启动收发或调用模型")
     chat = commands.add_parser("chat", help="启动原生 Hermes 交互；/model、/new 等由 Hermes 处理")
     chat.add_argument("--session", help="恢复原生会话 ID；--message 模式使用旧 API 聊天 ID")
     chat.add_argument("--message", help="使用现有 HTTP 聊天适配发送单条消息，输出 JSON")
@@ -101,6 +102,9 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         config = Config.load(args.config)
+        if args.command == "weixin-login":
+            from .connections import login_weixin
+            return login_weixin(config)
         if args.command == "connections":
             from .connections import diagnostics
             value = diagnostics(config, args.platform, probe=args.probe)

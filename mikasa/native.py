@@ -64,11 +64,8 @@ def verify_source(source):
         raise MikasaError("原生 Hermes 必须使用固定且未修改的源码，无额外 .env 注入")
 
 
-@runtime_operation
-def prepare_profile(config, actor):
-    """Regenerate immutable inputs only. Never overwrite native memories or sessions."""
-    home = profile_home(config, actor)
-    home.mkdir(parents=True, exist_ok=True, mode=0o700)
+def native_installation(config):
+    """Locate and verify Hermes without preparing a model or touching a profile."""
     settings = config.data.get("worker", {})
     source = (config.root / settings.get("hermes_source", "runtime/cache/hermes-source")).resolve()
     python = Path(settings.get("native_python", config.root / "runtime/cache/hermes-venv/bin/python"))
@@ -77,6 +74,16 @@ def prepare_profile(config, actor):
     if not python.is_file() or not (source / "gateway/run.py").is_file():
         raise MikasaError("缺少原生 Hermes 源码或 Python 环境")
     verify_source(source)
+    return source, python
+
+
+@runtime_operation
+def prepare_profile(config, actor):
+    """Regenerate immutable inputs only. Never overwrite native memories or sessions."""
+    home = profile_home(config, actor)
+    home.mkdir(parents=True, exist_ok=True, mode=0o700)
+    settings = config.data.get("worker", {})
+    source, python = native_installation(config)
     if (home / ".env").exists():
         raise MikasaError("原生 profile 不允许额外 .env 注入")
     model = default_model(config)
