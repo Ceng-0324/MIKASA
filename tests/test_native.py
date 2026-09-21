@@ -57,6 +57,26 @@ class NativeProfileTests(unittest.TestCase):
         with self.assertRaises(Forbidden):
             prepare_profile(self.config, 'unknown')
 
+    def test_environment_routes_generate_distinct_native_providers_without_disk_keys(self):
+        from mikasa.native import provider_id
+        from mikasa.model_settings import MODEL_FIELDS
+        mapping = {key: 'CLAUDE_' + key for key in MODEL_FIELDS}
+        source = {'type': 'environment', 'env': mapping}
+        self.config.data['worker']['model_routes'] = [{'models': ['claude-test'], 'model_source': source}]
+        self.config.data['worker']['env_allowlist'].extend(mapping.values())
+        env = dict(zip(mapping.values(), ['claude-test', 'https://claude.invalid',
+                                         'claude-private-key', 'anthropic_messages']))
+        with patch.dict(os.environ, env):
+            home, _, _, credentials = prepare_profile(self.config, self.config.owner)
+        native = json.loads((home/'config.yaml').read_text())
+        gpt = native['providers'][native['model']['provider']]
+        claude = native['providers'][provider_id(source)]
+        self.assertEqual(gpt['api_mode'], 'codex_responses')
+        self.assertEqual(claude['api_mode'], 'anthropic_messages')
+        self.assertEqual(credentials[claude['key_env']], 'claude-private-key')
+        self.assertEqual(native['model_aliases']['claude-test']['provider'], provider_id(source))
+        self.assertFalse(any(b'claude-private-key' in p.read_bytes() for p in home.rglob('*') if p.is_file()))
+
     def test_messaging_policy_distinguishes_profile_owner_from_message_sender(self):
         from types import SimpleNamespace
         from unittest.mock import Mock

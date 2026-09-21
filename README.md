@@ -41,7 +41,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor
 
 飞书、微信共用 Hermes Gateway，负责人私聊和 `/help` 已真实接通；微信用于主人私聊，团队群协作用飞书。飞书已开放群聊准入，群聊实际收发仍待验收；同一 profile 共享长期记忆与系统命令能力。GitHub 已确认 `Mikasa-0910` 账号身份，仓库操作待验收。
 
-后续顺序为 **微信验收收尾 → VM → 聊天工程任务与 FluxCore 联合验收**。详细状态与限制只维护在[验证边界](docs/VALIDATION.md)，下一步见[推进计划](MIKASA_FUNCTION_PLAN.md)，平台配置见[接入手册](docs/runbooks/CONNECTIONS.md)。
+当前推进 **OrbStack VM 部署与消息验收 → 工程部署条件 → 聊天工程任务与 FluxCore 联合验收**。详细状态与限制只维护在[验证边界](docs/VALIDATION.md)，下一步见[推进计划](MIKASA_FUNCTION_PLAN.md)，平台配置见[接入手册](docs/runbooks/CONNECTIONS.md)。
 
 ## 开发
 

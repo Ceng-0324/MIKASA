@@ -22,6 +22,12 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor --model claude
 
 输出的 `requested_model` 是请求名，`reported_model` 是响应标识，`model_match` 为 same/different/unreported。即使 same，也不能独立证明供应商实际底层模型。`backend` 明确实际使用的 worker；夹具 worker 通过不算真实 CCH 联调。默认 doctor 的退出码仍只表示命令执行成功，模型配置状态读取 `model.configuration`。
 
+## VM 环境变量来源
+
+VM 使用 `environment` 来源，不复制个人 Codex/Claude 认证文件。`model_source.env` 可将四个模型字段映射到该路由专用的环境变量名；映射后的名字仍须列入 `worker.env_allowlist`。显式引用缺失、为空或未获允许时直接失败，不回退到另一套 Key 或协议。
+
+完整双协议示例见 [VM 配置](../../deploy/vm/config.example.json)及[环境模板](../../deploy/vm/runtime.env.example)：GPT 使用 Responses，Claude 使用 Messages。Hermes Gateway 接收各 provider 的 Key，工程 worker 只接收本次选中来源的标准模型变量，不继承其他路由的原始变量。模型 ID 与端点按实际 CCH 配置填写，分组仍由 CCH Key 决定。
+
 ## /model 跨 GPT 与 Claude 切换
 
 终端 `/model` 直接由 Hermes CLI 执行；HTTP 和 `chat --message` 暂保留旧 API 命令适配。两者均可使用 `/model gpt-6-astra` 或 `/model claude-opus-4-6`，保留上下文。原生 CLI 支持 session/once/global、provider/reasoning 等官方参数；原生选择器与目录校验不额外发送推理探针，实际可用性由请求验证。旧 API 只开放 session 范围，中文“切换为 完整模型ID”仍由适配器识别，真实推理验证成功后保存新选择。具体差异见 [聊天手册](CHAT.md)。

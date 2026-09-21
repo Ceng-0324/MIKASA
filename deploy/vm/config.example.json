@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "project_root": "/opt/mikasa",
+  "runtime": "/var/lib/mikasa",
+  "owner": "Ceng-0324",
+  "bot": "Mikasa-0910",
+  "members": [],
+  "repositories": {},
+  "worker": {
+    "command": ["/opt/hermes-venv/bin/python", "/opt/mikasa/workers/hermes/bridge.py"],
+    "hermes_source": "/opt/hermes",
+    "native_python": "/opt/hermes-venv/bin/python",
+    "home": "/var/lib/mikasa/home",
+    "timeout": 240,
+    "model_source": {
+      "type": "environment",
+      "env": {
+        "MIKASA_MODEL": "MIKASA_GPT_MODEL",
+        "MIKASA_MODEL_BASE_URL": "MIKASA_GPT_BASE_URL",
+        "MIKASA_MODEL_API_KEY": "MIKASA_GPT_API_KEY",
+        "MIKASA_MODEL_API_MODE": "MIKASA_GPT_API_MODE"
+      }
+    },
+    "model_routes": [{
+      "models": ["claude-opus-4-6"],
+      "prefixes": ["claude-", "anthropic/claude-"],
+      "model_source": {
+        "type": "environment",
+        "env": {
+          "MIKASA_MODEL": "MIKASA_CLAUDE_MODEL",
+          "MIKASA_MODEL_BASE_URL": "MIKASA_CLAUDE_BASE_URL",
+          "MIKASA_MODEL_API_KEY": "MIKASA_CLAUDE_API_KEY",
+          "MIKASA_MODEL_API_MODE": "MIKASA_CLAUDE_API_MODE"
+        }
+      }
+    }],
+    "env_allowlist": [
+      "MIKASA_GPT_MODEL", "MIKASA_GPT_BASE_URL", "MIKASA_GPT_API_KEY", "MIKASA_GPT_API_MODE",
+      "MIKASA_CLAUDE_MODEL", "MIKASA_CLAUDE_BASE_URL", "MIKASA_CLAUDE_API_KEY", "MIKASA_CLAUDE_API_MODE"
+    ]
+  },
+  "feishu": {
+    "domain": "feishu",
+    "app_id_env": "MIKASA_FEISHU_APP_ID",
+    "app_secret_env": "MIKASA_FEISHU_APP_SECRET"
+  },
+  "github": {"token_env": "MIKASA_GITHUB_TOKEN", "publish_enabled": false},
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8765,
+    "auto_review": false,
+    "tokens": {"Ceng-0324": "MIKASA_OWNER_API_TOKEN"},
+    "webhook_secret_env": "MIKASA_GITHUB_WEBHOOK_SECRET"
+  },
+  "schedules": {"audit_interval_seconds": 0}
+}

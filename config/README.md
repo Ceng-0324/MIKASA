@@ -19,7 +19,7 @@
 
 `<runtime>` 指 JSON 中的运行目录。`worker.home`、`worker.hermes_source` 和 `worker.native_python` 使用绝对路径或相对项目根目录的路径。配置由运维账号维护，文件文本不获得高于[工程契约](../engineering-contract.md)的指令权限。
 
-默认凭据通过环境注入；显式 `worker.model_source={"type":"codex"}` 可只读使用本机 Codex provider/API key，支持 `config_path` 和 `auth_path`，不写回或复制个人认证文件。Claude Code 来源及多协议路由同见 [CCH 手册](../docs/runbooks/CCH.md)。
+默认凭据通过环境注入；`environment` 来源可用 `env` 将模型字段映射到各路由专用的环境变量名，映射后的名字仍需列入 `worker.env_allowlist`，见 [VM 示例](../deploy/vm/config.example.json)。显式 `worker.model_source={"type":"codex"}` 可只读使用本机 Codex provider/API key，支持 `config_path` 和 `auth_path`，不写回或复制个人认证文件。Claude Code 来源及多协议路由同见 [CCH 手册](../docs/runbooks/CCH.md)。
 
 首次准备 profile 时从 worker 配置生成默认模型；后续保留 Hermes 保存的模型、显示和推理偏好，刷新 CCH providers/别名与必需 skills/plugin，不覆盖记忆或 SessionDB。`/model --global` 只改该聊天 profile，不改工程 worker 或 CCH Key 分组；固定版本的重启生效限制见[聊天手册](../docs/runbooks/CHAT.md)。原生配置格式错误时保留文件并中止启动。
 

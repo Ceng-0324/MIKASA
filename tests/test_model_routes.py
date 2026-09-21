@@ -56,6 +56,30 @@ class ModelRouteTests(BaseTest):
             with self.subTest(routes=routes), self.assertRaises(MikasaError):
                 validate_routes(routes)
 
+    def test_environment_routes_forward_only_selected_credentials_to_worker(self):
+        from mikasa.model_settings import MODEL_FIELDS
+        mappings = {name: {key: name.upper() + '_' + key for key in MODEL_FIELDS}
+                    for name in ('gpt', 'claude')}
+        env = {}
+        for name, mode in [('gpt', 'codex_responses'), ('claude', 'anthropic_messages')]:
+            env.update(dict(zip(mappings[name].values(),
+                                [name + '-test', 'https://' + name + '.invalid', name + '-secret', mode])))
+        self.settings.update(model_source={'type': 'environment', 'env': mappings['gpt']},
+                             model_routes=[{'models': ['claude-test'],
+                                            'model_source': {'type': 'environment', 'env': mappings['claude']}}],
+                             env_allowlist=list(env))
+        seen = []
+        def run(*args, **kwargs):
+            child = kwargs['env']
+            self.assertFalse(set(env) & set(child))
+            seen.append((child['MIKASA_MODEL'], child['MIKASA_MODEL_API_KEY'], child['MIKASA_MODEL_API_MODE']))
+            return {'code': 0, 'stdout': json.dumps({'version': 1, 'runtime': {'backend': 'fixture'}, 'result': {'summary': 'ok'}})}
+        with patch.dict(os.environ, env, clear=True), patch('mikasa.worker.run', side_effect=run):
+            for model in ('gpt-test', 'claude-test'):
+                Worker(self.config).execute({'payload': {'kind': 'chat'}}, {}, lambda: False, model=model)
+        self.assertEqual(seen, [('gpt-test', 'gpt-secret', 'codex_responses'),
+                                ('claude-test', 'claude-secret', 'anthropic_messages')])
+
     def test_missing_claude_source_never_falls_back_to_gpt_credentials(self):
         self.claude.unlink()
         with patch('mikasa.worker.run') as run, self.assertRaises(MikasaError):

@@ -7,7 +7,7 @@ from unittest.mock import patch
 from mikasa.cli import doctor, main
 from mikasa.errors import MikasaError
 from mikasa.model_errors import ModelFailure, classify_failure
-from mikasa.model_settings import model_diagnostics, model_environment
+from mikasa.model_settings import model_diagnostics, model_environment, validate_source
 from mikasa.worker import Worker
 from tests.support import BaseTest
 
@@ -44,6 +44,29 @@ class ModelSettingsTests(BaseTest):
                         Worker(self.config).execute({"payload": {"kind": "chat"}}, {}, lambda: False)
                     run.assert_not_called()
                     self.assertNotIn("private", str(caught.exception))
+
+    def test_environment_mapping_requires_explicit_names_and_never_falls_back(self):
+        mapping = {key: 'VM_' + key for key in self.env}
+        settings = {'model_source': {'type': 'environment', 'env': mapping},
+                    'env_allowlist': list(mapping.values())}
+        env = {mapping[key]: value for key, value in self.env.items()}
+        with patch.dict(os.environ, {**self.env, **env}, clear=True):
+            self.assertEqual(model_environment(settings), self.env)
+            self.assertEqual(model_environment(settings, 'model-b')['MIKASA_MODEL'], 'model-b')
+            for field, name in mapping.items():
+                with self.subTest(field=field), patch.dict(os.environ, {**self.env, **env}, clear=True):
+                    os.environ.pop(name)
+                    with self.assertRaises(MikasaError):
+                        model_environment(settings)
+                    self.assertEqual(model_diagnostics(settings)['configuration'], 'invalid')
+            with self.assertRaises(MikasaError):
+                model_environment({**settings, 'env_allowlist': []})
+        for source in ({'type': 'codex', 'env': mapping}, {'type': 'environment', 'env': []},
+                       {'type': 'environment', 'env': {'TOKEN': 'VM_TOKEN'}},
+                       {'type': 'environment', 'env': {'MIKASA_MODEL_API_KEY': 'private-key'}},
+                       {'type': 'environment', 'env': {'MIKASA_MODEL_API_KEY': 42}}):
+            with self.subTest(source=source), self.assertRaises(MikasaError):
+                validate_source(source)
 
     def test_codex_bad_shapes_are_safe_and_environment_key_has_precedence(self):
         cfg = self.path / "codex.toml"

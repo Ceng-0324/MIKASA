@@ -32,8 +32,15 @@ API_MODES = {"codex_responses", "chat_completions", "anthropic_messages"}
 def validate_source(selection):
     if not isinstance(selection, dict) or selection.get("type") not in {"environment", "codex", "claude"}:
         raise MikasaError("worker.model_source.type 必须为 environment、codex 或 claude")
-    if set(selection) - {"type", "config_path", "auth_path"}:
+    if set(selection) - {"type", "config_path", "auth_path", "env"}:
         raise MikasaError("model_source 仅保存读取来源，不允许内嵌凭据")
+    if "env" in selection:
+        mapping = selection["env"]
+        if (selection["type"] != "environment" or not isinstance(mapping, dict)
+                or set(mapping) - set(MODEL_FIELDS)
+                or any(not isinstance(v, str) or not re.fullmatch(r"[A-Z_][A-Z0-9_]*", v)
+                       for v in mapping.values())):
+            raise MikasaError("environment 来源的 env 必须将模型字段映射到环境变量名")
     for field in ("config_path", "auth_path"):
         if field in selection and (not isinstance(selection[field], str) or not selection[field]):
             raise MikasaError("模型来源路径必须为非空字符串")
@@ -115,7 +122,12 @@ def model_environment(settings, model=None):
     validate_source(selection)
     source = selection.get("type")
     if source == "environment":
-        env = {k: os.environ[k] for k in MODEL_FIELDS if k in settings.get("env_allowlist", []) and k in os.environ}
+        if any(name not in settings.get("env_allowlist", []) or not os.environ.get(name)
+               for name in selection.get("env", {}).values()):
+            raise MikasaError("模型来源引用的环境变量缺失或未列入 env_allowlist")
+        names = {k: selection.get("env", {}).get(k, k) for k in MODEL_FIELDS}
+        env = {k: os.environ[name] for k, name in names.items()
+               if name in settings.get("env_allowlist", []) and name in os.environ}
         if model is not None:
             env["MIKASA_MODEL"] = model
         return validate_environment(env)

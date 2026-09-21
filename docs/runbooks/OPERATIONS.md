@@ -96,7 +96,7 @@ python3.12 -m mikasa --config config/local/mikasa.json restore /secure/backups/m
 
 ## VM 部署
 
-`deploy/vm/` 提供 systemd API 和 runner 模板。以专用 `mikasa` 用户安装项目到 `/opt/mikasa`、Hermes 到 `/opt/hermes`，状态放 `/var/lib/mikasa`，受限环境文件放 `/etc/mikasa/runtime.env`。设置 `HERMES_HOME=/var/lib/mikasa/hermes`，不能使用个人 home。
+按 [VM 部署手册](../../deploy/vm/README.md)执行。当前提供统一消息 Gateway、API 和 runner 的 systemd 模板；首先部署飞书/微信，工程任务及公网 API 后续接入。以专用 `mikasa` 用户运行，代码位于 `/opt/mikasa`、Hermes 位于 `/opt/hermes`，状态位于 `/var/lib/mikasa`，凭据由 `/etc/mikasa/runtime.env` 注入；各 home 由项目配置与 Hermes profile 管理，不能使用个人 home。
 
 模板包含只读系统目录、PrivateTmp、NoNewPrivileges、0077 umask 和进程组终止。模板尚未在目标 Linux VM 验证；部署时运行 `systemd-analyze verify`，确认 Python 路径、Docker 访问、可写目录、网络和 TLS 后再安装启用。停止服务由 systemd 杀死完整控制组；容器异常残留需按 `mikasa-check-` 前缀检查清理。
 

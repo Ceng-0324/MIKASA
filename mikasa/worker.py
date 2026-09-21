@@ -94,7 +94,11 @@ class Worker:
         # Clear allowlisted model fields before applying a selected source, so a
         # different route cannot inherit the previous source's mode or key.
         from .model_settings import MODEL_FIELDS
-        for field in MODEL_FIELDS:
+        model_variables = set(MODEL_FIELDS)
+        for source in [settings.get("model_source", {}),
+                       *(route["model_source"] for route in settings.get("model_routes", []))]:
+            model_variables.update(source.get("env", {}).values())
+        for field in model_variables:
             extra.pop(field, None)
         extra.update(model_environment(settings, model))
         if model is not None:
