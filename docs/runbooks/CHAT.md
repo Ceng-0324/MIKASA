@@ -68,6 +68,10 @@ CLI 启动原生 CLI 子进程，HTTP 启动原生 Gateway 子进程；同一账
 
 初始化更新身份/规则、必需 skills/plugin 和生成的 CCH 配置，保留 Hermes 自己保存的默认模型、推理和显示偏好。`config.yaml` 的 YAML/JSON 都可读取，刷新写为 JSON（合法 YAML），不保留 YAML 注释；格式错误时保留原文件并阻止启动。长期记忆和原生数据库不由配置初始化覆盖。
 
+飞书、微信中的 `/sethome` 直接使用 Hermes 原生命令，将当前聊天设为该平台默认投递目标。重启读取原生 `config.yaml` 中的完整目标；同时允许 Hermes 写入 `.env` 的 `FEISHU_HOME_CHANNEL`、`WEIXIN_HOME_CHANNEL` 及各自 `_THREAD_ID` 字段。其他环境变量、插值和无效格式会阻止启动，模型和平台凭据仍由显式运行配置提供。备份排除 `.env`，通过 `config.yaml` 保留投递目标及发送者/线程信息，恢复不依赖环境文件。
+
+明确要求跨会话记住非敏感事实时，Mikasa 应调用原生 memory 工具，成功后再确认。`/new` 会切换会话，不删除 MEMORY/USER；重启同样保留原生记忆。口头说“记住了”不等于已持久化，验收须同时核对工具结果、新会话回答与磁盘记录。
+
 被删除的 CCH 来源不再留在生成的 provider/别名列表。若该来源仍是原生默认 provider，启动会保留旧配置并报错；恢复来源或修正 profile 的默认 provider 后再启动，不自动回退到其他模型。
 
 首次打开账号 profile，会用 Hermes SessionDB 的原生接口导入旧聊天的全部普通消息；命令回执不进入模型历史。原 SQLite 保留，导入标记防止重复；冲突会阻止启动，不覆盖数据。新请求只保存摘要与 native run 引用，不复制正文。已接受但中断的请求先检查原生状态，重试使用同一幂等键，不重新推理。

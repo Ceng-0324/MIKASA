@@ -6,6 +6,22 @@ import sys
 from pathlib import Path
 
 
+def validate_home_env(path):
+    if path.is_symlink():
+        raise ValueError("profile env cannot be a symlink")
+    if not path.exists():
+        return
+    # /sethome writes legacy delivery hints here; credentials still come from the launcher.
+    from dotenv.parser import parse_stream
+    allowed = {platform + "_HOME_CHANNEL" + suffix
+               for platform in ("FEISHU", "WEIXIN") for suffix in ("", "_THREAD_ID")}
+    with path.open() as stream:
+        for binding in parse_stream(stream):
+            if binding.error or (binding.key is not None and
+                    (binding.key not in allowed or binding.value is None or "${" in binding.value)):
+                raise ValueError("profile env may contain only literal native home preferences")
+
+
 def merge(current, generated):
     # Hermes owns user preferences, including /model --global and reasoning.
     merged = {**generated, **current}
@@ -32,6 +48,7 @@ def merge(current, generated):
 
 def main():
     path = Path(sys.argv[1])
+    validate_home_env(path.parent / ".env")
     if path.is_symlink():
         raise ValueError("profile config cannot be a symlink")
     current = {}

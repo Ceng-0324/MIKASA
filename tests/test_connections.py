@@ -260,6 +260,94 @@ print('pinned Feishu SDK admission and Gateway configuration: passed')
                                input=json.dumps(settings), capture_output=True, text=True, timeout=30)
         self.assertEqual(reply.returncode, 0, reply.stderr)
 
+    def test_native_sethome_survives_profile_refresh_restart_and_env_free_restore(self):
+        from mikasa.native import prepare_profile
+        self.native_python("dotenv", "openai", "anthropic", "aiohttp")
+        model_env = {"MIKASA_MODEL": "fixture-model", "MIKASA_MODEL_BASE_URL": "https://cch.invalid/v1",
+                     "MIKASA_MODEL_API_KEY": "fixture-model-secret", "MIKASA_MODEL_API_MODE": "codex_responses"}
+        with patch.dict(os.environ, model_env):
+            home, source, python, credentials = prepare_profile(self.config, self.config.owner)
+        explicit = home / 'gateway-messaging.json'
+        explicit.write_text(json.dumps({'platforms': {
+            name: {'enabled': True, 'gateway_restart_notification': False, 'extra': {'fixture': True}}
+            for name in ('feishu', 'weixin')}}))
+        env = {"PATH": os.environ.get("PATH", ""), "HERMES_HOME": str(home),
+               "MIKASA_HERMES_SOURCE": str(source), "HERMES_ENABLE_PROJECT_PLUGINS": "0", **credentials}
+        code = '''
+import asyncio, json, os, sys
+from pathlib import Path
+from types import SimpleNamespace as N
+sys.path.insert(0, os.environ['MIKASA_HERMES_SOURCE'])
+sys.path.insert(0, sys.argv[1])
+from gateway.run import GatewayRunner
+from gateway.config import GatewayConfig, Platform
+from workers.hermes.native_gateway import messaging_config
+home = Path(os.environ['HERMES_HOME'])
+if sys.argv[2] == 'save':
+    runner = N(config=GatewayConfig())
+    for name in ('feishu', 'weixin'):
+        source = N(platform=Platform(name), chat_id=name+'-chat', chat_name='Home',
+                   user_id=name+'-user', scope_id=name+'-scope', thread_id=None,
+                   chat_type='dm', delivered_via_upstream_relay=False)
+        asyncio.run(GatewayRunner._handle_set_home_command(runner, N(source=source)))
+    assert (home / '.env').exists()
+config = messaging_config(home / 'gateway-messaging.json')
+assert set(config.platforms) == {Platform.FEISHU, Platform.WEIXIN}
+for name in ('feishu', 'weixin'):
+    settings = config.platforms[Platform(name)]
+    assert settings.home_channel.chat_id == name+'-chat'
+    assert settings.home_channel.user_id == name+'-user'
+    assert settings.home_channel.scope_id == name+'-scope'
+    assert settings.extra == {'fixture': True}
+    assert not settings.gateway_restart_notification
+assert 'fixture-model-secret' in os.environ.values()
+'''
+        def check(mode):
+            result = subprocess.run([str(python), '-c', code, str(ROOT), mode],
+                                    cwd=home / 'workspace', env=env, capture_output=True, text=True, timeout=45)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        check('save')
+        original = (home / '.env').read_bytes()
+        with patch.dict(os.environ, model_env):
+            prepare_profile(self.config, self.config.owner)
+        self.assertEqual((home / '.env').read_bytes(), original)
+        check('restart')
+        (home / '.env').unlink()  # Backups keep canonical config.yaml, never credential files.
+        check('restored')
+
+    def test_profile_home_env_validation_uses_dotenv_without_loading_credentials(self):
+        python = self.native_python('dotenv')
+        code = '''
+import os, sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from workers.hermes.profile_config import validate_home_env
+path = Path('profile.env')
+path.write_text("# Native compatibility hints\\nexport FEISHU_HOME_CHANNEL='chat-id'\\nWEIXIN_HOME_CHANNEL_THREAD_ID=\\n")
+validate_home_env(path)
+assert 'FEISHU_HOME_CHANNEL' not in os.environ
+for content in ("OPENAI_API_KEY=private", "FEISHU_HOME_CHANNEL='unterminated", "WEIXIN_HOME_CHANNEL",
+                "FEISHU_HOME_CHANNEL=${OPENAI_API_KEY}", "FEISHU_HOME_CHANNEL=ok\\nMIKASA_CCH_TEST=private"):
+    path.write_text(content)
+    try:
+        validate_home_env(path)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('unexpected env accepted')
+path.unlink()
+path.symlink_to('missing')
+try:
+    validate_home_env(path)
+except ValueError:
+    pass
+else:
+    raise AssertionError('symlink accepted')
+'''
+        result = subprocess.run([str(python), '-c', code, str(ROOT)], cwd=self.path,
+                                env={'PATH': os.environ.get('PATH', '')}, capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_pinned_gateway_entry_loads_identity_policy_and_persona_without_connecting(self):
         from mikasa.native import prepare_profile
         self.native_python("openai", "anthropic", "aiohttp")

@@ -28,7 +28,11 @@ class BackupTests(BaseTest):
         memory.mkdir(parents=True)
         (memory / 'MEMORY.md').write_text('Persistent memory')
         (home / '.api-key').write_text('local-service-identity')
+        home_channel = {'platform': 'feishu', 'chat_id': 'test-chat', 'name': 'Test home',
+                        'thread_id': 'test-thread', 'user_id': 'test-user', 'scope_id': 'test-scope'}
+        (home / '.env').write_text("FEISHU_HOME_CHANNEL='test-chat'\n")
         (home / 'config.yaml').write_text(json.dumps({'model': {'default': 'retained'},
+            'platforms': {'feishu': {'home_channel': home_channel}},
             'providers': {'local': {'api_key': 'external-secret', 'key_env': 'MY_MODEL_KEY'}},
             'terminal': {'cwd': str(home / 'workspace')}}))
         engineering = runtime / 'engineering' / task['id']
@@ -78,6 +82,8 @@ class BackupTests(BaseTest):
             self.assertEqual(db.execute('SELECT COUNT(*) FROM gateway_routing WHERE scope=?',
                                        (str(home / 'sessions'),)).fetchone()[0], 1)
         cfg = json.loads((restored / 'native/account/config.yaml').read_text())
+        self.assertEqual(cfg['platforms']['feishu']['home_channel'], home_channel)
+        self.assertFalse((restored / 'native/account/.env').exists())
         self.assertNotIn('api_key', cfg['providers']['local'])
         self.assertEqual(cfg['providers']['local']['key_env'], 'MY_MODEL_KEY')
         self.assertEqual(cfg['terminal']['cwd'], str(restored / 'native/account/workspace'))

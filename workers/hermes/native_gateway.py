@@ -6,6 +6,19 @@ import asyncio
 from pathlib import Path
 
 sys.path.insert(0, os.environ["MIKASA_HERMES_SOURCE"])
+
+
+def messaging_config(path):
+    from gateway.config import GatewayConfig
+    from hermes_cli.config import load_config
+    config = GatewayConfig.from_dict(json.loads(path.read_text()))
+    saved = GatewayConfig.from_dict(load_config())
+    for platform, settings in config.platforms.items():
+        # Hermes owns /sethome persistence, including user/scope/thread provenance.
+        settings.home_channel = saved.get_home_channel(platform)
+    return config
+
+
 if __name__ == "__main__":
     if Path.cwd() != Path(os.environ["HERMES_HOME"]) / "workspace":
         raise SystemExit("isolated workspace required")
@@ -20,11 +33,11 @@ if __name__ == "__main__":
         raise SystemExit("Required persona skill not loaded; refusing to start")
     if "--config" in sys.argv:
         # Explicit messaging startup must not silently become a cron-only process.
-        from gateway.config import GatewayConfig, Platform
+        from gateway.config import Platform
         from gateway.platform_registry import platform_registry
         from gateway.run import _instantiate_builtin_adapter, start_gateway, _exit_after_graceful_shutdown
         path = Path(sys.argv[sys.argv.index("--config") + 1])
-        config = GatewayConfig.from_dict(json.loads(path.read_text()))
+        config = messaging_config(path)
         for platform, settings in config.platforms.items():
             if not settings.enabled:
                 continue

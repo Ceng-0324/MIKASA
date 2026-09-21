@@ -84,8 +84,6 @@ def prepare_profile(config, actor):
     home.mkdir(parents=True, exist_ok=True, mode=0o700)
     settings = config.data.get("worker", {})
     source, python = native_installation(config)
-    if (home / ".env").exists():
-        raise MikasaError("原生 profile 不允许额外 .env 注入")
     actor_identity = {"actor": actor}
     binding_path = config.runtime / "credentials/weixin.json"
     if binding_path.exists() or binding_path.is_symlink():
@@ -128,7 +126,7 @@ def prepare_profile(config, actor):
                                input=json.dumps(native_config), capture_output=True, text=True, timeout=30,
                                env={k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL", "TMPDIR") if k in os.environ})
     if refreshed.returncode:
-        raise MikasaError("原生配置更新失败；原有配置保留，请检查配置结构及所选 CCH provider 是否仍在配置中")
+        raise MikasaError("原生配置更新失败；原有配置保留，请检查配置结构、所选 CCH provider 及 .env 是否仅包含原生投递偏好")
     private_write(home / "SOUL.md", (config.root / "identity.md").read_text())
     # Snapshots are generated from the canonical files, never maintained separately.
     for name in ("engineering-contract.md", "engineering-workflow.md"):
