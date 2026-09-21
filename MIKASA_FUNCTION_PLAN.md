@@ -14,7 +14,7 @@
 
 CCH `default` 是 Key 的供应商分组，仍需网关管理员配置与同次路由证据；本地模型名或连接成功不能证明分组已切换。见 [CCH 手册](docs/runbooks/CCH.md)。
 
-当前已提供 `connections github|feishu [--probe]` 诊断及 `feishu` 原生长连接入口。GitHub 独立账号 `Mikasa-0910` 已通过真实 token 身份检查，无需预先指定仓库；具体仓库与操作权限按后续任务处理。飞书应用机器人已通过真实认证，负责人 ID 已配置，身份与原生记忆复用负责人 profile，暂不开放群聊或聊天工程任务。平台准备步骤见[接入手册](docs/runbooks/CONNECTIONS.md)。接下来确认应用发布与事件订阅，进行长连接和真实消息验收；VM 信息留下一阶段。
+当前已提供 `connections github|feishu [--probe]` 诊断及 `feishu` 原生长连接入口。GitHub 独立账号 `Mikasa-0910` 已通过真实 token 身份检查，无需预先指定仓库；具体仓库与操作权限按后续任务处理。飞书应用机器人、负责人单聊、原生会话、CCH 回复和身份/skills 加载已真实验收，暂不开放群聊或聊天工程任务。下一步进入 VM 部署，再做聊天工程任务与 FluxCore 联合验收。
 
 ## 收窄条件
 

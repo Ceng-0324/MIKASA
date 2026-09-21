@@ -4,6 +4,14 @@
 
 ## 本轮验证
 
+飞书真实联调已完成：应用凭据探针通过后，Hermes 原生 WebSocket 日志记录已连接；负责人实际收到 `/help` 和普通自我介绍消息的回复。SQLite 生成了 `source=feishu` 的原生会话，模型回执为 `gpt-6-astra`；运行证据显示身份、工程规则、persona skill 与 skills 索引均加载。新版人格规则再用两条真实 CCH 对话验证，自我介绍与情绪回应已从职责清单改为自然短答。发送与接收无错误。
+
+联调中发现并修复两处启动问题：固定依赖快照缺少 Hermes 飞书平台注册需要的 `qrcode`，以及显式飞书 Gateway 配置未传入 App ID；同时加入启动前平台准入检查，阻止依赖/配置准入失败后退化为“仅运行 Cron”的假成功。连接后的网络失败仍由 Hermes 原生重试和状态处理。固定环境补装 `qrcode==7.4.2` 与 `pypng==0.20220715.0`，未修改 Hermes 源码。全量 188 项通过（254.206 秒）；人格调整后 27 项接入/原生/persona 回归通过（5.129 秒），文档与 diff 检查通过。
+
+macOS 本机还记录一个 Hermes 可选 liveness UNIX socket 路径过长警告；飞书 WebSocket 不受影响，后续 VM 部署时使用较短 `HERMES_HOME` 路径复验。旧 profile 的 `.env` 仅含此前 `/sethome` 写入的飞书默认投递字段，已移出并保留为本机 `native-home-channel.env.saved`，不含模型或应用凭据。
+
+## 飞书认证与消息前
+
 飞书应用凭据已从本机 JSON 的误填字段移至 `config/local/platforms.env`，文件权限为 0600，JSON 恢复为环境变量名称，两份文件均被 Git 忽略。复用固定 Hermes 官方探针完成真实机器人认证，返回 `configuration=ready`、`connection=passed`、`bot_identity=passed`、`owner_bound=true`。未输出凭据、建立长连接或发送消息；负责人真实消息身份和收发仍为 `not_checked`。应用发布、权限生效与事件订阅待消息联调核实。
 
 ## GitHub 认证
@@ -49,6 +57,6 @@ GitHub/飞书接入准备：全量 **187 项 unittest 通过（323.032 秒）**�
 
 ## 尚未验收
 
-GitHub 真实账号身份及飞书应用机器人认证已验证；仓库权限、正式写入与 webhook，飞书真实用户/事件/消息往返，目标 VM、TLS 与恢复演练，以及聊天工程入口和 FluxCore 联合验收均未完成。CCH 管理端分组证据仍缺失；不重复绕过先前的 WAF 拒绝。
+GitHub 真实账号身份及飞书应用机器人认证、负责人单聊消息往返已验证；GitHub 仓库权限、正式写入与 webhook，飞书群聊、目标 VM、TLS 与恢复演练，以及聊天工程入口和 FluxCore 联合验收均未完成。CCH 管理端分组证据仍缺失；不重复绕过先前的 WAF 拒绝。
 
 SDK/模型夹具证明协议、工具和存储链路，不能证明真实模型始终遵循人格、skills 和记忆。默认 doctor 不联网；`--probe-model` 才消耗模型额度。所有可重复探针及其前提见 [脚本说明](../scripts/README.md)。
