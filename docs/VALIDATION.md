@@ -1,5 +1,7 @@
 # 本体开发验证记录
 
+2026-09-21 完整状态备份阶段：基线 `3b436b1` 加本阶段变更，全量 **177 项通过（244.515 秒）**；真实 Hermes Gateway + 本地模型夹具的事件/迁移探针 **15 项通过**。恢复到全新 runtime 后原有回复、历史、服务 Key、MEMORY 和取消回执可读取，不重复推理。新增备份回归覆盖 WAL、配对数据库、Cron 文件、Git 对象/执行位、记忆链接、路径迁移、凭据排除、并发拒绝、篡改和失败不发布目标。文档检查、doctor 和 diff 检查通过；未调用 CCH 或外部平台。全量测试出现一次已关闭 socket 的 ResourceWarning，不影响结果，后续清理阶段继续定位。备份用法以 [操作手册](runbooks/OPERATIONS.md) 为准，下面旧阶段的双库备份描述仅为历史。
+
 最新运行事件迁移验收见 [0012](decisions/0012-native-run-events.md)：2026-09-21，基线 `831e946` 加本阶段变更，`python3.12 -m unittest discover -v` **171 项通过（238.953 秒）**。新增 11 项本地 HTTP 协议测试，覆盖事件完成通知、正常路径不轮询、CRLF/多行帧、终态后保持连接、已完成回执、EOF/404 后持久状态恢复、静默流取消、超时与 stop 失败、失败终态、鉴权错误、畸形/超限帧与读取线程清理。现有聊天、模型切换、身份、skills、Kanban 和 Cron 回归继续通过。
 
 `python3.12 scripts/probe_native_events.py` **14 项全部通过**：真实固定 Hermes Gateway 与原生 SSE、临时 profile、本地模型 HTTP 夹具，验收完成通知、持久回复、原生 memory 写入、工具历史、身份/工程规则/persona/skills 索引证据、同一 run 幂等重放、暂停停止、Gateway 重启后的原结果/历史/API Key 保留、取消运行不重启、合成模型 Key 不落盘和读取线程回收。夹具显式触发 memory 工具，不能据此声称真实模型必然主动遵循约定。没有重跑工程 Docker 或真实 CCH 跨协议场景。

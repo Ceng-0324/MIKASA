@@ -17,6 +17,8 @@ from mikasa.errors import MikasaError
 from mikasa.native import HERMES_REVISION, NativeGateway
 from mikasa.run_events import RunEvents
 from mikasa.store import Store
+from mikasa.backup import backup_state, restore_state
+from mikasa.service import Service
 
 
 def main():
@@ -90,7 +92,7 @@ def main():
     try:
         with tempfile.TemporaryDirectory(prefix='mkevents-', dir='/tmp') as directory:
             data = json.loads((root / 'config/examples/mikasa.json').read_text())
-            data.update(runtime=directory)
+            data.update(runtime=str(Path(directory) / 'runtime'))
             data['worker']['timeout'] = 40
             config = Config(root, data)
             Store(config.runtime)
@@ -135,12 +137,19 @@ def main():
                     checks['native_stop_observed'] = stop['status'] in {'cancelled', 'interrupted'}
                     checks['all_stream_readers_joined'] = all(e['joined'] for e in observed)
 
+                backup = Path(directory) / 'backup'
+                restored = Path(directory) / 'restored'
+                backup_state(Service(config), backup)
+                restore_state(config, backup, restored)
+                data['runtime'] = str(restored)
+                config = Config(root, data)
                 count, streams = len(requests), len(observed)
                 with NativeGateway(config, config.owner) as gateway:
                     restarted = gateway.wait(run['run_id'])
                     checks['restart_recovers_durable_result_without_stream'] = (
                         restarted == result and len(observed) == streams and len(requests) == count)
                     checks['profile_key_and_history_preserved'] = gateway.key == key and gateway.messages(session)['data'] == rows
+                    checks['restored_profile_memory_preserved'] = 'Event probe memory marker.' in (gateway.home / 'memories/MEMORY.md').read_text()
                     try:
                         gateway.wait(cancel_run['run_id'])
                     except MikasaError:

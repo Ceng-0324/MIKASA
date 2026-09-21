@@ -4,6 +4,7 @@ import json
 from .errors import Conflict, MikasaError
 from .native import verify_source
 from .process import clean_env, run
+from .maintenance import runtime_operation
 
 
 class Cron:
@@ -11,6 +12,7 @@ class Cron:
         self.config, self.tasks = config, tasks
         self.home = config.runtime / 'scheduler'
 
+    @runtime_operation
     def tick(self, paused=False):
         interval = self.config.data.get('schedules', {}).get('audit_interval_seconds', 0)
         if not interval and not self.home.exists():

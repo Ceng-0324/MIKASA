@@ -12,6 +12,7 @@ from .model_settings import default_model, model_choices
 from .store import Store
 from .worker import Worker
 from .native import NativeAPIError, NativeGateways
+from .maintenance import runtime_operation
 
 
 # Only a complete direct user command can change state. Quoted text, questions,
@@ -61,6 +62,7 @@ class Chat:
     def __exit__(self, *args):
         self.close()
 
+    @runtime_operation
     def create(self, actor):
         self.config.authorize(actor)
         session = uuid.uuid4().hex
@@ -135,6 +137,7 @@ class Chat:
         with self.store.connect() as db:
             db.execute("UPDATE chat_requests SET active_run=? WHERE chat_id=? AND request_key=?", (run, session, key))
 
+    @runtime_operation
     def stop(self, session, actor):
         self.owned(session, actor)
         gateway = self.gateways.for_actor(actor)
@@ -155,6 +158,7 @@ class Chat:
                     db.execute("UPDATE chat_requests SET active_run=NULL WHERE chat_id=? AND active_run=?", (session, run))
         return {"chat_id": session, "stop_requested": bool(stopped), "runs": stopped}
 
+    @runtime_operation
     def send(self, session, actor, message, key):
         self.owned(session, actor)  # Authenticate before opening an actor's native profile.
         if not isinstance(message, str) or not message.strip() or len(message) > 10000:

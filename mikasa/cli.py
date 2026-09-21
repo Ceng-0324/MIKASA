@@ -49,8 +49,11 @@ def parser():
     resolve.add_argument("external_id", type=int)
     commands.add_parser("pause")
     commands.add_parser("resume")
-    backup = commands.add_parser("backup", help="备份任务与回执到新目录；不含原生账号会话/记忆和工作区")
+    backup = commands.add_parser("backup", help="停服后备份完整受管状态到新目录")
     backup.add_argument("destination")
+    restore = commands.add_parser("restore", help="校验备份并恢复到新 runtime；不覆盖现有目录或启动服务")
+    restore.add_argument("source")
+    restore.add_argument("destination")
     return p
 
 
@@ -94,6 +97,10 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         config = Config.load(args.config)
+        if args.command == "restore":
+            from .backup import restore_state
+            print(json.dumps(restore_state(config, args.source, args.destination), ensure_ascii=False, indent=2))
+            return 0
         if args.command == "doctor":
             value = doctor(config, probe_model=args.probe_model, selected_model=args.model)
             print(json.dumps(value, ensure_ascii=False, indent=2))
@@ -161,8 +168,8 @@ def main(argv=None):
             elif cmd == "resolve-publication":
                 value = service.resolve_publication(args.task, args.external_id, actor)
             elif cmd == "backup":
-                from .backup import backup_tasks
-                value = backup_tasks(service, args.destination)
+                from .backup import backup_state
+                value = backup_state(service, args.destination)
         print(json.dumps(value, ensure_ascii=False, indent=2))
         return 0
     except MikasaError as exc:

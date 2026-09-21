@@ -11,6 +11,7 @@ from .process import clean_env, git
 from .store import Store
 from .kanban import Kanban
 from .cron import Cron
+from .maintenance import runtime_operation
 from .worker import Worker
 from .workspace import Workspace
 from .agent_tools import run_checks
@@ -61,6 +62,7 @@ class Service:
                 raise MikasaError("完成任务必须记录证据")
         return self.tasks.transition(task_id, action, actor, assignee=data.get("assignee"), evidence=data.get("evidence"))
 
+    @runtime_operation
     def expand(self, task_id, actor):
         self.config.authorize(actor, owner=True)
         task = self.tasks.get(task_id)
@@ -73,6 +75,7 @@ class Service:
                                         actor, f"plan:{task_id}:{i}"))
         return children
 
+    @runtime_operation
     def run_once(self):
         self.tasks.call('prepare')  # First migration takes its own runner lock.
         lock_path = self.config.runtime / "runner.lock"
@@ -188,6 +191,7 @@ class Service:
         result["branch"] = f"mikasa/task-{task['id']}"
         return result, "awaiting_review"
 
+    @runtime_operation
     def publish(self, task_id, actor):
         self.config.authorize(actor, owner=True)
         if self.store.paused():
@@ -238,6 +242,7 @@ class Service:
             self.store.publication(task_id, "uncertain", {"note": "可能已发生外部写入；人工核对后处理，不自动重发"})
             raise
 
+    @runtime_operation
     def resolve_publication(self, task_id, external_id, actor):
         self.config.authorize(actor, owner=True)
         task = self.tasks.get(task_id)

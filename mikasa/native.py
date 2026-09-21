@@ -16,6 +16,7 @@ from urllib.request import Request, build_opener, ProxyHandler
 from .errors import Conflict, MikasaError
 from .model_settings import default_model, model_choices, model_environment, select_source, validate_environment
 from .run_events import RunEvents, TERMINAL
+from .maintenance import runtime_lock, runtime_operation
 
 HERMES_REVISION = "f9524d3f119c672e4a4444f56d582e7475716ba3"
 
@@ -63,6 +64,7 @@ def verify_source(source):
         raise MikasaError("原生 Hermes 必须使用固定且未修改的源码，无额外 .env 注入")
 
 
+@runtime_operation
 def prepare_profile(config, actor):
     """Regenerate immutable inputs only. Never overwrite native memories or sessions."""
     home = profile_home(config, actor)
@@ -130,6 +132,7 @@ def prepare_profile(config, actor):
     return home, source, python, credentials
 
 
+@runtime_operation
 def interactive(config, session=None):
     """TTY is owned by Hermes. No Mikasa command parser or conversation loop."""
     actor = config.owner
@@ -187,10 +190,12 @@ class NativeGateway:
         self.config, self.actor = config, actor
         self.process = None
         self._lock = None
-        self.home = profile_home(config, actor)
-        self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self._lock = (self.home / "mikasa.lock").open("a")
+        self._maintenance = runtime_lock(config.runtime)
+        self._maintenance.__enter__()
         try:
+            self.home = profile_home(config, actor)
+            self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
+            self._lock = (self.home / "mikasa.lock").open("a")
             fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             home, source, python, credentials = prepare_profile(config, actor)
             self.key = (home / ".api-key").read_text()
@@ -342,6 +347,9 @@ class NativeGateway:
         if self._lock:
             self._lock.close()
             self._lock = None
+        if getattr(self, '_maintenance', None):
+            self._maintenance.__exit__(None, None, None)
+            self._maintenance = None
 
     def __enter__(self):
         return self

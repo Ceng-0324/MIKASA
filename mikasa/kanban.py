@@ -8,6 +8,7 @@ from pathlib import Path
 from .errors import Conflict, MikasaError, NotFound
 from .native import verify_source
 from .process import clean_env, run
+from .maintenance import runtime_operation
 
 
 class Kanban:
@@ -27,6 +28,7 @@ class Kanban:
                 'source_present': (self.source / 'hermes_cli/kanban_db.py').is_file(),
                 'connection': 'not_checked', 'migration': 'not_run'}
 
+    @runtime_operation
     def call(self, operation, **values):
         if not self.python.is_file():
             raise MikasaError('任务功能需要安装固定 Hermes 环境；参见 workers/hermes/README.md')

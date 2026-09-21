@@ -84,10 +84,15 @@ python3.12 -m mikasa --config config/local/mikasa.json events TASK_ID
 一致性备份：
 
 ```sh
-python3.12 -m mikasa --config config/local/mikasa.json backup /secure/backups/mikasa-tasks
+python3.12 -m mikasa --config config/local/mikasa.json backup /secure/backups/mikasa-state
+python3.12 -m mikasa --config config/local/mikasa.json restore /secure/backups/mikasa-state /var/lib/mikasa-restored
 ```
 
-目标目录必须不存在，目录 0700、文件 0600；含 mikasa.sqlite3、kanban/kanban.db 和 manifest.json。manifest 缺失表示不完整；任务运行时拒绝备份。这里只覆盖任务与回执，scheduler 的原生 Cron 状态、原生账号/工程 profile 的会话、记忆及工作区须按相同访问级别另行备份。恢复前停止 API 和 runner，同时恢复两份数据库及相应 profile/工作区；不要在服务活跃时覆盖 WAL 数据库。保留当前数据库副本用于回滚。恢复后先运行 doctor，检查中断任务和发布回执，再 resume。
+先停止 API、runner、原生 CLI 及自行启动的 Hermes 进程。备份覆盖 runtime 下的 mikasa.sqlite3、kanban、scheduler、native、engineering、workspaces，包括会话、记忆、Cron、回执和 Git 对象；受管进程的维护锁与旧 profile/runner 锁阻止并发快照。SQLite 使用固定 Hermes 的 WAL 安全快照 helper。备份清单版本 2，逐文件记录 SHA-256；旧双库目录不作为完整恢复点。
+
+备份与恢复均要求源目录外的新目标，先在私有临时目录完成，再整体发布。目录 0700，普通文件 0600，可执行文件 0700。恢复先验证清单与内容，重建内部符号链接，并迁移配置和任务的运行定位路径；历史会话和事件保留原文。不覆盖现有 runtime，不启动服务，也不改当前配置。将外部配置的 runtime 指向恢复目录后，先 doctor、检查任务与回执，再显式启动；失败或中断任务按原生恢复语义处理，不自动重做。
+
+备份是私密数据，含本机生成的 `.api-key`，用于维持原生运行回执的认证范围。外部模型/GitHub/飞书认证来源不读取；已知凭据文件、日志、缓存、锁和未受管根目录不包含，profile config 的直接密钥字段被移除，环境变量引用保留。源码、Git 历史和会话本身可能包含敏感内容，备份不是脱敏导出；外部工具/provider 状态与自定义认证须独立管理。外部符号链接拒绝备份，不跟随读取。目标机器仍需相同 Hermes 版本、项目、镜像和外部凭据。恢复后 scheduler 的受管配置在首次 tick 重新生成；自定义原生任务和工具引用的外部路径须自行核对。
 
 ## VM 部署
 

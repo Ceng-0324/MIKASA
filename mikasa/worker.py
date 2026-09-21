@@ -14,6 +14,7 @@ from .model_settings import model_environment
 from .skills import digest, load_skills
 from .model_settings import validate_model
 from .model_errors import ModelFailure
+from .maintenance import runtime_operation
 
 
 OUTPUT_CONTRACT = {
@@ -60,6 +61,7 @@ class Worker:
             raise MikasaError("Hermes 命令组件不可用；检查固定版本与 worker 配置，命令未执行") from None
         return result
 
+    @runtime_operation
     def execute(self, task, context, cancelled, *, model=None, workspace=None, progress=None):
         invocation = uuid.uuid4().hex
 

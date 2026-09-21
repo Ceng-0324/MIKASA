@@ -3,7 +3,6 @@ import concurrent.futures
 import contextlib
 import json
 import fcntl
-import shutil
 import sqlite3
 import time
 from pathlib import Path
@@ -160,19 +159,18 @@ class KanbanTests(BaseTest):
         self.assertIsNone(self.service.run_once())
 
     def test_task_backup_restores_both_authoritative_databases(self):
-        from mikasa.backup import backup_tasks
+        from mikasa.backup import backup_state, restore_state
         task = self.submit('audit')
         self.service.run_once()
         self.service.store.reserve_publication(task['id'])
         destination = self.path / 'backup'
-        receipt = backup_tasks(self.service, destination)
-        self.assertEqual(receipt['scope'], 'tasks-and-receipts')
-        self.assertIn('native', receipt['excluded'])
+        receipt = backup_state(self.service, destination)
+        self.assertEqual(receipt['scope'], 'managed-runtime')
         self.assertEqual((destination / 'kanban/kanban.db').stat().st_mode & 0o777, 0o600)
         with self.assertRaises(MikasaError):
-            backup_tasks(self.service, destination)
+            backup_state(self.service, destination)
         restored = self.path / 'restored'
-        shutil.copytree(destination, restored)
+        restore_state(self.config, destination, restored)
         self.data['runtime'] = str(restored)
         self.write_config()
         service = Service(self.config, github=self.github)

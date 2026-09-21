@@ -4,6 +4,7 @@ import time
 from contextlib import contextmanager
 
 from .errors import Conflict, MikasaError
+from .maintenance import runtime_lock
 
 
 class Store:
@@ -65,6 +66,12 @@ class Store:
 
     @contextmanager
     def connect(self):
+        with runtime_lock(self.path.parent):
+            with self._connect() as db:
+                yield db
+
+    @contextmanager
+    def _connect(self):
         db = sqlite3.connect(self.path, timeout=15)
         db.row_factory = sqlite3.Row
         try:
