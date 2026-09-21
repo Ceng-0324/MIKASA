@@ -25,9 +25,9 @@ def feishu_environment(config):
     }
 
 
-def feishu_gateway_config():
+def feishu_gateway_config(app_id):
     return {"platforms": {"feishu": {"enabled": True, "gateway_restart_notification": False,
-                                     "typing_indicator": False}},
+                                     "typing_indicator": False, "extra": {"app_id": app_id}}},
             "unauthorized_dm_behavior": "ignore", "multiplex_profiles": False,
             "stt_enabled": False, "max_concurrent_sessions": 1,
             "streaming": {"enabled": False}}

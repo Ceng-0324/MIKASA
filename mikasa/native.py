@@ -168,7 +168,7 @@ def interactive(config, session=None, *, platform="cli"):
         if platform == "feishu":
             from .connections import feishu_gateway_config
             gateway_config = home / "gateway-feishu.json"
-            private_write(gateway_config, json.dumps(feishu_gateway_config()))
+            private_write(gateway_config, json.dumps(feishu_gateway_config(platform_env["FEISHU_APP_ID"])))
             command = [str(python), str(config.root / "workers/hermes/native_gateway.py"), "--config", str(gateway_config)]
         if session:
             command += ["--resume", session]

@@ -86,6 +86,6 @@ Mikasa 将当前暂存树（实现/修复）或固定 PR head（计划/审查）
 | `cron_adapter.py` / `cron_enqueue.py` | 原生 Cron tick 与 occurrence 幂等入板 |
 | `backup_adapter.py` | 原生 SQLite 快照、配置密钥字段排除及恢复路径迁移 |
 
-`worker.native_python` 指定 Hermes 解释器，默认 `runtime/cache/hermes-venv/bin/python`，保留 venv 路径而不解析为基础 Python。`requirements-kanban.txt` 供 CI/控制面测试，完整 agent 使用安装快照；Gateway 的 aiohttp、lark-oapi 已包含在快照中。
+`worker.native_python` 指定 Hermes 解释器，默认 `runtime/cache/hermes-venv/bin/python`，保留 venv 路径而不解析为基础 Python。`requirements-kanban.txt` 供 CI/控制面测试，完整 agent 使用安装快照；Gateway 的 aiohttp、lark-oapi、qrcode 已包含在快照中。飞书平台注册会检查 qrcode，即使不用扫码安装也不可省略。显式 Gateway 平台配置需提供非密钥 App ID，App Secret 仍仅经环境传入；入口预检查依赖与平台注册条件，避免无消息平台的 Cron-only 进程伪装为启动成功。
 
 命令、状态、迁移及兼容退出条件统一见 [当前架构](../../docs/architecture/README.md)。可重复的 SDK、Docker 与真实模型验收见 [脚本](../../scripts/README.md)；平台接通与历史验证的界限见 [验证边界](../../docs/VALIDATION.md)。

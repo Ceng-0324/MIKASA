@@ -133,12 +133,15 @@ sys.path.insert(0, os.environ['MIKASA_HERMES_SOURCE'])
 from hermes_cli.plugins import discover_plugins
 discover_plugins()
 from gateway.config import GatewayConfig, Platform
-from plugins.platforms.feishu.adapter import FeishuAdapter, _load_lark_oapi
-assert _load_lark_oapi()
+from gateway.platform_registry import platform_registry
+entry = platform_registry.get('feishu')
+assert entry.check_fn(), 'full dependency snapshot must satisfy registry before SDK import'
 config = GatewayConfig.from_dict(json.load(sys.stdin))
 assert list(config.platforms) == [Platform.FEISHU]
 assert config.unauthorized_dm_behavior == 'ignore'
-adapter = FeishuAdapter(config.platforms[Platform.FEISHU])
+adapter = platform_registry.create_adapter('feishu', config.platforms[Platform.FEISHU])
+assert adapter is not None, 'native registry must accept dependency and config contracts'
+assert sys.modules[type(adapter).__module__]._load_lark_oapi()
 assert adapter._connection_mode == 'websocket'
 assert not config.platforms[Platform.FEISHU].gateway_restart_notification
 assert adapter._build_event_handler() is not None
@@ -159,7 +162,7 @@ for tenant_id in (None, 'owner_tenant_id'):
 print('pinned Feishu SDK admission and Gateway configuration: passed')
 '''
         reply = subprocess.run([str(python), "-c", code], cwd=self.path, env=env,
-                               input=json.dumps(feishu_gateway_config()), capture_output=True, text=True, timeout=30)
+                               input=json.dumps(feishu_gateway_config('cli_fixture')), capture_output=True, text=True, timeout=30)
         self.assertEqual(reply.returncode, 0, reply.stderr)
 
     def test_pinned_gateway_entry_loads_identity_policy_and_persona_without_connecting(self):
@@ -179,3 +182,11 @@ print('pinned Feishu SDK admission and Gateway configuration: passed')
         self.assertGreater(loaded["policy_chars"], 0)
         self.assertTrue(loaded["native_memory"])
         self.assertEqual((home / "SOUL.md").read_text(), (ROOT / "identity.md").read_text())
+        # A broken explicit platform must exit before the native cron-only fallback.
+        invalid = home / 'invalid-gateway.json'
+        invalid.write_text(json.dumps({'platforms': {'feishu': {'enabled': True}}}))
+        reply = subprocess.run([str(python), str(ROOT / 'workers/hermes/native_gateway.py'), '--config', str(invalid)],
+                               cwd=home / 'workspace', env=env, capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(reply.returncode, 0)
+        self.assertIn('Messaging platform prerequisites missing', reply.stderr)
+        self.assertFalse((home / 'gateway.pid').exists())
