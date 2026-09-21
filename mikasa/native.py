@@ -127,7 +127,10 @@ def prepare_profile(config, actor):
     # Snapshots are generated from the canonical files, never maintained separately.
     for name in ("engineering-contract.md", "engineering-workflow.md"):
         private_write(home / "policy" / name, (config.root / name).read_text())
-    private_write(home / "policy/actor.json", json.dumps({"actor": actor}, ensure_ascii=False))
+    feishu = config.data.get("feishu", {})
+    owner_ids = [feishu[key] for key in ("owner_open_id", "owner_user_id") if feishu.get(key)]
+    private_write(home / "policy/actor.json", json.dumps({"actor": actor, "feishu_owner": {
+        "account": config.owner, "ids": owner_ids}}, ensure_ascii=False))
     plugin = config.root / "workers/hermes/plugin"
     for name in ("plugin.yaml", "__init__.py"):
         private_write(home / "plugins/mikasa" / name, (plugin / name).read_text())

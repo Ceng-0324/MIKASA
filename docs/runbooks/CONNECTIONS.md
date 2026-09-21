@@ -10,8 +10,8 @@
 | --- | --- |
 | GitHub token | 使用 `Mikasa-0910` 创建；只告知本机文件路径或环境变量名 |
 | 飞书应用 | 企业自建应用，名称 Mikasa，启用机器人；App ID / App Secret 保存在本机 |
-| 负责人身份 | 已写入本机配置的 `owner_open_id`；如启用 User ID 权限，再在本机补充同一人的 `owner_user_id` |
-| 应用状态 | 是否发布、负责人是否在可用范围、权限是否批准、消息事件是否订阅 |
+| 负责人身份 | 可选 `owner_open_id` / `owner_user_id` 说明身份关系，不作为飞书聊天白名单；本机已有绑定 |
+| 应用状态 | 是否发布、需要使用的人是否在可用范围、权限是否批准、消息事件是否订阅 |
 
 不需要提供 GitHub/飞书密码、短信验证码、浏览器 Cookie、整份认证目录。飞书普通成员账号与机器人应用是两种身份：可额外创建普通账号管理应用，但 Hermes 接入仍需要应用凭据，不使用普通账号模拟登录。机器人已有独立名称、头像和聊天入口。
 
@@ -55,8 +55,8 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections github --
 1. 使用能管理目标企业应用的账号登录 [飞书开发者后台](https://open.feishu.cn/app)，选择目标企业，**创建企业自建应用**，填写 Mikasa 名称、描述与头像。若没有创建权限，让企业管理员授予开发者权限或创建应用并将你加入应用协作者。
 2. 在应用的 **添加应用能力 → 机器人** 启用机器人。这是 Hermes 使用的独立飞书身份，无需先注册普通成员号。不要选择群聊中的自定义 Webhook 机器人；Hermes 此入口需要企业自建应用的 App ID / App Secret 和长连接事件能力。
 3. 在 **凭证与基础信息** 找到 `App ID`（通常 `cli_...`）和 `App Secret`，存入本机 `MIKASA_FEISHU_APP_ID`、`MIKASA_FEISHU_APP_SECRET`。不要把它们写入 Git JSON 或聊天消息。
-4. 在 **权限管理** 申请 `im:message.p2p_msg:readonly`（读取用户发给机器人的单聊消息）和 `im:message:send_as_bot`（以应用身份发消息）。这是首阶段文字单聊所需权限；关闭输入状态和流式预览，不为群聊、通讯录、云文档、会议或附件预先授予额外权限。Hermes 可尝试查询显示名、引用原消息等，缺少额外权限时这些附加信息可能不可用，真实验收再按实际使用补充。
-5. 在 **版本管理与发布** 创建版本，把应用可用范围设为负责人曾俊轩，提交并完成企业审批/发布。权限修改可能需要重新发布。机器人存在但未发布或不在可用范围，仍无法正常单聊。
+4. 在 **权限管理** 保留 `im:message.p2p_msg:readonly`（单聊读取）和 `im:message:send_as_bot`（发送回复）；群聊补充 `im:message.group_at_msg:readonly`（接收群内 @ 机器人的消息）。要让普通未 @ 的群消息也送达，申请 `im:message.group_msg`（获取群组中所有消息，敏感权限，以控制台审批为准）。项目取消 @ 限制不等于飞书自动投递全部消息。Hermes 查询显示名、引用和附件所需额外权限按实际使用补充。
+5. 在 **版本管理与发布** 创建版本，把应用可用范围扩大到需要与 Mikasa 交互的成员或部门，提交并完成企业审批/发布。原先只选负责人会限制其他人的使用。修改权限或可用范围后按控制台要求重新发布。
 6. 负责人的 Open ID 已写入本机 `config/local/hermes-cch.json` 的 `feishu.owner_open_id`，不需要再次提供。这个 ID 必须是你在 Mikasa 应用中的 `ou_...`，不能是机器人自己的 ID。默认不申请通讯录权限；如果应用已经启用 User ID 权限，再把同一人的租户 ID 作为 `owner_user_id` 写入本机配置即可。
 7. 检查配置中的 `feishu` 段应类似下面这样，App ID 和 App Secret 仍只通过环境变量提供：
 
@@ -69,20 +69,25 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections github --
 }
 ```
 
-9. 加载本机环境后执行以下检查。`--probe` 复用 Hermes 官方机器人信息探针，获取 tenant token 并读取机器人信息，不建立长连接、不发送消息，也不调用 CCH。
+8. 加载本机环境后执行以下检查。`--probe` 复用 Hermes 官方机器人信息探针，获取 tenant token 并读取机器人信息，不建立长连接、不发送消息，也不调用 CCH。诊断的 `access` 字段报告代码生成的准入策略，不证明旧进程已加载新策略。
 
 ```sh
 python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu
 python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu --probe
 ```
 
-10. 准备事件订阅：在 **事件与回调 → 事件配置** 选择 **使用长连接接收事件**。该方式不需要公网 URL、Encrypt Key 或 Verification Token。先检查 CCH 已配置，关闭同账号正在运行的 CLI/API Gateway，然后执行 `python3.12 -m mikasa --config config/local/hermes-cch.json gateway --platform feishu`。微信绑定完成后改为同一条 Gateway 命令追加 `--platform weixin`；不要让两个进程使用同一 profile。
-11. 控制台若要求先建立长连接，等待启动输出确认连接后，再保存订阅方式，添加 **接收消息 v2.0** 事件 `im.message.receive_v1`，按控制台提示发布新版本。无需订阅 Hermes 支持的所有事件。
-12. 用负责人本人账号在飞书打开机器人，主动发送一条普通文字消息，再测试 `/help`、`/model 完整模型ID` 和 `/new`。这一步才验证真实事件、CCH 推理、机器人回复和系统命令；同时检查人格/skills 加载证据和原生记忆跨会话保留。其他账号和群聊当前不会进入负责人 profile。
+9. 准备事件订阅：在 **事件与回调 → 事件配置** 选择 **使用长连接接收事件**。该方式不需要公网 URL、Encrypt Key 或 Verification Token。先检查 CCH 已配置，关闭同账号正在运行的 CLI/API Gateway，然后执行 `python3.12 -m mikasa --config config/local/hermes-cch.json gateway --platform feishu`。微信绑定完成后改为同一条 Gateway 命令追加 `--platform weixin`；不要让两个进程使用同一 profile。代码更新后需重启现有 Gateway 才会加载新策略。
+10. 控制台若要求先建立长连接，等待启动输出确认连接后，再保存订阅方式，添加 **接收消息 v2.0** 事件 `im.message.receive_v1`，按控制台提示发布新版本。无需订阅 Hermes 支持的所有事件。
+11. 在目标飞书群打开 **群设置 → 群机器人 → 添加机器人**，搜索 Mikasa 并添加。若搜索不到或不能添加，检查应用是否发布、操作者是否在应用可用范围，以及群管理员的添加限制；项目的消息过滤无法影响飞书客户端的添加列表。
+12. 在私聊和群内分别发送 `/help`、普通文字、`/model 完整模型ID` 和 `/new`；再用另一成员账号验证。群内先 @ Mikasa，再测试未 @ 消息，区分事件权限与本地策略。只有真实收到回复才算完成平台验收；同时检查身份/skills 加载与记忆保留。
 
-`gateway` 启动意味着一个 Hermes 原生 Gateway 接收并回复已绑定负责人的消息。这里只开放模型的 memory 与只读 skills；**原生系统命令是受信任控制面，并非沙箱**，不要将负责人身份授予陌生用户。当前不接聊天工程任务、不主动群发。CLI、HTTP Gateway 与消息 Gateway 共享同一负责人 profile 和 MEMORY/USER，但进程互斥，不能同时启动。Ctrl-C 停止前台；启动失败需处理错误后重启，不自动修改身份或放宽准入。
+飞书现采用 Hermes 原生开放准入：所有用户、群聊与其他机器人均可进入，群聊不要求 @。通过 `FEISHU_ALLOW_ALL_USERS=true`、`FEISHU_GROUP_POLICY=open`、`FEISHU_ALLOW_BOTS=all`、`FEISHU_REQUIRE_MENTION=false` 实现，无成员或群白名单；Hermes 自身消息回环过滤、消息去重与机器人循环保护保留。只对飞书开放，微信仍使用扫码负责人的单聊绑定。
 
-已知限制：原生 `/sethome` 会保存默认投递设置并生成 profile `.env`，与当前禁止额外环境注入的启动检查冲突。本阶段只验收单聊，不依赖默认投递；遇到此情况先核对文件字段并保留原设置，不能删除未知凭据或直接放开任意 `.env`。macOS 上过长的 profile 路径还会使 Hermes 可选 liveness socket 无法创建，消息长连接仍可工作；VM 使用短路径后复验存活检测。
+各私聊、普通群聊中的不同成员由 Hermes 原生会话键区分；话题内默认共享会话。同一 Gateway 共用负责人 profile 的 MEMORY/USER、身份与 skills，**并非每人的私有记忆空间**。开放也意味着这些用户可以调用 Hermes 原生系统命令，其中部分命令影响 profile；模型的工具白名单不是命令沙箱。身份注入会区分 profile 归属与发送者，不能把每个发言人都认作负责人。聊天模型工具仍为 memory 与只读 skills，工程工具接入按原计划最后验收。
+
+CLI、HTTP Gateway 与消息 Gateway 使用同一负责人 profile，进程互斥。Ctrl-C 停止前台；启动失败需处理错误后重启，不覆盖会话或记忆。
+
+已知限制：原生 `/sethome` 会保存默认投递设置并生成 profile `.env`，与当前禁止额外环境注入的启动检查冲突。当前验收不依赖默认投递；遇到此情况先核对文件字段并保留原设置，不能删除未知凭据或直接放开任意 `.env`。macOS 上过长的 profile 路径还会使 Hermes 可选 liveness socket 无法创建，消息长连接仍可工作；VM 使用短路径后复验存活检测。
 
 ## 微信扫码绑定
 

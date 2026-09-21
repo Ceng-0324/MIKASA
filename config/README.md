@@ -4,7 +4,7 @@
 
 当前使用版本化 JSON 配置：[examples/mikasa.json](examples/mikasa.json)。结构与权限校验由 `mikasa/config.py` 实现；未知顶层字段和非法身份会被拒绝。默认不启用仓库、模型命令、周期审计或外部发布。
 
-可选 `feishu` 段配置国内应用、负责人 `owner_open_id`、可选同一人 `owner_user_id` 及凭据环境变量名。微信通过 `weixin-login` 原生扫码绑定；使用 `mikasa gateway --platform feishu --platform weixin` 启动一个统一 Hermes Gateway。`connections github|feishu|weixin` 做本地或只读检查，微信不支持 `--probe`。字段示例、独立账号/机器人区别、获取步骤与[环境模板](examples/platforms.env.example)的用法见[接入手册](../docs/runbooks/CONNECTIONS.md)。
+可选 `feishu` 段配置国内应用、负责人 `owner_open_id` / `owner_user_id` 身份说明及凭据环境变量名；两个负责人 ID 均非聊天接入必填。飞书采用 Hermes 原生开放策略：所有用户、群聊、机器人可进入，群聊不要求 @；应用可用范围和消息权限仍需在飞书后台配置。微信通过 `weixin-login` 原生扫码绑定，仍限本人单聊；使用 `mikasa gateway --platform feishu --platform weixin` 启动一个统一 Hermes Gateway。`connections github|feishu|weixin` 做本地或只读检查，微信不支持 `--probe`。飞书诊断的 `access` 只说明生成策略，更新后需重启 Gateway 生效。字段示例、获取步骤与[环境模板](examples/platforms.env.example)用法见[接入手册](../docs/runbooks/CONNECTIONS.md)。
 
 `schedules.audit_interval_seconds` 由 Hermes Cron 实现：0 关闭，60–604800 秒启用，支持非整分钟间隔；首次启用等待一个间隔。重启不重置下次执行时间，未改宿主间隔时保留原生暂停/周期编辑。关闭保留 job 和历史，改间隔后启用新周期。专用 `runtime/scheduler` home 只做无模型的审计入板，详见 [当前架构](../docs/architecture/README.md)。
 

@@ -77,17 +77,15 @@ def weixin_diagnostics(config):
 
 def feishu_environment(config):
     settings = config.data.get("feishu", {})
-    owner = settings.get("owner_open_id")
-    if not owner:
-        raise MikasaError("先配置 feishu.owner_open_id，绑定负责人在该应用中的身份")
     return {
         "FEISHU_APP_ID": config.secret("feishu", "app_id_env", "MIKASA_FEISHU_APP_ID"),
         "FEISHU_APP_SECRET": config.secret("feishu", "app_secret_env", "MIKASA_FEISHU_APP_SECRET"),
         "FEISHU_DOMAIN": settings.get("domain", "feishu"),
-        "FEISHU_CONNECTION_MODE": "websocket", "FEISHU_ALLOWED_USERS": ",".join(
-            value for value in (owner, settings.get("owner_user_id")) if value),
-        "FEISHU_ALLOW_ALL_USERS": "false", "FEISHU_GROUP_POLICY": "disabled",
-        "FEISHU_ALLOW_BOTS": "none", "GATEWAY_ALLOW_ALL_USERS": "false",
+        "FEISHU_CONNECTION_MODE": "websocket", "FEISHU_ALLOWED_USERS": "",
+        "FEISHU_ALLOW_ALL_USERS": "true", "FEISHU_GROUP_POLICY": "open",
+        "FEISHU_ALLOW_BOTS": "all", "FEISHU_REQUIRE_MENTION": "false",
+        # The platform opt-in opens Feishu without opening other Gateway adapters.
+        "GATEWAY_ALLOW_ALL_USERS": "false",
         "GATEWAY_MULTIPLEX_PROFILES": "false",
     }
 
@@ -102,7 +100,8 @@ def messaging_gateway(config, platforms):
     for platform in dict.fromkeys(platforms):
         if platform == "feishu":
             env.update(feishu_environment(config))
-            extra = {"app_id": env["FEISHU_APP_ID"]}
+            extra = {"app_id": env["FEISHU_APP_ID"], "default_group_policy": "open",
+                     "allow_bots": "all", "require_mention": False}
         else:
             binding = weixin_binding(config)
             env.update(WEIXIN_TOKEN=binding["token"], WEIXIN_ALLOW_ALL_USERS="false",
@@ -126,8 +125,6 @@ def diagnostics(config, platform, *, probe=False):
     required = [settings.get(field, default) for field, default in fields.items()]
     missing = [name for name in required if not os.environ.get(name)]
     ready = not missing
-    if platform == "feishu":
-        ready = ready and bool(settings.get("owner_open_id"))
     result = {"platform": platform, "configuration": "ready" if ready else "incomplete",
               "missing_environment": missing, "connection": "not_checked"}
     if platform == "github":
@@ -135,7 +132,8 @@ def diagnostics(config, platform, *, probe=False):
                       write_access="not_checked", webhook="not_checked")
     else:
         result.update(owner_bound=bool(settings.get("owner_open_id")), domain=settings.get("domain", "feishu"),
-                      transport="websocket", messages="not_checked", owner_identity="not_checked")
+                      transport="websocket", messages="not_checked", owner_identity="not_checked",
+                      access={"users": "all", "groups": "open", "bots": "all", "require_mention": False})
     if probe:
         if missing:
             raise MikasaError("缺少接入凭据环境变量：" + ", ".join(missing))

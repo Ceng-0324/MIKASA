@@ -49,8 +49,12 @@ class ConnectionTests(unittest.TestCase):
                 with self.assertRaises(MikasaError):
                     Config.load(path)
         self.data["feishu"] = {}
-        with self.assertRaisesRegex(MikasaError, "绑定负责人"):
-            feishu_environment(self.config)
+        with patch.dict(os.environ, {"MIKASA_FEISHU_APP_ID": "cli_fixture", "MIKASA_FEISHU_APP_SECRET": "fixture-secret"}):
+            self.assertEqual(feishu_environment(self.config)["FEISHU_ALLOW_ALL_USERS"], "true")
+            result = diagnostics(self.config, "feishu")
+        self.assertEqual(result["configuration"], "ready")
+        self.assertFalse(result["owner_bound"])
+        self.assertEqual(result["access"], {"users": "all", "groups": "open", "bots": "all", "require_mention": False})
 
     def test_weixin_binding_fails_closed_and_diagnostics_do_not_expose_credentials(self):
         value = {"actor": self.config.owner, "account_id": "fixture@im.bot", "user_id": "owner@im.wechat",
@@ -211,16 +215,45 @@ owner = N(sender_type='user', sender_id=N(open_id='ou_owner', user_id=None, unio
 stranger = N(sender_type='user', sender_id=N(open_id='ou_stranger', user_id=None, union_id=None))
 bot = N(sender_type='bot', sender_id=N(open_id='ou_owner', user_id=None, union_id=None))
 dm = N(chat_type='p2p', chat_id='oc_fixture')
-assert adapter._admit(owner, dm) is None
-assert adapter._admit(stranger, dm) == 'dm_policy_rejected'
-assert adapter._admit(bot, dm) == 'bots_disabled'
-assert adapter._admit(owner, N(chat_type='group', chat_id='oc_fixture')) == 'group_policy_rejected'
-from gateway.authz_mixin import _principal_matches_allowlist
+group = N(chat_type='group', chat_id='oc_fixture', mentions=[], content='ordinary unmentioned text')
+adapter._bot_open_id = 'ou_mikasa_bot'
+from gateway.authz_mixin import GatewayAuthorizationMixin
+from gateway.session import build_session_key
+auth = GatewayAuthorizationMixin()
+auth.adapters = {Platform.FEISHU: adapter}
+auth.config = config
+sources = []
+for sender in (owner, stranger, bot):
+    for message in (dm, group):
+        assert adapter._admit(sender, message) is None, (sender, message)
+        resolved = asyncio.run(adapter._resolve_sender_profile(sender.sender_id))
+        source = adapter.build_source(chat_id=message.chat_id,
+            chat_type='dm' if message is dm else 'group', **resolved)
+        source.is_bot = sender is bot
+        assert auth._is_user_authorized(source), (sender, message)
+        sources.append(source)
+assert build_session_key(sources[0]) != build_session_key(sources[1])
+assert build_session_key(sources[1]) != build_session_key(sources[3])
+# Native identity/loop defenses remain active even when channel admission is open.
+self_sender = N(sender_type='bot', sender_id=N(open_id='ou_mikasa_bot', user_id=None, union_id=None))
+assert adapter._admit(self_sender, group) == 'self_echo'
+for _ in range(100):
+    if not auth._admit_bot_message(sources[-1]):
+        break
+else:
+    raise AssertionError('native bot loop guard must stop repeated bot traffic')
+assert not auth._is_user_authorized(sources[-1])
+assert auth._is_user_authorized(sources[3]), 'bot cooldown must not block humans'
 for tenant_id in (None, 'owner_tenant_id'):
     owner.sender_id.user_id = tenant_id
     resolved = asyncio.run(adapter._resolve_sender_profile(owner.sender_id))
     source = adapter.build_source(chat_id='oc_fixture', chat_type='dm', **resolved)
-    assert _principal_matches_allowlist(source, source.user_id, set(os.environ['FEISHU_ALLOWED_USERS'].split(',')))
+    assert auth._is_user_authorized(source)
+# Validate the native startup opt-in, not just the adapter's local policy.
+from gateway.run_startup import GatewayStartupMixin
+startup = GatewayStartupMixin()
+startup.config = config
+assert not startup._start_check_access_policy()
 print('pinned Feishu SDK admission and Gateway configuration: passed')
 '''
         reply = subprocess.run([str(python), "-c", code], cwd=self.path, env=env,

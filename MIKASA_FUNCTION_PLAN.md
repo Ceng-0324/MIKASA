@@ -14,6 +14,8 @@
 
 CCH `default` 是 Key 的供应商分组，仍需网关管理员配置与同次路由证据；本地模型名或连接成功不能证明分组已切换。见 [CCH 手册](docs/runbooks/CCH.md)。
 
+飞书准入按最新要求开放用户、群聊及机器人，取消 @ 要求，直接配置 Hermes 原生策略。代码验证不代表飞书事件权限已批准或运行进程已更新；先按[接入手册](docs/runbooks/CONNECTIONS.md)完成重启及群聊验证，再继续微信和 VM。多人仍共用 profile 级记忆，发送者与 profile 归属在身份注入中区分。
+
 当前已提供 `connections github|feishu|weixin` 诊断、`weixin-login` 扫码绑定，以及统一 `gateway --platform feishu [--platform weixin]` 入口；旧 `feishu` 命令保留为单平台兼容入口。GitHub 独立账号 `Mikasa-0910` 已通过真实 token 身份检查，无需预先指定仓库；具体仓库与操作权限按后续任务处理。飞书应用机器人、负责人单聊、原生会话、CCH 回复和身份/skills 加载已真实验收，微信仍待扫码和消息验收。下一步完成微信真实接入，再部署 VM，最后做聊天工程任务与 FluxCore 联合验收。
 
 ## 收窄条件

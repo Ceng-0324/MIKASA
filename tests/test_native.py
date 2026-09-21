@@ -57,6 +57,21 @@ class NativeProfileTests(unittest.TestCase):
         with self.assertRaises(Forbidden):
             prepare_profile(self.config, 'unknown')
 
+    def test_messaging_policy_distinguishes_profile_owner_from_message_sender(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from workers.hermes.plugin import register
+        self.config.data['feishu'] = {'owner_open_id': 'ou_owner', 'owner_user_id': 'owner_tenant_id'}
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        context = Mock()
+        with patch.dict(sys.modules, {'hermes_constants': SimpleNamespace(get_hermes_home=lambda: home)}):
+            register(context)
+        prompt = ''.join(call.args[1] for call in context.register_system_prompt_section.call_args_list)
+        self.assertNotIn('当前已鉴权账号', prompt)
+        self.assertIn('共用 profile 不代表是同一人', prompt)
+        self.assertIn(self.config.owner + ' 对应 ou_owner, owner_tenant_id', prompt)
+        self.assertIn('仅说明身份，不限制其他人聊天', prompt)
+
     def test_refresh_preserves_native_preferences_and_refreshes_integration_routes(self):
         home, *_ = prepare_profile(self.config, self.config.owner)
         path = home / 'config.yaml'
@@ -151,7 +166,8 @@ class NativeProfileTests(unittest.TestCase):
         process.wait.return_value = 0
         process.poll.return_value = 0
         with patch.dict(os.environ, {'MIKASA_FEISHU_APP_ID': 'cli_fixture', 'MIKASA_FEISHU_APP_SECRET': 'feishu-secret',
-                                     'FEISHU_ALLOW_ALL_USERS': 'true', 'GATEWAY_ALLOW_ALL_USERS': 'true',
+                                     'FEISHU_ALLOW_ALL_USERS': 'false', 'GATEWAY_ALLOW_ALL_USERS': 'true',
+                                     'FEISHU_GROUP_POLICY': 'disabled', 'FEISHU_REQUIRE_MENTION': 'true',
                                      'FEISHU_HOME_CHANNEL': 'oc_unwanted', 'GH_TOKEN': 'private'}), \
                 patch('mikasa.native.prepare_profile', return_value=prepared), \
                 patch('mikasa.native.subprocess.Popen', return_value=process) as spawn:
@@ -160,10 +176,12 @@ class NativeProfileTests(unittest.TestCase):
         env = spawn.call_args.kwargs['env']
         self.assertEqual(Path(command[1]).name, 'native_gateway.py')
         self.assertEqual(command[2], '--config')
-        self.assertEqual(env['FEISHU_ALLOWED_USERS'], 'ou_owner')
-        self.assertEqual(env['FEISHU_ALLOW_ALL_USERS'], 'false')
+        self.assertEqual(env['FEISHU_ALLOWED_USERS'], '')
+        self.assertEqual(env['FEISHU_ALLOW_ALL_USERS'], 'true')
         self.assertEqual(env['GATEWAY_ALLOW_ALL_USERS'], 'false')
-        self.assertEqual(env['FEISHU_GROUP_POLICY'], 'disabled')
+        self.assertEqual(env['FEISHU_GROUP_POLICY'], 'open')
+        self.assertEqual(env['FEISHU_ALLOW_BOTS'], 'all')
+        self.assertEqual(env['FEISHU_REQUIRE_MENTION'], 'false')
         self.assertNotIn('FEISHU_HOME_CHANNEL', env)
         self.assertNotIn('GH_TOKEN', env)
         self.assertFalse(any(b'feishu-secret' in p.read_bytes() for p in prepared[0].rglob('*') if p.is_file()))
@@ -207,6 +225,8 @@ class NativeProfileTests(unittest.TestCase):
         self.assertEqual(env['HERMES_HOME'], str(prepared[0]))
         self.assertEqual(env['WEIXIN_TOKEN'], 'private-weixin-token')
         self.assertEqual(env['WEIXIN_ALLOW_ALL_USERS'], 'false')
+        self.assertEqual(env['FEISHU_ALLOW_ALL_USERS'], 'true')
+        self.assertEqual(env['GATEWAY_ALLOW_ALL_USERS'], 'false')
         self.assertNotIn('WEIXIN_HOME_CHANNEL', env)
         gateway = json.loads((prepared[0] / 'gateway-messaging.json').read_text())
         self.assertEqual(set(gateway['platforms']), {'feishu', 'weixin'})
