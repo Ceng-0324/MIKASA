@@ -12,6 +12,7 @@ runtime/state/
 runtime/logs/
 runtime/workspaces/
 runtime/cache/
+runtime/backups/
 
 # Local model/tool homes and generated artifacts
 workers/*/home/

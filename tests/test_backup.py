@@ -47,6 +47,10 @@ class BackupTests(BaseTest):
             db.execute('PRAGMA journal_mode=WAL')
             db.execute('CREATE TABLE messages(text)')
             db.execute("INSERT INTO messages VALUES('committed WAL data')")
+            db.execute('CREATE TABLE gateway_routing(scope TEXT, session_key TEXT, entry_json TEXT, PRIMARY KEY(scope, session_key))')
+            routing = json.dumps({'session_id': 'existing-session', 'history_path': str(home / 'old-history')})
+            db.execute('INSERT INTO gateway_routing VALUES(?,?,?)', (str(home / 'sessions'), 'weixin-owner', routing))
+            db.execute('INSERT INTO gateway_routing VALUES(?,?,?)', ('/external/sessions', 'unmanaged', routing))
             db.commit()
             fixture.execute('PRAGMA journal_mode=WAL')
             fixture.execute('CREATE TABLE sample(value)')
@@ -65,6 +69,14 @@ class BackupTests(BaseTest):
         self.assertEqual((restored / 'engineering' / task['id'] / 'memories/MEMORY.md').read_text(), 'Persistent memory')
         with sqlite3.connect(restored / 'native/account/state.db') as db:
             self.assertEqual(db.execute('SELECT text FROM messages').fetchone()[0], 'committed WAL data')
+            self.assertEqual(db.execute('SELECT entry_json FROM gateway_routing WHERE scope=? AND session_key=?',
+                                       (str(restored / 'native/account/sessions'), 'weixin-owner')).fetchone()[0], routing)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM gateway_routing WHERE scope=?',
+                                       (str(home / 'sessions'),)).fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT entry_json FROM gateway_routing WHERE scope='/external/sessions'").fetchone()[0], routing)
+        with sqlite3.connect(backup / 'native/account/state.db') as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM gateway_routing WHERE scope=?',
+                                       (str(home / 'sessions'),)).fetchone()[0], 1)
         cfg = json.loads((restored / 'native/account/config.yaml').read_text())
         self.assertNotIn('api_key', cfg['providers']['local'])
         self.assertEqual(cfg['providers']['local']['key_env'], 'MY_MODEL_KEY')

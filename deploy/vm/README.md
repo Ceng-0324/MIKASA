@@ -8,7 +8,7 @@
 | [工程 runner](mikasa-runner.service) | `run` | 已有模板；消费工程任务队列 |
 | [飞书 / 微信](mikasa-gateway.service) | `gateway --platform feishu --platform weixin` | 统一消息服务模板；本阶段首先部署 |
 
-本阶段使用已有 OrbStack `mylinux`（Ubuntu 26.04 arm64），在独立目录安装 Python 3.12，以专用 `mikasa` 用户运行。它依赖 Mac 保持运行，不能等同于独立云主机的持续在线。部署结果和验收限制统一记录在[验证边界](../../docs/VALIDATION.md)。
+本机已部署到 OrbStack `mylinux`（Ubuntu 26.04 arm64），使用独立 Python 3.12.14 与专用 `mikasa` 用户，消息服务已启用。它依赖 Mac 保持运行，不能等同于独立云主机的持续在线。部署结果和验收限制统一记录在[验证边界](../../docs/VALIDATION.md)。
 
 消息 Gateway 是独立运行入口；同一账号 profile 不能同时由终端、HTTP 聊天和消息 Gateway 管理。只启用消息服务时无需启动 API、runner、Docker 或 TLS 反向代理；飞书长连接和微信轮询主动向外连接，不需要公网入站端口。工程执行和 GitHub webhook 在后续阶段启用。
 
@@ -21,6 +21,8 @@
 3. 将 [config.example.json](config.example.json) 安装为 `/etc/mikasa/config.json`，填写实际模型目录与原有飞书主人 ID；将 [runtime.env.example](runtime.env.example) 的结构用于私密 `/etc/mikasa/runtime.env`。目录 root:mikasa 0750、两文件 root:mikasa 0640。环境文件使用 systemd 赋值语法，不使用 `export`、命令替换或 `source`。
 4. GPT/Claude 各自指定 CCH 端点、Key 和协议，来源 `env` 引用须列入 `worker.env_allowlist`。仅将服务需要的凭据注入 VM 私密环境，不复制个人认证目录，也不将密钥写进命令行、日志或 Git。缺少任一路由的显式环境引用会阻止启动。
 5. 保留本机消息服务运行，先验证 VM 的固定 Hermes、依赖、模型和飞书只读探针。将服务单元安装到 `/etc/systemd/system/mikasa-gateway.service`，执行 `systemd-analyze verify` 与 `systemctl daemon-reload`；此时尚不启动消息消费。
+
+macOS 打包源码和备份时使用 `COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata ...`，避免 AppleDouble `._*` 文件进入 Linux 后被 Hermes 当成 Python 模块扫描。优先使用固定 Git revision 或已核对的源码包，不能把缺少运行依赖的目录当成安装完成。
 
 ## 状态迁移与切换
 
@@ -37,6 +39,8 @@ sudo journalctl -u mikasa-gateway.service -n 80 --no-pager
 ```
 
 在飞书和微信分别验证 `/help`、普通消息、`/model 完整模型ID` 与 `/new`，核对主人身份及跨会话记忆；随后检查停止、重启、自动拉起和状态恢复。日志可能含私密消息，只在本机查看，不原样上传。
+
+本机迁移恢复点为 `runtime/backups/pre-vm-20260922`；VM 保存 `/var/backups/mikasa/pre-vm-20260922` 和 `/var/backups/mikasa-service/initial-vm`。这些目录不含外部凭据但包含私密会话及本机 API Key，不能提交 Git。Mac 原 runtime 保留作回退依据，旧 Gateway 已停止；VM 现在是消息运行状态的事实源。
 
 ## 日常运维与回退
 

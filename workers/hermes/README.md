@@ -14,7 +14,7 @@ uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/b
 uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/bin/python --no-deps --editable runtime/cache/hermes-source
 ```
 
-[requirements-tested.txt](requirements-tested.txt) 是本次 macOS arm64/Python 3.12 的依赖版本快照；不是所有平台通用锁文件，Linux VM 需独立验证。没有运行上游全局安装器。
+[requirements-tested.txt](requirements-tested.txt) 是 macOS arm64/Python 3.12 的依赖版本快照；已在 OrbStack Ubuntu 26.04 arm64/Python 3.12.14 重新安装，依赖检查、GPT/Claude 探针与飞书/微信连接通过。它不是所有平台通用锁文件，换平台仍需复验。没有运行上游全局安装器。
 
 ## 配置与认证
 

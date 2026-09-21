@@ -42,6 +42,14 @@ def main():
         if database and not item.get('workspace'):
             if not copy_db_and_verify(src, dst):
                 raise ValueError('SQLite snapshot failed')
+            if move:
+                with sqlite3.connect(dst) as db:
+                    if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='gateway_routing'").fetchone():
+                        # Hermes namespaces live session routing by absolute sessions_dir.
+                        for (scope,) in db.execute('SELECT DISTINCT scope FROM gateway_routing').fetchall():
+                            updated = relocate(scope, paths[:1])
+                            if updated != scope:
+                                db.execute('UPDATE gateway_routing SET scope=? WHERE scope=?', (updated, scope))
         elif item.get('config'):
             value = yaml.safe_load(src.read_text())
             if not isinstance(value, dict):

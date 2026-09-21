@@ -5,7 +5,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 errors = []
-excluded = {".git", ".venv", "__pycache__", "installed", "local", "state", "workspaces", "cache", "home"}
+excluded = {".git", ".venv", "__pycache__", "installed", "local", "state", "workspaces", "cache", "home", "backups"}
 for path in root.rglob("*.md"):
     if set(path.relative_to(root).parts) & excluded:
         continue
