@@ -102,7 +102,13 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections weixin
 
 完整绑定以 0600 保存到配置 runtime 下的 `credentials/weixin.json`；登录取消、超时或返回缺字段时保留旧文件。该目录被 Git 忽略且不属于受管状态备份范围，迁到 VM 时单独安全转移或重新扫码。登录临时 home 自动清理，凭据不写入会话、记忆或生成的 Gateway 配置。`connections weixin` 只检查本地绑定，不证明 token 尚有效；微信不提供本项目使用的只读认证探针，因此拒绝 `--probe`，避免探针消费真实消息。
 
-消息启动与真实验收是下一阶段，扫码成功不等于微信已经接通。
+扫码成功后必须启用消息平台。若飞书 Gateway 已运行，先在其终端 Ctrl-C 正常停止；保持原有飞书凭据环境，再用同一 profile 启动双平台：
+
+```sh
+python3.12 -m mikasa --config config/local/hermes-cch.json gateway --platform feishu --platform weixin
+```
+
+不要另开一个微信进程争用 profile。`weixin-login` 不会自动修改已经运行的 Gateway；`connections weixin` 的 `ready` 也只说明本地绑定可读取。启动后用扫码账号进入微信机器人，发送 `/help` 和普通文字，再验证 `/model`、`/new` 与记忆。原生 `connected` 表示适配器已启动，真实入站、CCH 回执、发送结果和手机收到回复需要分别确认。
 
 ## 本机凭据存放
 
