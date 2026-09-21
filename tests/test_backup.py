@@ -40,12 +40,23 @@ class BackupTests(BaseTest):
         script = Path(result['workspace']) / 'script.sh'
         script.write_text('#!/bin/sh\nexit 0\n')
         script.chmod(0o755)
-        with sqlite3.connect(home / 'state.db') as db:
+        cache_source = script.parent / 'cache/source.py'
+        cache_source.parent.mkdir()
+        cache_source.write_text('CACHE_IMPLEMENTATION = True\n')
+        with sqlite3.connect(home / 'state.db') as db, sqlite3.connect(script.parent / 'fixture.db') as fixture:
             db.execute('PRAGMA journal_mode=WAL')
             db.execute('CREATE TABLE messages(text)')
             db.execute("INSERT INTO messages VALUES('committed WAL data')")
             db.commit()
+            fixture.execute('PRAGMA journal_mode=WAL')
+            fixture.execute('CREATE TABLE sample(value)')
+            fixture.execute('INSERT INTO sample VALUES(42)')
+            fixture.commit()
+            fixture_bytes = (script.parent / 'fixture.db').read_bytes()
             backup = self.snapshot()
+            copied_fixture = backup / script.parent.relative_to(runtime) / 'fixture.db'
+            self.assertEqual(copied_fixture.read_bytes(), fixture_bytes)
+            self.assertTrue(copied_fixture.with_name('fixture.db-wal').exists())
         restored = self.path / 'restored'
         restore_state(self.config, backup, restored)
         self.assertEqual((restored / 'native/account/.api-key').read_text(), 'local-service-identity')
@@ -66,6 +77,9 @@ class BackupTests(BaseTest):
         self.assertTrue(workspace.is_relative_to(restored))
         self.assertEqual(git(['rev-parse', 'HEAD'], workspace), result['head'])
         self.assertEqual((workspace / 'script.sh').stat().st_mode & 0o777, 0o700)
+        self.assertEqual((workspace / 'cache/source.py').read_text(), cache_source.read_text())
+        with sqlite3.connect(workspace / 'fixture.db') as fixture:
+            self.assertEqual(fixture.execute('SELECT value FROM sample').fetchone()[0], 42)
         self.assertTrue((restored / 'scheduler/cron/jobs.json').exists())
         self.assertEqual(restored.stat().st_mode & 0o777, 0o700)
 

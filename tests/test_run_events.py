@@ -1,5 +1,6 @@
 """Local HTTP protocol tests: event notification, durable recovery and teardown."""
 import hashlib
+import io
 import json
 import tempfile
 import threading
@@ -8,6 +9,8 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
+from urllib.error import HTTPError
 from urllib.request import ProxyHandler, build_opener
 
 from mikasa.errors import MikasaError
@@ -95,6 +98,16 @@ class RunEventTests(unittest.TestCase):
     def assert_closed(self):
         self.assertFalse(any(t.name == 'mikasa-run-events' for t in threading.enumerate()))
         self.assertTrue(all(method != 'POST' or path.endswith('/stop') for method, path in self.paths))
+
+    def test_api_error_closes_response_without_reading_private_body(self):
+        body = io.BytesIO(b'private upstream error')
+        error = HTTPError(self.gateway.url, 403, 'forbidden', {}, body)
+        with patch.object(self.gateway.http, 'open', side_effect=error):
+            with self.assertRaises(NativeAPIError) as raised:
+                self.gateway.request('GET', '/v1/runs/run-test')
+        self.assertEqual(raised.exception.status, 403)
+        self.assertTrue(body.closed)
+        self.assertNotIn('private', str(raised.exception))
 
     def test_events_wake_without_polling_and_result_comes_from_durable_state(self):
         counts = []

@@ -32,9 +32,9 @@ HTTP 默认监听 `127.0.0.1:8765`。除健康检查和单独验签的 GitHub we
 
 模型任务结果可包含 `execution`，记录可信 worker 提供的 SDK 版本、请求模型、API 模式、规则和 skill SHA-256 及工具数；这是宿主注入证据，不是模型自述；Hermes 的 post_api_request hook 另提供 reported_model，表示 SDK 观察到的响应标识，仍不独立证明供应商实际模型身份。聊天接口语义和失败处理见 [聊天手册](../runbooks/CHAT.md)。
 
-内置 Hermes 工程执行另返回 `session_owner=hermes`、`root_session_id`、`session_id`（可能为压缩后的后续会话）、`history_messages` 和 `memory_owner`。根会话固定为 `mikasa-task-<task-id>`，记忆归属取自可信任务提交账号，不能由任务 body 指定。重试与修复读取原生 SessionDB，不从任务事件重拼历史；失败不会回滚已经落盘的会话或记忆。旧随机工程会话保留为档案，不自动接入新根会话。详见 [0008](../decisions/0008-engineering-state.md)。
+内置 Hermes 工程执行另返回 `session_owner=hermes`、`root_session_id`、`session_id`（可能为压缩后的后续会话）、`history_messages` 和 `memory_owner`。根会话固定为 `mikasa-task-<task-id>`，记忆归属取自可信任务提交账号，不能由任务 body 指定。重试与修复读取原生 SessionDB，不从任务事件重拼历史；失败不会回滚已经落盘的会话或记忆。旧随机工程会话保留为档案，不自动接入新根会话。详见 [当前架构](../architecture/README.md)。
 
-每次认领只调用一次 worker，最终验收失败返回 blocked，不再自动生成宿主修复轮。新结果不生成 `attempts`，工具内检查记录在 `execution.tool_events`，最终验收记录在 `checks`；旧任务结果保持可读。validation 事件不再携带外层 `attempt`。显式 retry 时 worker context 可含 `previous_validation`（上次 checks、head、base），只是历史证据，不复制旧工作区。第三方 v1 worker 同样自行完成内部修复，stdin/stdout 结构和工具 RPC 不变。见 [0009](../decisions/0009-native-repair-loop.md)。
+每次认领只调用一次 worker，最终验收失败返回 blocked，不再自动生成宿主修复轮。新结果不生成 `attempts`，工具内检查记录在 `execution.tool_events`，最终验收记录在 `checks`；旧任务结果保持可读。validation 事件不再携带外层 `attempt`。显式 retry 时 worker context 可含 `previous_validation`（上次 checks、head、base），只是历史证据，不复制旧工作区。第三方 v1 worker 同样自行完成内部修复，stdin/stdout 结构和工具 RPC 不变。见 [当前架构](../architecture/README.md)。
 
 任务示例：
 
@@ -55,7 +55,7 @@ POST 请求体最多 1 MB，必须使用 Content-Length；错误分别返回 400
 
 `server.auto_review=true` 时，PR opened/reopened/synchronize/ready_for_review 事件创建只读审查任务，结果先留为本地草稿。webhook 文本不会自动触发代码实施或发布。定期审计由 `schedules.audit_interval_seconds` 控制，默认 0 关闭。
 
-发布歧义恢复仅提供本地 CLI `resolve-publication TASK EXTERNAL_ID`，读取外部记录并核对作者、任务标记和提交，不盲目重发。`gate`、`provenance`、`reconcile` 及对应 HTTP 接口已移除；旧接口返回 404，旧归属数据仅保留为档案。`backup DIRECTORY` 创建任务与回执双库备份目录，包含 manifest；不覆盖已存在目标，不包含完整原生会话/记忆或工作区，见 [备份说明](../decisions/0010-native-kanban.md)。
+发布歧义恢复仅提供本地 CLI `resolve-publication TASK EXTERNAL_ID`，读取外部记录并核对作者、任务标记和提交，不盲目重发。`backup DIRECTORY` 创建完整受管状态快照，`restore BACKUP NEW_RUNTIME` 校验后恢复到新目录，均不覆盖已有目标或提供 HTTP 写入口；见 [操作手册](../runbooks/OPERATIONS.md)。
 
 执行时无需等待最终结果即可读取 `GET /tasks/{id}/events` 或 CLI `events TASK_ID`。`kind=execution` 的 `data` 包含 `phase`（workspace/worker/tool/validation/commit）、`status`（started/completed，worker 还可能 failed）。worker 与其工具事件共享 `invocation`，工具另有 `call` 序号；completed 表示该调用已返回，是否成功看 `ok` 或检查退出码，不代表任务已交付。
 
@@ -63,6 +63,6 @@ POST 请求体最多 1 MB，必须使用 Content-Length；错误分别返回 400
 
 可识别的模型故障在 `worker/failed` 事件附加固定词表 `error_code`。聊天切换失败时 `execution` 可仅含 `error_code`，不能当作成功的模型运行证据；原模型和 revision 保持不变。
 
-任务由 Hermes Kanban 保存并调度。新 ID 形如 `t_<hex>`，迁移旧 ID 保持可用；返回值新增 `native_id`、`native_status`，旧 state 标签作为兼容视图保留。events 包含原生生命周期事件，seq 改为原生事件序号；发布回执另由业务库管理。取消不会解除子任务依赖，手动 complete 也须满足原生父任务条件；详见 [0010](../decisions/0010-native-kanban.md)。
+任务由 Hermes Kanban 保存并调度。新 ID 形如 `t_<hex>`，迁移旧 ID 保持可用；返回值新增 `native_id`、`native_status`，旧 state 标签作为兼容视图保留。events 包含原生生命周期事件，seq 改为原生事件序号；发布回执另由业务库管理。取消不会解除子任务依赖，手动 complete 也须满足原生父任务条件；详见 [当前架构](../architecture/README.md)。
 
-HTTP/`chat --message` 内部以原生 SSE 等待运行完成，最终 JSON 字段不变，不开放新的对外 SSE 路由。事件流缺失或断开时只恢复相同 run 的持久状态，不能承诺重放中间进度；正常等待、取消与断线语义见 [0012](../decisions/0012-native-run-events.md)。
+HTTP/`chat --message` 内部以原生 SSE 等待运行完成，最终 JSON 字段不变，不开放新的对外 SSE 路由。事件流缺失或断开时只恢复相同 run 的持久状态，不能承诺重放中间进度；正常等待、取消与断线语义见 [当前架构](../architecture/README.md)。

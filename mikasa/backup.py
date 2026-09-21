@@ -23,7 +23,7 @@ CREDENTIALS = {'vault', 'tokens.json', '.netrc', '.git-credentials'}
 def excluded(path):
     # Git objects and reflogs are part of the recovery state, not disposable logs.
     return (sensitive(path.as_posix()) or bool(set(path.parts) & CREDENTIALS) or
-            ('.git' not in path.parts and (bool(set(path.parts) & TRANSIENT) or
+            (path.parts[0] != 'workspaces' and '.git' not in path.parts and (bool(set(path.parts) & TRANSIENT) or
              path.name.endswith(('.log', '.lock', '.pid', '.pyc', '-wal', '-shm', '-journal')))))
 
 
@@ -105,6 +105,7 @@ def _backup_state(service, destination):
                 elif stat.S_ISREG(mode):
                     entries[name] = {'mode': 0o700 if mode & 0o111 else 0o600}
                     files.append({'source': str(source), 'target': str(output),
+                                  'workspace': relative.parts[0] == 'workspaces',
                                   'config': source.name == 'config.yaml' and relative.parts[0] != 'workspaces'})
                 else:
                     raise MikasaError('备份中存在不支持的特殊文件')
@@ -188,6 +189,7 @@ def restore_state(config, source, destination):
                     output.mkdir(mode=0o700)
                 elif 'mode' in entry:
                     files.append({'source': str(backup / name), 'target': str(output),
+                                  'workspace': PurePosixPath(name).parts[0] == 'workspaces',
                                   'config': Path(name).name == 'config.yaml' and PurePosixPath(name).parts[0] != 'workspaces'})
             native_copy(config, files, relocation={
                 'old_runtime': manifest['source_runtime'], 'runtime': str(target),

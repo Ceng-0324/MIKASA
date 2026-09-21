@@ -246,6 +246,7 @@ class NativeGateway:
                 return json.load(response)
         except HTTPError as exc:
             # Do not reflect upstream response text, which can contain credentials or prompts.
+            exc.close()
             raise NativeAPIError(exc.code) from None
         except (URLError, OSError, ValueError):
             raise MikasaError("Hermes 原生 API 不可用") from None

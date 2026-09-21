@@ -7,6 +7,7 @@ from datetime import datetime
 from unittest.mock import patch
 
 from mikasa.config import Config
+from mikasa.backup import backup_state, restore_state
 from mikasa.cron import Cron
 from mikasa.errors import Conflict, MikasaError
 from mikasa.process import clean_env, run
@@ -65,6 +66,29 @@ class CronTests(BaseTest):
             with sqlite3.connect(self.home / 'state.db') as db:
                 self.assertEqual(db.execute('SELECT count(*) FROM sessions').fetchone()[0], 0)
         self.assertEqual(self.github.writes, [])
+
+    def test_restored_cron_preserves_occurrence_and_uses_new_runtime(self):
+        job = self.service.schedule()['job']
+        self.due(job)
+        current = self.service.schedule()['job']
+        previous = self.executions(job)
+        backup = self.path / 'backup'
+        backup_state(self.service, backup)
+        restored = self.path / 'restored'
+        restore_state(self.config, backup, restored)
+        self.data.update(runtime=str(restored), schedules={'audit_interval_seconds': 90})
+        self.write_config()
+        self.home = restored / 'scheduler'
+        self.service = Service(self.config, github=self.github)
+        self.assertEqual(self.service.schedule()['job']['next_run_at'], current['next_run_at'])
+        self.assertEqual(self.executions(job), previous)
+        self.assertEqual(len(self.service.tasks.list()), 1)
+        self.service.run_once()
+        self.due(job)
+        self.assertEqual(self.service.schedule()['executed'], 1)
+        self.assertEqual(len(self.service.tasks.list()), 2)
+        integration = json.loads((self.home / 'integration.json').read_text())
+        self.assertEqual(integration['runtime'], str(restored))
 
     def test_active_audit_suppresses_later_occurrence_and_replay_is_idempotent(self):
         job = self.service.schedule()['job']

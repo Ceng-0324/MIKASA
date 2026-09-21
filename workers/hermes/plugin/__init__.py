@@ -2,7 +2,6 @@
 import hashlib
 import json
 import threading
-from pathlib import Path
 
 
 def register(ctx):

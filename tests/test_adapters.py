@@ -1,7 +1,6 @@
 import io
 import json
 import os
-import subprocess
 import sys
 from contextlib import redirect_stdout
 from unittest.mock import patch
@@ -230,3 +229,7 @@ class AIAgent:
         with redirect_stdout(io.StringIO()):
             self.assertEqual(main(["--config", str(self.config_path), "backup", str(self.path / "backup")]), 0)
         self.assertEqual((self.path / "backup/mikasa.sqlite3").stat().st_mode & 0o777, 0o600)
+        with redirect_stdout(io.StringIO()), patch('mikasa.cli.Service', side_effect=AssertionError('restore must not initialize active state')):
+            self.assertEqual(main(["--config", str(self.config_path), "restore", str(self.path / "backup"),
+                                   str(self.path / "restored")]), 0)
+        self.assertTrue((self.path / "restored/kanban/kanban.db").is_file())

@@ -1,11 +1,10 @@
-import json
 import sys
 
 from mikasa.agent_tools import ToolSession
 from mikasa.errors import MikasaError
 from mikasa.process import git
 from mikasa.workspace import Workspace
-from tests.support import BaseTest, REPO
+from tests.support import BaseTest
 
 
 class AgentToolTests(BaseTest):

@@ -39,7 +39,7 @@ def main():
         src, dst = Path(item['source']), Path(item['target'])
         with src.open('rb') as stream:
             database = stream.read(16) == b'SQLite format 3\x00'
-        if database:
+        if database and not item.get('workspace'):
             if not copy_db_and_verify(src, dst):
                 raise ValueError('SQLite snapshot failed')
         elif item.get('config'):

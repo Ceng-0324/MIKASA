@@ -74,10 +74,10 @@ CLI 启动原生 CLI 子进程，HTTP 启动原生 Gateway 子进程；同一账
 
 不同账号的 SessionDB、MEMORY、USER 和 home 独立。身份由 canonical 生成 SOUL，工程规则经官方插件注入。人格 skill 通过原生 `skills.auto_load` 必需加载，缺失时拒绝启动；工程 skills 由原生索引与 skill_view 加载。聊天模型目前仅授权 memory、skills_list、skill_view，plugin 阻止其他模型工具。CLI 系统命令与模型工具调用是不同通道；HTTP 的 `/init` 仍暂缓。
 
-工程任务与提交账号共用原生 MEMORY/USER，聊天中经确认并写入长期记忆的约定会在新的工程 Agent 实例加载；工程写入的长期约定也可由新聊天实例读取。同一实例的系统提示记忆快照不立即重建，不承诺热刷新。普通聊天正文不会自动成为工程上下文，临时安排须随任务提供；工程完整工具历史仍按任务隔离。旧工程记忆留在任务 profile 的 `memories.legacy`，不自动并入账号记忆；详见 [工程会话与迁移](../decisions/0008-engineering-state.md)。这不代表聊天已经开放仓库执行工具。
+工程任务与提交账号共用原生 MEMORY/USER，聊天中经确认并写入长期记忆的约定会在新的工程 Agent 实例加载；工程写入的长期约定也可由新聊天实例读取。同一实例的系统提示记忆快照不立即重建，不承诺热刷新。普通聊天正文不会自动成为工程上下文，临时安排须随任务提供；工程完整工具历史仍按任务隔离。旧工程记忆留在任务 profile 的 `memories.legacy`，不自动并入账号记忆；详见 [当前架构](../architecture/README.md)。这不代表聊天已经开放仓库执行工具。
 
-`backup DIRECTORY` 备份业务回执和原生 Kanban 两个 SQLite，不能作为原生会话/记忆的完整恢复点。维护前停服并保留整个受限 runtime；不把它上传到 Git 或公开存储。
+`backup DIRECTORY` 备份完整受管状态，包括原生会话、记忆与运行回执；`restore BACKUP NEW_RUNTIME` 校验后恢复到新目录。先停服，按 [备份说明](OPERATIONS.md) 重新提供外部配置与凭据；备份不上传 Git 或公开存储。
 
 通过 HTTP 调用 `POST /chats/{id}/stop`（空 JSON、所属账号鉴权）。返回 `stop_requested` 仅说明已向 Hermes 发出取消；原生运行进入终态后才能确认停止。取消不会回滚已经写入的长期记忆或已发生的工具副作用。
 
-HTTP/单条消息的内部等待已使用 Hermes 原生运行事件，正常运行不再高频查询状态；对外仍返回最终 JSON。断流后查询同一 run 的持久状态，不重新推理，不保证恢复中间 delta；暂停/超时仍向原生 `/stop` 请求结束。旧回执在 Gateway 重启后可直接读取持久结果，失败或已中断的 run 不会自动重新执行。边界及本地真实 Gateway 验收见 [0012](../decisions/0012-native-run-events.md)。
+HTTP/单条消息的内部等待已使用 Hermes 原生运行事件，正常运行不再高频查询状态；对外仍返回最终 JSON。断流后查询同一 run 的持久状态，不重新推理，不保证恢复中间 delta；暂停/超时仍向原生 `/stop` 请求结束。旧回执在 Gateway 重启后可直接读取持久结果，失败或已中断的 run 不会自动重新执行。边界及本地真实 Gateway 验收见 [当前架构](../architecture/README.md)。

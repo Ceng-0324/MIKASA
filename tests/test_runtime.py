@@ -1,5 +1,4 @@
 import concurrent.futures
-import json
 import os
 import sys
 from unittest.mock import patch
@@ -8,7 +7,7 @@ from mikasa.errors import Conflict, Forbidden, MikasaError
 from mikasa.process import run, git
 from mikasa.service import Service
 from mikasa.workspace import Workspace
-from tests.support import BaseTest, REPO, SHA
+from tests.support import BaseTest, REPO
 
 
 class RuntimeTests(BaseTest):

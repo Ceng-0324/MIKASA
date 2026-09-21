@@ -7,7 +7,7 @@ from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from mikasa.chat import Chat, command
-from mikasa.errors import Conflict, MikasaError, NotFound
+from mikasa.errors import Conflict, NotFound
 from mikasa.server import make_server
 from mikasa.worker import Worker
 from tests.support import BaseTest, command_reply

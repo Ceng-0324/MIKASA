@@ -1,6 +1,6 @@
 # Hermes 执行器
 
-固定源码：NousResearch/hermes-agent `f9524d3f119c672e4a4444f56d582e7475716ba3`，包版本 0.21.3。真实 CCH Responses、人格/工程 skill 和完整任务链已通过合成任务联调，证据与限制见 [联调记录](../../docs/HERMES_CCH_VALIDATION.md)。
+固定源码：NousResearch/hermes-agent `f9524d3f119c672e4a4444f56d582e7475716ba3`，包版本 0.21.3。真实 CCH Responses、人格/工程 skill 和完整任务链已通过合成任务联调，证据与限制见 [验证边界](../../docs/VALIDATION.md)。
 
 ## 独立安装
 
@@ -61,46 +61,30 @@ Mikasa 将当前暂存树（实现/修复）或固定 PR head（计划/审查）
 
 工程 profile 位于 `runtime/engineering/<task-id>`，SessionDB 按任务隔离；每轮从稳定根会话恢复原生工具历史及压缩后续。memories 目录直接链接提交账号的原生 MEMORY/USER，由 Hermes 负责锁、原子写入与加载；不复制聊天正文。任务 profile 绑定可信 actor、task-id 和 repo，同任务进程互斥。旧任务记忆留在 `memories.legacy`，旧随机会话仍保留在原 SessionDB，均不自动合并。SOUL 和任务对应 skills 由 canonical 与受信任 manifest 生成，pre_api_request 验证实际请求内的完整身份、规则与 skill 正文。只准加载本任务的可信 skills，不开放 skill_manage、委派、浏览器、外部消息或发布工具。每次至多 24 次原生迭代、128 个工具证据事件；时间仍由 worker.timeout 限制。
 
-持久根会话为 `mikasa-task-<task-id>`；每轮随机 `run_id` 单独传给原生工具作为 task_id，容器按该 ID 标记、验收及清理。Python 启动路径保留虚拟环境符号链接，避免切换到缺少 SDK 的基础解释器。续话、记忆、真实 Docker 与固定 SDK 验证见 [0008](../../docs/decisions/0008-engineering-state.md)。
+持久根会话为 `mikasa-task-<task-id>`；每轮随机 `run_id` 单独传给原生工具作为 task_id，容器按该 ID 标记、验收及清理。Python 启动路径保留虚拟环境符号链接，避免切换到缺少 SDK 的基础解释器。续话、记忆、真实 Docker 与固定 SDK 验证见 [当前架构](../../docs/architecture/README.md)。
 
 工程返回严格 JSON，原生实现必须通过工具修改快照并返回 `changes: []`。宿主暂保留任务、固定 revision、检查和发布适配；审查分工由 Agent 依据规则与记忆判断，不再由宿主归属分类或指定审批人引擎执行。没有工作区的诊断调用仍为无工具结构化请求，不代表工程执行。
 
-每次任务认领只调用一次 worker；Hermes 在原生工具循环中自行读取失败、修改并重跑 `mikasa_run_checks`。宿主结束后独立验收一次，失败返回 blocked、保留结果与工作区，不启动新的 Agent 修复轮。显式 retry 恢复同任务原生历史，并传递上次最终验收结果；新工作区不自动复制旧失败改动。旧 `worker.max_attempts` 仅供 v1 配置读取兼容，doctor 明确报告已停用。详见 [0009](../../docs/decisions/0009-native-repair-loop.md)。
+每次任务认领只调用一次 worker；Hermes 在原生工具循环中自行读取失败、修改并重跑 `mikasa_run_checks`。宿主结束后独立验收一次，失败返回 blocked、保留结果与工作区，不启动新的 Agent 修复轮。显式 retry 恢复同任务原生历史，并传递上次最终验收结果；新工作区不自动复制旧失败改动。旧 `worker.max_attempts` 仅供 v1 配置读取兼容，doctor 明确报告已停用。详见 [当前架构](../../docs/architecture/README.md)。
 
 可配置的第三方 worker 暂保留 version=1 的宿主 RPC 协议（旧 mikasa_list/read/search/apply）；它是已公开进程协议的兼容对象，内置 Hermes 工程路径不使用它。待第三方协议升级、调用方与协议测试一起迁移后删除该兼容实现，不提供 Hermes 新旧后端切换开关。
 
-原生容器、工程循环与分页证据见 [原生验收](../../docs/NATIVE_HERMES_VALIDATION.md)。旧自研工具的验证保留为 [历史记录](../../docs/HERMES_TOOLS_VALIDATION.md)，不能当作当前实现的验收结果。
+原生容器、工程循环与分页的实测范围见 [验证边界](../../docs/VALIDATION.md)，旧版本结果不能替代当前验收。
 
-## 命令与会话接口
+## 集成入口
 
-终端 `mikasa chat` 由 `native_cli.py` 调用官方 `cli.main()`；TTY、输入循环和完整命令分派由 Hermes 拥有。身份/工程规则、Mikasa plugin 与 persona 加载检查在启动前完成；`/model` 使用 Hermes providers/model_aliases 和官方 scope 语义，`/new` 确认后新建会话，`/resume` 恢复原生会话。固定版本 `/new` 恢复默认模型的路径对自定义 CCH provider 有上游限制，当前保留原模型；详见 0007。
+| 文件 | 职责 |
+| --- | --- |
+| `native_cli.py` / `native_gateway.py` | 官方 CLI/Gateway 生命周期与必要加载检查 |
+| `profile_config.py` | 保留原生偏好，刷新受管 providers/aliases/skills/plugin |
+| `plugin/` | 聊天工程规则、身份加载证据与已开放工具范围 |
+| `task_session.py` | 工程原生续话与压缩后续 |
+| `import_legacy.py` | 旧聊天导入原生 SessionDB，保留原档案 |
+| `command_adapter.py` | 既有 HTTP/单条消息命令契约；终端不用此适配 |
+| `kanban_adapter.py` | 原生任务、租约、dispatcher、事件与旧 ID 迁移 |
+| `cron_adapter.py` / `cron_enqueue.py` | 原生 Cron tick 与 occurrence 幂等入板 |
+| `backup_adapter.py` | 原生 SQLite 快照、配置密钥字段排除及恢复路径迁移 |
 
-HTTP 和 `chat --message` 暂留既有进程协议 `{"version":1,"operation":"command","text":"/model ..."}`，返回 `version` 与 `result`（name、kind、target、reply）。该命令解析进程只接收专用 home 和源码位置，不读取模型配置、不注入模型/平台认证。bridge 在模型环境校验之前调用官方命令注册表、model 参数解析器及 version 执行器；错误仍返回固定错误信封，不转交模型。此适配将在原生渠道接管既有 API 的鉴权、幂等和取消并迁移调用方后删除。
+`worker.native_python` 指定 Hermes 解释器，默认 `runtime/cache/hermes-venv/bin/python`，保留 venv 路径而不解析为基础 Python。`requirements-kanban.txt` 供 CI/控制面测试，完整 agent 使用安装快照；Gateway 的 aiohttp、lark-oapi 已包含在快照中。
 
-HTTP 聊天使用原生 Gateway 的 SessionDB、运行幂等和取消；Mikasa 只保存账号与 session/run 引用。API 的 `/new` 明确保留模型和账号长期记忆，客户端须跟随返回的新 chat_id。见 [原生运行决定](../../docs/decisions/0004-native-hermes-runtime.md) 和 [原生 CLI 决定](../../docs/decisions/0007-native-cli.md)。
-
-不耗模型额度的兼容探针：`python3.12 scripts/probe_commands.py --config config/local/hermes-cch.json`。真实跨协议与新会话验收使用 `probe_chat.py --slash --commands`，其余参数见 [验证记录](../../docs/VALIDATION.md)。
-
-原生 CLI 的本地 SDK 验收：`python3.12 scripts/probe_native_cli.py`，使用一次性 profile、本机模型目录和合成 Key，验证官方命令分派、跨协议路由、历史恢复、偏好重载与入口启动退出，不调用真实模型。
-
-## 原生聊天 Gateway
-
-HTTP/单条消息调用未修改的 `gateway.run`、`/api/sessions` 和 `/v1/runs`。账号 profile 位于 runtime/native，与原生 CLI 共用会话与记忆；CLI/Gateway 通过同一进程锁互斥。`native_gateway.py` 校验 Mikasa plugin 成功加载后启动官方生命周期。Mikasa 原生适配不实现另一套 agent loop。
-
-Gateway 需要固定版本的额外依赖：
-
-```sh
-uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/bin/python aiohttp==3.14.3 lark-oapi==1.6.8
-```
-
-`worker.native_python` 可指定 CLI/Gateway 解释器，默认 runtime/cache/hermes-venv/bin/python；`worker.hermes_source` 指向固定源码。配置沿用现有 model_source/model_routes，所有已配置来源须可读取。生成的 Hermes providers 只包含 Key 环境变量名，无实际 Key。`profile_config.py` 在该解释器中解析 YAML/JSON，刷新集成配置并保留 Hermes 原生偏好；格式错误不覆盖文件。当前模型工具只启用 memory 与 skills，plugin 拒绝未授予的工具；本地 CLI 系统命令仍采用原生行为，这不是操作系统沙箱。
-
-`bridge.py` 保留工程结构化协议、原生 harness 配置和交付证据适配；文件、搜索、修改、shell、任务续话与账号长期记忆已使用官方原生能力。审批引擎与外层修复循环已移除；任务事实源与认领调度已接入 Kanban，周期审计已接原生 Cron；宿主仍负责唤醒；HTTP 聊天等待已接原生 SSE，完整原生备份待迁移。
-
-## 原生任务控制面
-
-`kanban_adapter.py` 调用固定 SDK 的任务、图、租约、原生 dispatcher 与事件 API，独立 home 为 runtime/kanban，不读取模型凭据。公开 spawn_fn 将认领租约交给现有同步工程 Worker；周期唤醒仍由宿主负责。旧任务导入、API 映射、单一事实源与恢复边界见 [0010](../../docs/decisions/0010-native-kanban.md)。`requirements-kanban.txt` 仅供 CI 和控制面测试，不足以运行模型 agent。
-
-`cron_adapter.py` 在独立 `runtime/scheduler` home 调用原生 `cron.jobs` 和 `cron.scheduler.tick`。官方 no_agent 脚本 `cron_enqueue.py` 按原生 occurrence 向同一 Kanban 入板，删除宿主时间槽算法；不加载模型凭据或发出外部消息。暂停、重启、脚本失败和后续边界见 [0011](../../docs/decisions/0011-native-cron.md)。
-
-HTTP/单条聊天的 `NativeGateway.wait` 消费官方 `/v1/runs/{run_id}/events`，正常等待只读初始/最终状态。固定版 transport 无法重放，断流转为同一 run 的低频状态恢复，不重发推理；取消/超时清理读取线程。对外仍是最终 JSON API，不新增自研事件日志或 UI。见 [0012](../../docs/decisions/0012-native-run-events.md)。
+命令、状态、迁移及兼容退出条件统一见 [当前架构](../../docs/architecture/README.md)。可重复的 SDK、Docker 与真实模型验收见 [脚本](../../scripts/README.md)；平台接通与历史验证的界限见 [验证边界](../../docs/VALIDATION.md)。

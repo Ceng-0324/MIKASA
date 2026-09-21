@@ -2,7 +2,6 @@
 """Actual native Docker read-only and forced-cancellation checks; no model requests."""
 import argparse
 import json
-import os
 import sys
 import tempfile
 import time

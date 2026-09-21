@@ -5,7 +5,6 @@ import json
 import fcntl
 import sqlite3
 import time
-from pathlib import Path
 
 from mikasa.errors import Conflict, MikasaError
 from mikasa.service import Service
