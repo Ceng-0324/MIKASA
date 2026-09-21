@@ -6,11 +6,15 @@
 
 ```mermaid
 flowchart LR
-    CLI[终端 chat] --> H[Hermes CLI]
-    HTTP[鉴权聊天 API] --> G[Hermes Gateway]
-    F[飞书私聊与群聊] --> G
+    subgraph Chat[原生聊天入口：同一 profile 择一运行]
+        CLI[终端 chat] --> H[Hermes CLI]
+        HTTP[鉴权聊天 API] --> AG[Hermes API Gateway]
+        F[飞书私聊与群聊] --> MG[Hermes 消息 Gateway]
+        WX[微信主人私聊] --> MG
+    end
     H --> CCH[CCH 模型路由]
-    G --> CCH
+    AG --> CCH
+    MG --> CCH
     T[任务 CLI / API / GitHub webhook] --> K[Hermes Kanban]
     CR[Hermes Cron] --> K
     K --> W[同步工程适配]

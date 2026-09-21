@@ -1,6 +1,6 @@
 # Mikasa skills
 
-本目录保存已适配并验证的项目 skill。工程方法来自固定版本 `mattpocock/skills`，版本、MIT 许可和适配差异见 [SOURCES.md](SOURCES.md)。人格正文仍以三个 canonical 文件为准。
+本目录保存已适配并验证的项目 skill。工程方法来自固定版本 `mattpocock/skills`，版本、MIT 许可和适配差异见 [SOURCES.md](SOURCES.md)。人格以 [identity.md](../identity.md) 为唯一事实源，授权与执行方法分别见[工程契约](../engineering-contract.md)和[工程工作流](../engineering-workflow.md)。
 
 | 任务 | 加载内容 |
 | --- | --- |

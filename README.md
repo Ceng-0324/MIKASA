@@ -6,7 +6,7 @@
 
 | 组件 | 负责什么 |
 | --- | --- |
-| Hermes | 原生 CLI、系统命令、模型调用与工具循环、SessionDB、MEMORY/USER、skills、Kanban、Cron、运行事件及 SQLite 快照 |
+| Hermes | 原生 CLI 与多平台 Gateway、系统命令、模型调用与工具循环、SessionDB、MEMORY/USER、skills、Kanban、Cron、运行事件及 SQLite 快照 |
 | CCH | 模型供应、协议对应的供应商路由、模型重写和分组 |
 | Mikasa | 身份与工程 skills、配置和账号绑定、工程隔离与最终验收、必要的 API/平台/备份适配 |
 
@@ -14,21 +14,26 @@
 
 ## 运行
 
-需要 Python 3.12+、Git 和[固定 Hermes 环境](workers/hermes/README.md)；工程执行另需 Docker 及预装镜像。按[配置说明](config/README.md)建立 `config/local/mikasa.json`，配置模型来源及授权仓库。
+需要 Python 3.12+、Git 和[固定 Hermes 环境](workers/hermes/README.md)。按[配置说明](config/README.md)准备本机 JSON 与模型来源；以下沿用接入手册的 `config/local/hermes-cch.json`，其他机器替换为自己的路径。纯聊天无需配置仓库；工程任务另需授权仓库、Docker 及预装镜像。
 
 ```sh
-python3.12 -m mikasa --config config/local/mikasa.json doctor
-python3.12 -m mikasa --config config/local/mikasa.json chat
+python3.12 -m mikasa --config config/local/hermes-cch.json doctor
 ```
 
-`chat` 直接进入 Hermes，使用 `/model 完整模型ID`、`/new`、`/resume` 等原生命令。GPT/Claude 需配置相应 CCH provider 和协议；聊天目前开放记忆与 skills，仓库工程任务仍走独立入口。API 与任务 runner 分别启动：
+按用途选择入口；命令均追加在 `python3.12 -m mikasa --config config/local/hermes-cch.json` 后：
 
-```sh
-python3.12 -m mikasa --config config/local/mikasa.json serve
-python3.12 -m mikasa --config config/local/mikasa.json run
-```
+| 用途 | 命令 | 说明 |
+| --- | --- | --- |
+| 飞书与微信聊天 | `gateway --platform feishu --platform weixin` | 一个 Hermes Gateway；先配置飞书应用并完成微信扫码，可只选一个平台 |
+| 终端聊天 | `chat` | 直接进入 Hermes CLI |
+| HTTP 接口 | `serve` | 鉴权聊天与任务 API，聊天按账号启动原生 Gateway |
+| 工程任务执行 | `run` | 消费任务队列；提交任务见[操作手册](docs/runbooks/OPERATIONS.md) |
 
-默认示例未配置模型、仓库或外部发布，`doctor` 只检查本地条件。聊天差异、工程操作及完整备份/恢复见[运行手册](docs/runbooks/OPERATIONS.md)和[聊天手册](docs/runbooks/CHAT.md)。
+**同一账号 profile 的终端、HTTP 聊天和消息 Gateway 互斥**，切换入口前需停止占用它的进程。飞书和微信应在同一条 Gateway 命令中启动。
+
+原生聊天使用 `/model 完整模型ID`、`/new`、`/help` 等系统命令；GPT/Claude 需配置相应 CCH provider 和协议。聊天模型工具目前为记忆与只读 skills，仓库工程任务仍走独立入口；HTTP 命令兼容范围见[聊天手册](docs/runbooks/CHAT.md)。
+
+默认示例未配置模型、仓库或外部发布，`doctor` 只检查本地条件。平台凭据与扫码见[接入手册](docs/runbooks/CONNECTIONS.md)，模型配置见 [CCH 手册](docs/runbooks/CCH.md)。
 
 ## 当前进度
 
