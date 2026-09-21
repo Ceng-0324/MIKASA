@@ -4,6 +4,8 @@
 
 当前使用版本化 JSON 配置：[examples/mikasa.json](examples/mikasa.json)。结构与权限校验由 `mikasa/config.py` 实现；未知顶层字段和非法身份会被拒绝。默认不启用仓库、模型命令、周期审计或外部发布。
 
+可选 `feishu` 段配置国内应用、负责人 `owner_open_id`、可选同一人 `owner_user_id` 及凭据环境变量名。只有显式运行 `mikasa feishu` 才启动渠道；`connections github|feishu --probe` 只读检查平台。字段示例、独立账号/机器人区别、获取步骤与[环境模板](examples/platforms.env.example)的用法见[接入手册](../docs/runbooks/CONNECTIONS.md)。
+
 `schedules.audit_interval_seconds` 由 Hermes Cron 实现：0 关闭，60–604800 秒启用，支持非整分钟间隔；首次启用等待一个间隔。重启不重置下次执行时间，未改宿主间隔时保留原生暂停/周期编辑。关闭保留 job 和历史，改间隔后启用新周期。专用 `runtime/scheduler` home 只做无模型的审计入板，详见 [当前架构](../docs/architecture/README.md)。
 
 当前分层：

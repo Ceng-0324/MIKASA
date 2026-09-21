@@ -101,7 +101,7 @@ def prepare_profile(config, actor):
         "model": {"default": model, "provider": provider_id(select_source(settings, model))},
         "providers": providers,
         "model_aliases": {m: {"model": m, "provider": provider_id(select_source(settings, m))} for m in choices},
-        "platform_toolsets": {"api_server": ["memory", "skills"], "cli": ["memory", "skills"]},
+        "platform_toolsets": {name: ["memory", "skills"] for name in ("api_server", "cli", "feishu")},
         "memory": {"memory_enabled": True, "user_profile_enabled": True},
         "skills": {"external_dirs": [str(config.root / "skills")], "auto_load": ["mikasa-persona"]},
         "plugins": {"enabled": ["mikasa"]},
@@ -133,8 +133,16 @@ def prepare_profile(config, actor):
 
 
 @runtime_operation
-def interactive(config, session=None):
-    """TTY is owned by Hermes. No Mikasa command parser or conversation loop."""
+def interactive(config, session=None, *, platform="cli"):
+    """Foreground native CLI or messaging Gateway; Hermes owns interaction."""
+    platform_env = {}
+    if platform == "feishu":
+        from .connections import feishu_environment
+        platform_env = feishu_environment(config)
+        if session:
+            raise MikasaError("飞书会话由 Hermes Gateway 管理")
+    elif platform != "cli":
+        raise MikasaError("不支持的原生交互平台")
     actor = config.owner
     home = profile_home(config, actor)
     home.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -146,6 +154,7 @@ def interactive(config, session=None):
         home, source, python, credentials = prepare_profile(config, actor)
         env = {k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL", "TMPDIR", "TERM", "COLORTERM", "SSL_CERT_FILE") if k in os.environ}
         env.update(credentials)
+        env.update(platform_env)
         env.update(HERMES_HOME=str(home), MIKASA_HERMES_SOURCE=str(source),
                    HERMES_ENABLE_PROJECT_PLUGINS="0", PYTHONUNBUFFERED="1")
         # Import only existing legacy state; starting native CLI needs no Mikasa database.
@@ -156,6 +165,11 @@ def interactive(config, session=None):
             if imported.returncode:
                 raise MikasaError("旧会话导入失败；原数据库保留，CLI 未启动")
         command = [str(python), str(config.root / "workers/hermes/native_cli.py")]
+        if platform == "feishu":
+            from .connections import feishu_gateway_config
+            gateway_config = home / "gateway-feishu.json"
+            private_write(gateway_config, json.dumps(feishu_gateway_config()))
+            command = [str(python), str(config.root / "workers/hermes/native_gateway.py"), "--config", str(gateway_config)]
         if session:
             command += ["--resume", session]
         def terminate(signum, frame):

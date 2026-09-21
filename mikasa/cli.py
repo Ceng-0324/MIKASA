@@ -20,6 +20,10 @@ def parser():
     diagnostic.add_argument("--probe-model", action="store_true", help="经当前 worker 发起一次真实模型调用；会消耗模型额度")
     diagnostic.add_argument("--model", help="诊断指定模型的路由；不改变默认模型或聊天")
     commands.add_parser("serve")
+    connections = commands.add_parser("connections", help="检查平台配置；--probe 只读联网，不发消息或发布")
+    connections.add_argument("platform", choices=("github", "feishu"))
+    connections.add_argument("--probe", action="store_true")
+    commands.add_parser("feishu", help="以前台方式启动 Hermes 原生飞书负责人单聊")
     chat = commands.add_parser("chat", help="启动原生 Hermes 交互；/model、/new 等由 Hermes 处理")
     chat.add_argument("--session", help="恢复原生会话 ID；--message 模式使用旧 API 聊天 ID")
     chat.add_argument("--message", help="使用现有 HTTP 聊天适配发送单条消息，输出 JSON")
@@ -97,6 +101,14 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         config = Config.load(args.config)
+        if args.command == "connections":
+            from .connections import diagnostics
+            value = diagnostics(config, args.platform, probe=args.probe)
+            print(json.dumps(value, ensure_ascii=False, indent=2))
+            return int(value["configuration"] != "ready" or (args.probe and value["connection"] != "passed"))
+        if args.command == "feishu":
+            from .native import interactive
+            return interactive(config, platform="feishu")
         if args.command == "restore":
             from .backup import restore_state
             print(json.dumps(restore_state(config, args.source, args.destination), ensure_ascii=False, indent=2))

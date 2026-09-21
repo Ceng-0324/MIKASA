@@ -142,6 +142,51 @@ class NativeProfileTests(unittest.TestCase):
                 interactive(self.config)
         self.assertEqual((home / 'config.yaml').read_bytes(), before)
 
+    def test_feishu_launcher_uses_owner_profile_and_never_persists_app_secret(self):
+        from mikasa.native import interactive
+        from unittest.mock import Mock
+        self.config.data['feishu'] = {'domain': 'feishu', 'owner_open_id': 'ou_owner'}
+        prepared = prepare_profile(self.config, self.config.owner)
+        process = Mock()
+        process.wait.return_value = 0
+        process.poll.return_value = 0
+        with patch.dict(os.environ, {'MIKASA_FEISHU_APP_ID': 'cli_fixture', 'MIKASA_FEISHU_APP_SECRET': 'feishu-secret',
+                                     'FEISHU_ALLOW_ALL_USERS': 'true', 'GATEWAY_ALLOW_ALL_USERS': 'true',
+                                     'FEISHU_HOME_CHANNEL': 'oc_unwanted', 'GH_TOKEN': 'private'}), \
+                patch('mikasa.native.prepare_profile', return_value=prepared), \
+                patch('mikasa.native.subprocess.Popen', return_value=process) as spawn:
+            self.assertEqual(interactive(self.config, platform='feishu'), 0)
+        command = spawn.call_args.args[0]
+        env = spawn.call_args.kwargs['env']
+        self.assertEqual(Path(command[1]).name, 'native_gateway.py')
+        self.assertEqual(command[2], '--config')
+        self.assertEqual(env['FEISHU_ALLOWED_USERS'], 'ou_owner')
+        self.assertEqual(env['FEISHU_ALLOW_ALL_USERS'], 'false')
+        self.assertEqual(env['GATEWAY_ALLOW_ALL_USERS'], 'false')
+        self.assertEqual(env['FEISHU_GROUP_POLICY'], 'disabled')
+        self.assertNotIn('FEISHU_HOME_CHANNEL', env)
+        self.assertNotIn('GH_TOKEN', env)
+        self.assertFalse(any(b'feishu-secret' in p.read_bytes() for p in prepared[0].rglob('*') if p.is_file()))
+        native = json.loads((prepared[0] / 'config.yaml').read_text())
+        self.assertEqual(native['platform_toolsets']['feishu'], ['memory', 'skills'])
+        self.assertEqual(native['skills']['auto_load'], ['mikasa-persona'])
+        self.assertEqual(json.loads((prepared[0] / 'policy/actor.json').read_text())['actor'], self.config.owner)
+
+    def test_feishu_cannot_mutate_an_active_owner_profile(self):
+        import fcntl
+        from mikasa.native import interactive
+        from mikasa.errors import Conflict
+        self.config.data['feishu'] = {'owner_open_id': 'ou_owner'}
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        with (home / 'mikasa.lock').open('a') as lock, \
+                patch.dict(os.environ, {'MIKASA_FEISHU_APP_ID': 'cli_fixture', 'MIKASA_FEISHU_APP_SECRET': 'feishu-secret'}), \
+                patch('mikasa.native.subprocess.Popen') as spawn:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaises(Conflict):
+                interactive(self.config, platform='feishu')
+        spawn.assert_not_called()
+        self.assertFalse((home / 'gateway-feishu.json').exists())
+
     def test_native_launcher_terminates_child_and_restores_handler_on_sigterm(self):
         import fcntl
         import signal

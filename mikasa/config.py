@@ -24,7 +24,7 @@ class Config:
             root = (path.parent / data.get("project_root", "../..")).resolve()
             if data.get("version") != 1:
                 raise MikasaError("配置 version 必须为 1")
-            allowed = {"version", "project_root", "runtime", "owner", "bot", "members", "repositories", "worker", "server", "github", "schedules"}
+            allowed = {"version", "project_root", "runtime", "owner", "bot", "members", "repositories", "worker", "server", "github", "feishu", "schedules"}
             if set(data) - allowed:
                 raise MikasaError("配置包含未知字段")
             if data.get("owner") != "Ceng-0324" or data.get("bot") != "Mikasa-0910":
@@ -96,6 +96,21 @@ class Config:
             for section, field in (("server", "auto_review"), ("github", "publish_enabled")):
                 if type(data.get(section, {}).get(field, False)) is not bool:
                     raise MikasaError(f"{section}.{field} 必须为布尔值")
+            feishu = data.get("feishu", {})
+            if not isinstance(feishu, dict) or set(feishu) - {"domain", "owner_open_id", "owner_user_id", "app_id_env", "app_secret_env"}:
+                raise MikasaError("feishu 只接受 domain、负责人 ID 和凭据环境变量名称")
+            if feishu.get("domain", "feishu") not in {"feishu", "lark"}:
+                raise MikasaError("feishu.domain 必须为 feishu 或 lark")
+            if "owner_open_id" in feishu and (not isinstance(feishu["owner_open_id"], str) or not re.fullmatch(r"ou_[A-Za-z0-9]+", feishu["owner_open_id"])):
+                raise MikasaError("feishu.owner_open_id 必须为负责人在本应用中的 ou_ 用户标识")
+            if "owner_user_id" in feishu and (not isinstance(feishu["owner_user_id"], str) or not re.fullmatch(r"[A-Za-z0-9_-]+", feishu["owner_user_id"])):
+                raise MikasaError("feishu.owner_user_id 必须为同一负责人的租户用户 ID")
+            for section, field, default in (("github", "token_env", "MIKASA_GITHUB_TOKEN"),
+                                            ("feishu", "app_id_env", "MIKASA_FEISHU_APP_ID"),
+                                            ("feishu", "app_secret_env", "MIKASA_FEISHU_APP_SECRET")):
+                variable = data.get(section, {}).get(field, default)
+                if not isinstance(variable, str) or not re.fullmatch(r"[A-Z_][A-Z0-9_]*", variable):
+                    raise MikasaError(f"{section}.{field} 必须为环境变量名称")
             return cls(root, data)
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             raise MikasaError("配置无法读取或结构不正确") from exc

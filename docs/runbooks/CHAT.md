@@ -64,7 +64,7 @@ HTTP 和单条 `chat --message` 仍使用旧命令适配：支持中文切换、
 
 ## 原生运行与数据迁移
 
-CLI 启动原生 CLI 子进程，HTTP 启动原生 Gateway 子进程；同一账号使用同一 profile、SessionDB 和 MEMORY/USER。不能同时以 CLI 和 HTTP 管理同一账号 profile，锁冲突会在更新配置前报错。退出会收回对应子进程，重新打开继续使用原生数据。模型凭据只从显式 CCH 来源读取到子进程环境，不复制个人认证文件。
+CLI 启动原生 CLI 子进程，HTTP 启动原生 Gateway 子进程；同一账号使用同一 profile、SessionDB 和 MEMORY/USER。`mikasa feishu` 也使用负责人 profile，由 Hermes 原生飞书插件处理已绑定负责人的单聊；应用与账号配置见[接入手册](CONNECTIONS.md)。CLI、HTTP 和飞书不能同时管理同一账号 profile，锁冲突会在更新配置前报错。退出会收回对应子进程，重新打开继续使用原生数据。模型凭据只从显式 CCH 来源读取到子进程环境，不复制个人认证文件。
 
 初始化更新身份/规则、必需 skills/plugin 和生成的 CCH 配置，保留 Hermes 自己保存的默认模型、推理和显示偏好。`config.yaml` 的 YAML/JSON 都可读取，刷新写为 JSON（合法 YAML），不保留 YAML 注释；格式错误时保留原文件并阻止启动。长期记忆和原生数据库不由配置初始化覆盖。
 

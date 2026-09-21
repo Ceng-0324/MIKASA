@@ -8,6 +8,7 @@
 flowchart LR
     CLI[终端 chat] --> H[Hermes CLI]
     HTTP[鉴权聊天 API] --> G[Hermes Gateway]
+    F[飞书负责人单聊] --> G
     H --> CCH[CCH 模型路由]
     G --> CCH
     T[任务 CLI / API / GitHub webhook] --> K[Hermes Kanban]
@@ -19,6 +20,8 @@ flowchart LR
 ```
 
 终端直接调用官方 `cli.main()`，完整系统命令与输入循环由 Hermes 提供。HTTP/`chat --message` 保留现有鉴权、命令和幂等回执契约，运行使用官方 Gateway。CLI 新会话不会自动登记为旧 API chat_id。同账号 CLI/Gateway 共用 profile 且进程互斥；本地 shell 是受信任负责人入口。
+
+`mikasa feishu` 以前台方式启动同一固定 Gateway 的原生飞书插件；显式平台配置只启用飞书，凭据仅经环境传入。负责人 Open ID（可补同一人租户 User ID）映射 owner profile，原生准入只允许负责人单聊、拒绝群聊与机器人，不使用显示名鉴权。保持与 CLI/API 相同的身份、skills、记忆及维护锁；默认无启动通知、输入状态或流式预览。`connections` 本地检查不初始化任务数据库，显式 `--probe` 才读取平台身份；不会发布。详见[接入手册](../runbooks/CONNECTIONS.md)。
 
 原生 `/model` 支持 session/once/global，由配置别名选择模型、provider、协议和 Key。HTTP 暂仅支持 session，中文直接切换命令经额外推理验证后保存。模型选择不改变 CCH Key 分组、个人配置或工程默认值。聊天模型工具当前只有 memory 和只读 skills；原生系统命令是独立通道，不构成操作系统沙箱。
 

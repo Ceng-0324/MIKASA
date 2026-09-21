@@ -4,6 +4,14 @@
 
 ## 本轮验证
 
+GitHub/飞书接入准备：全量 **187 项 unittest 通过（323.032 秒）**；追加 Gateway 启动加载验证后，接入测试 **7 项通过（2.493 秒）**，其中固定 SDK 检查在本机实际运行、未跳过。文档检查、默认 doctor 和 diff 检查通过。默认示例仍未配置模型，doctor 的执行成功不表示模型连接已验证。
+
+新增覆盖 GitHub GET-only 身份/仓库/base/列表探针、不把 push 角色当作 token 写权限、缺配置诊断不初始化任务库、飞书凭据隔离、owner profile 互斥与无密钥落盘。真实固定 Hermes/lark SDK 验证负责人准入、陌生人/机器人/群聊拒绝、Open ID 与可选 User ID 解析、事件处理器构造及 Gateway 配置。官方 Gateway `--help` 路径经过 Mikasa plugin/persona 加载检查；未建立飞书连接或调用模型。精简 CI 依赖不包含完整飞书/模型包时，这两项完整 SDK 检查明确 skip，其余接入回归照常执行；远端 CI 本轮未执行。
+
+本机 `config/local/hermes-cch.json` 的只读配置检查显示：GitHub token 未注入、授权仓库为空；飞书 App ID/Secret 未注入、负责人 ID 未绑定。真实 GitHub/飞书探针、应用发布、消息往返、正式 Review、webhook 与 VM 均未验收；未启动或重启现有正式 profile。外部信息获取与联调步骤见[接入手册](runbooks/CONNECTIONS.md)。
+
+## 上一轮基础
+
 完整受管状态备份提交 `011248c`：177 项 unittest 通过（244.515 秒），文档检查、doctor 与 diff 检查通过。`probe_native_events.py` 的 15 项真实 SDK/本地模型夹具检查通过，覆盖新目录恢复后的原回执、会话、记忆、Key、身份/skills、取消与幂等，无重复推理。
 
 备份回归包含 WAL、任务/回执配对、Cron 文件、Git 对象/执行位、记忆链接、运行路径迁移、凭据排除、并发拒绝、篡改拒绝和失败不发布目标。这里的“完整”限定为受管 runtime；不含外部凭据、依赖、外部 provider 状态或日志缓存。

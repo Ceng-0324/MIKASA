@@ -14,7 +14,7 @@
 
 CCH `default` 是 Key 的供应商分组，仍需网关管理员配置与同次路由证据；本地模型名或连接成功不能证明分组已切换。见 [CCH 手册](docs/runbooks/CCH.md)。
 
-GitHub 凭据来源与授权仓库、飞书应用和用户 ID、VM 地址及系统按负责人要求稍后具体讨论；未提供前推进可本地验证的接入准备，不宣称已上线。
+当前已提供 `connections github|feishu [--probe]` 诊断及 `feishu` 原生长连接入口。GitHub 使用独立账号 `Mikasa-0910`，飞书使用国内企业自建应用机器人；先绑定负责人单聊，身份与原生记忆复用负责人 profile，暂不开放群聊或聊天工程任务。平台准备步骤见[接入手册](docs/runbooks/CONNECTIONS.md)。仍需授权仓库、凭据来源、飞书应用及负责人 ID 后做真实验收；VM 信息留下一阶段。
 
 ## 收窄条件
 
