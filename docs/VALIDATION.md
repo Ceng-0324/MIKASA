@@ -4,7 +4,7 @@
 
 ## 本轮验证
 
-2026-09-21，使用负责人指定的本机 token 文件，通过现有 `connections` 诊断调用真实 GitHub `/user`，确认账号为 **Mikasa-0910**，`connection=passed`、`identity=passed`。token 仅在检查进程内读取并注入环境，未打印、复制或写入配置；没有建立常驻服务的凭据注入。仓库配置为空，`repository_access`、`write_access`、`webhook` 均为 `not_checked`。未创建内容、推送或向任何人发送消息。飞书应用凭据与负责人 ID 仍待提供。
+2026-09-21，使用负责人指定的本机 token 文件，通过现有 `connections` 诊断调用真实 GitHub `/user`，确认账号为 **Mikasa-0910**，`connection=passed`、`identity=passed`。token 仅在检查进程内读取并注入环境，未打印、复制或写入配置；没有建立常驻服务的凭据注入。仓库配置为空，`repository_access`、`write_access`、`webhook` 均为 `not_checked`。未创建内容、推送或向任何人发送消息。飞书负责人 Open ID 已写入本机配置，App ID、App Secret 和应用发布状态仍待准备。
 
 ## 账号接入调整
 

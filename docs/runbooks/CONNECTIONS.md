@@ -10,7 +10,7 @@
 | --- | --- |
 | GitHub token | 使用 `Mikasa-0910` 创建；只告知本机文件路径或环境变量名 |
 | 飞书应用 | 企业自建应用，名称 Mikasa，启用机器人；App ID / App Secret 保存在本机 |
-| 负责人身份 | 曾俊轩在上述应用中的 `open_id`；如启用 User ID 权限，再提供同一人的 `user_id` |
+| 负责人身份 | 已写入本机配置的 `owner_open_id`；如启用 User ID 权限，再在本机补充同一人的 `owner_user_id` |
 | 应用状态 | 是否发布、负责人是否在可用范围、权限是否批准、消息事件是否订阅 |
 
 不需要提供 GitHub/飞书密码、短信验证码、浏览器 Cookie、整份认证目录。飞书普通成员账号与机器人应用是两种身份：可额外创建普通账号管理应用，但 Hermes 接入仍需要应用凭据，不使用普通账号模拟登录。机器人已有独立名称、头像和聊天入口。
@@ -56,15 +56,14 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections github --
 2. 在应用的 **添加应用能力 → 机器人** 启用机器人。这是 Hermes 使用的独立飞书身份，无需先注册普通成员号。不要选择群聊中的自定义 Webhook 机器人；Hermes 此入口需要企业自建应用的 App ID / App Secret 和长连接事件能力。
 3. 在 **凭证与基础信息** 找到 `App ID`（通常 `cli_...`）和 `App Secret`，存入本机 `MIKASA_FEISHU_APP_ID`、`MIKASA_FEISHU_APP_SECRET`。不要把它们写入 Git JSON 或聊天消息。
 4. 在 **权限管理** 申请 `im:message.p2p_msg:readonly`（读取用户发给机器人的单聊消息）和 `im:message:send_as_bot`（以应用身份发消息）。这是首阶段文字单聊所需权限；关闭输入状态和流式预览，不为群聊、通讯录、云文档、会议或附件预先授予额外权限。Hermes 可尝试查询显示名、引用原消息等，缺少额外权限时这些附加信息可能不可用，真实验收再按实际使用补充。
-5. 在 **版本管理与发布** 创建版本，把应用可用范围先设为负责人曾俊轩，提交并完成企业审批/发布。权限修改可能需要重新发布。机器人存在但未发布或不在可用范围，仍无法正常单聊。
-6. 获取**负责人的 Open ID**：打开 [API 调试台](https://open.feishu.cn/api-explorer)，选择刚创建的 Mikasa 应用，找到 **发送消息** 接口，在 ID 类型选择 `open_id`，点击 **快速复制 open_id**，搜索曾俊轩并复制成员 ID。这里只使用选择器，**不要点击发送请求**。不同应用的 Open ID 不同，不能拿其他应用的 ID 或机器人自己的 ID 代替。
-7. 如果调试台没有用户选择器，可在同一应用申请 `contact:user.id:readonly`，将通讯录数据范围限制到本人，在 **通过手机号或邮箱获取用户 ID** 接口中用 `tenant_access_token`、`user_id_type=open_id` 查询自己。返回 `data.user_list[].user_id` 此时实际是 `ou_...`。手机号/邮箱仅在飞书平台输入，不需要发给我；这条替代路径所需的额外权限并非单聊的必需项。
-8. 在本机配置添加下列 `feishu` 段，替换你的真实 Open ID。默认不申请 `contact:user.employee_id:readonly`。若应用已有该权限，Hermes 优先采用事件中的租户 User ID，需要再通过同一成员选择器或查询 API 的 `user_id_type=user_id` 获取同一人的 ID，填入可选 `owner_user_id`；不要填其他人的 ID。
+5. 在 **版本管理与发布** 创建版本，把应用可用范围设为负责人曾俊轩，提交并完成企业审批/发布。权限修改可能需要重新发布。机器人存在但未发布或不在可用范围，仍无法正常单聊。
+6. 负责人的 Open ID 已写入本机 `config/local/hermes-cch.json` 的 `feishu.owner_open_id`，不需要再次提供。这个 ID 必须是你在 Mikasa 应用中的 `ou_...`，不能是机器人自己的 ID。默认不申请通讯录权限；如果应用已经启用 User ID 权限，再把同一人的租户 ID 作为 `owner_user_id` 写入本机配置即可。
+7. 检查配置中的 `feishu` 段应类似下面这样，App ID 和 App Secret 仍只通过环境变量提供：
 
 ```json
 "feishu": {
   "domain": "feishu",
-  "owner_open_id": "ou_REPLACE_WITH_YOUR_ID",
+  "owner_open_id": "ou_66d90d4ea03fde05030396e31647ccb8",
   "app_id_env": "MIKASA_FEISHU_APP_ID",
   "app_secret_env": "MIKASA_FEISHU_APP_SECRET"
 }
@@ -97,7 +96,7 @@ set +a
 
 文件按 shell 赋值语法填写，值用单引号包裹，不启用 `set -x`，不在带密钥的命令行中直接赋值。Mikasa 不自动加载这个文件，也不会复制 Codex/Claude 认证文件。配置只保存环境变量名；飞书子进程只得到模型与飞书凭据，不继承 GitHub token。诊断不会打印 secret 或原始 SDK 响应。
 
-准备好后告知：**配置文件路径、GitHub token 的本机路径或变量名、飞书凭据来源、飞书 Open ID、应用发布/事件订阅状态**。GitHub 仓库与分支在后续具体任务时确定，不是本次账号接入的前置条件。不用粘贴 token / App Secret。完成真实接入后再推进 VM，最后接聊天工程任务与 FluxCore。
+准备好后只需告知：**App ID 和 App Secret 是否已注入 `MIKASA_FEISHU_APP_ID` / `MIKASA_FEISHU_APP_SECRET`，以及应用是否已发布**。负责人 Open ID 已写入本机配置，不需要重复提供；GitHub 仓库与分支在后续具体任务时确定。不用粘贴 token / App Secret。完成真实接入后再推进 VM，最后接聊天工程任务与 FluxCore。
 
 ## 依据与验证范围
 
