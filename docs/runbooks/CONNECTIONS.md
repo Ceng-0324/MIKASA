@@ -63,7 +63,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections github --
 ```json
 "feishu": {
   "domain": "feishu",
-  "owner_open_id": "ou_66d90d4ea03fde05030396e31647ccb8",
+  "owner_open_id": "ou_YOUR_OPEN_ID",
   "app_id_env": "MIKASA_FEISHU_APP_ID",
   "app_secret_env": "MIKASA_FEISHU_APP_SECRET"
 }
@@ -85,6 +85,8 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu --
 ## 本机凭据存放
 
 已有可用本机配置时在原配置中合并上述字段，保留 CCH 设置，不覆盖成默认示例。可将 [环境模板](../../config/examples/platforms.env.example) 复制为 `config/local/platforms.env`，设置 `chmod 600 config/local/platforms.env` 后，用本机编辑器填写值。该目录已被 Git 忽略；不要把整个文件内容发到聊天。
+
+`hermes-cch.json` 中的 `app_id_env` / `app_secret_env` 填的是变量名，不能替换成凭据值。实际值填写在 `platforms.env` 中，例如 `MIKASA_FEISHU_APP_ID='cli_...'` 和 `MIKASA_FEISHU_APP_SECRET='实际密钥'`。本机这两项已配置并通过真实认证，不要再次覆盖该文件；GitHub token 保留在原文件中，无需复制到飞书凭据文件。公开文档仅使用 Open ID 占位符，真实绑定保存在本机配置。
 
 在你自己控制的 shell 中加载自己编写的文件：
 

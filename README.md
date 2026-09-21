@@ -34,7 +34,7 @@ python3.12 -m mikasa --config config/local/mikasa.json run
 
 原生交互、工程续话与共享记忆、工具内修复、Kanban、Cron、运行事件和完整受管状态备份已接入。当前仍保留 HTTP 兼容、单任务 runner、结构化交付及工程快照验收。
 
-历史真实 CCH 联调已验证合成工程任务和 GPT/Claude 会话切换；`default` 分组仍缺网关侧确认。GitHub 已通过真实 token 确认 `Mikasa-0910` 账号身份，仓库读写尚未验收；Hermes 原生飞书负责人单聊入口已实现，应用认证、消息往返和目标 VM 尚未验收。账号、凭据、飞书应用与用户 ID 的获取步骤见[接入手册](docs/runbooks/CONNECTIONS.md)。后续顺序为 **GitHub/飞书 → VM → 聊天工程任务与 FluxCore 联合验收**，详见[推进计划](MIKASA_FUNCTION_PLAN.md)与[验证边界](docs/VALIDATION.md)。
+历史真实 CCH 联调已验证合成工程任务和 GPT/Claude 会话切换；`default` 分组仍缺网关侧确认。GitHub 已通过真实 token 确认 `Mikasa-0910` 账号身份，仓库读写尚未验收；Hermes 原生飞书负责人单聊入口已实现，应用机器人认证已通过，真实消息往返和目标 VM 尚未验收。账号、凭据、飞书应用与用户 ID 的获取步骤见[接入手册](docs/runbooks/CONNECTIONS.md)。后续顺序为 **GitHub/飞书 → VM → 聊天工程任务与 FluxCore 联合验收**，详见[推进计划](MIKASA_FUNCTION_PLAN.md)与[验证边界](docs/VALIDATION.md)。
 
 ## 开发
 

@@ -4,6 +4,10 @@
 
 ## 本轮验证
 
+飞书应用凭据已从本机 JSON 的误填字段移至 `config/local/platforms.env`，文件权限为 0600，JSON 恢复为环境变量名称，两份文件均被 Git 忽略。复用固定 Hermes 官方探针完成真实机器人认证，返回 `configuration=ready`、`connection=passed`、`bot_identity=passed`、`owner_bound=true`。未输出凭据、建立长连接或发送消息；负责人真实消息身份和收发仍为 `not_checked`。应用发布、权限生效与事件订阅待消息联调核实。
+
+## GitHub 认证
+
 2026-09-21，使用负责人指定的本机 token 文件，通过现有 `connections` 诊断调用真实 GitHub `/user`，确认账号为 **Mikasa-0910**，`connection=passed`、`identity=passed`。token 仅在检查进程内读取并注入环境，未打印、复制或写入配置；没有建立常驻服务的凭据注入。仓库配置为空，`repository_access`、`write_access`、`webhook` 均为 `not_checked`。未创建内容、推送或向任何人发送消息。飞书负责人 Open ID 已写入本机配置，App ID、App Secret 和应用发布状态仍待准备。
 
 ## 账号接入调整
@@ -45,6 +49,6 @@ GitHub/飞书接入准备：全量 **187 项 unittest 通过（323.032 秒）**�
 
 ## 尚未验收
 
-GitHub 真实账号身份已验证；仓库权限、正式写入与 webhook，飞书应用/账号/事件，目标 VM、TLS 与恢复演练，以及聊天工程入口和 FluxCore 联合验收均未完成。CCH 管理端分组证据仍缺失；不重复绕过先前的 WAF 拒绝。
+GitHub 真实账号身份及飞书应用机器人认证已验证；仓库权限、正式写入与 webhook，飞书真实用户/事件/消息往返，目标 VM、TLS 与恢复演练，以及聊天工程入口和 FluxCore 联合验收均未完成。CCH 管理端分组证据仍缺失；不重复绕过先前的 WAF 拒绝。
 
 SDK/模型夹具证明协议、工具和存储链路，不能证明真实模型始终遵循人格、skills 和记忆。默认 doctor 不联网；`--probe-model` 才消耗模型额度。所有可重复探针及其前提见 [脚本说明](../scripts/README.md)。
