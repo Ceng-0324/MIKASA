@@ -8,7 +8,6 @@
 
 | 信息 | 获取与交付方式 |
 | --- | --- |
-| GitHub 授权仓库 | 告知 `owner/repo`、公开/私有、默认分支；尚未选定，FluxCore 仍留最后验收 |
 | GitHub token | 使用 `Mikasa-0910` 创建；只告知本机文件路径或环境变量名 |
 | 飞书应用 | 企业自建应用，名称 Mikasa，启用机器人；App ID / App Secret 保存在本机 |
 | 负责人身份 | 曾俊轩在上述应用中的 `open_id`；如启用 User ID 权限，再提供同一人的 `user_id` |
@@ -18,12 +17,14 @@
 
 ## GitHub 操作步骤
 
-1. 用负责人账号 `Ceng-0324` 打开准备授权的仓库，进入 **Settings → Collaborators / Manage access → Add people**，邀请 `Mikasa-0910`。私人组织仓库则由组织管理员授予所需仓库角色。
-2. 切换到 `Mikasa-0910`，确认账号主页与登录身份，接受仓库邀请。确认可以打开该仓库；不需要向我提供登录密码。
-3. 在 `Mikasa-0910` 的 **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)** 创建 token，填写用途和有限有效期。
-4. 若授权目标全为公开仓库，选 `public_repo`；需要私有仓库时选 `repo`。不额外选 `delete_repo`、`admin:org`、`admin:repo_hook` 或 `workflow`。若组织禁止 classic PAT，不绕过策略，告知组织限制后再选择 GitHub App 接入。
-5. 将生成的 token 仅存入本机私密文件或密码管理器，注入 `MIKASA_GITHUB_TOKEN`。页面仅显示一次；泄露或遗失时撤销重建。
-6. 把授权仓库及 base 分支写入本机配置的 `repositories`，例如以下结构中的占位仓库需替换为实际已授权仓库：
+本阶段目标是独立使用 `Mikasa-0910` 账号身份，不要求先指定仓库、接受邀请或配置 webhook。通过 token 使用 GitHub API，不接管密码、邮箱或双因素认证；账号身份验证与具体操作权限分开验收。
+
+1. 登录 `Mikasa-0910`，确认当前账号，然后打开 **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)**，填写用途和有限有效期。
+2. 只验证账号身份时无需选仓库 scope；计划开展公开仓库协作可选 `public_repo`，需要私有仓库时选 `repo`。其他能力按实际任务补充，不要求一次勾选全部权限。若组织禁止 classic PAT，后续接入该组织时再处理其授权方式。
+3. 将生成的 token 仅存入本机私密文件或密码管理器，注入 `MIKASA_GITHUB_TOKEN`。页面仅显示一次；泄露或遗失时撤销重建。只需告知本机凭据路径或变量名。
+4. 使用现有配置执行下方只读探针。`repositories` 可保持 `{}`；确认 `/user` 返回 `Mikasa-0910` 即通过账号接入检查。
+
+后续进入具体仓库任务时，再按需要授予 Mikasa 账号实际访问权限。负责人可在仓库 **Settings → Collaborators / Manage access → Add people** 邀请 `Mikasa-0910`，由该账号接受。现有工程任务入口仍需配置目标仓库和 base 分支，例如：
 
 ```json
 "repositories": {
@@ -41,7 +42,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections github
 python3.12 -m mikasa --config config/local/hermes-cch.json connections github --probe
 ```
 
-联网探针只 GET `/user`、已配置仓库、base 分支、Issue/PR 列表，不创建 Issue、PR、Review 或 push。`account_push_role=true` 只说明账号角色，不证明 token 写权限；正式写入与 CI Checks 权限仍需分别验收。无授权仓库时可以确认账号，但总状态保持 `incomplete`。
+联网探针只 GET `/user`，有已配置仓库时再检查仓库、base 分支、Issue/PR 列表，不创建 Issue、PR、Review 或 push。无仓库时账号认证成功即 `connection=passed`，`repository_access=not_checked`。`account_push_role=true` 只说明账号角色，不证明 token 写权限；正式写入与 CI Checks 权限仍需分别验收。账号接通不代表所有 GitHub 操作或聊天工程工具均已实现。
 
 ### GitHub Webhook 留到公网入口就绪
 
@@ -96,7 +97,7 @@ set +a
 
 文件按 shell 赋值语法填写，值用单引号包裹，不启用 `set -x`，不在带密钥的命令行中直接赋值。Mikasa 不自动加载这个文件，也不会复制 Codex/Claude 认证文件。配置只保存环境变量名；飞书子进程只得到模型与飞书凭据，不继承 GitHub token。诊断不会打印 secret 或原始 SDK 响应。
 
-准备好后告知：**配置文件路径、凭据文件路径或变量名、授权仓库与分支、飞书 Open ID、应用发布/事件订阅状态**。不用粘贴 token / App Secret。完成真实接入后再推进 VM，最后接聊天工程任务与 FluxCore。
+准备好后告知：**配置文件路径、GitHub token 的本机路径或变量名、飞书凭据来源、飞书 Open ID、应用发布/事件订阅状态**。GitHub 仓库与分支在后续具体任务时确定，不是本次账号接入的前置条件。不用粘贴 token / App Secret。完成真实接入后再推进 VM，最后接聊天工程任务与 FluxCore。
 
 ## 依据与验证范围
 

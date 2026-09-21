@@ -42,8 +42,6 @@ def diagnostics(config, platform, *, probe=False):
     ready = not missing
     if platform == "feishu":
         ready = ready and bool(settings.get("owner_open_id"))
-    else:
-        ready = ready and bool(config.data.get("repositories"))
     result = {"platform": platform, "configuration": "ready" if ready else "incomplete",
               "missing_environment": missing, "connection": "not_checked"}
     if platform == "github":

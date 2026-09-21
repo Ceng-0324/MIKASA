@@ -79,10 +79,22 @@ class ConnectionTests(unittest.TestCase):
                 github.probe()
         self.assertEqual(request.call_count, 1)
 
-    def test_github_missing_repository_or_branch_stays_incomplete(self):
+    def test_github_account_needs_no_repository_but_configured_branch_must_exist(self):
         github = GitHub(self.config)
-        with patch.object(github, "request", return_value={"login": "Mikasa-0910"}):
-            self.assertEqual(github.probe()["connection"], "incomplete")
+        with patch.object(github, "request", return_value={"login": "Mikasa-0910"}) as request:
+            result = github.probe()
+        self.assertEqual(result["connection"], "passed")
+        self.assertEqual(result["repository_access"], "not_checked")
+        self.assertEqual(result["write_access"], "not_checked")
+        request.assert_called_once_with("GET", "/user")
+        path = self.path / "config.json"
+        path.write_text(json.dumps(self.data))
+        with patch.dict(os.environ, {"MIKASA_GITHUB_TOKEN": "fixture-token"}), \
+                patch("mikasa.github.GitHub.request", return_value={"login": "Mikasa-0910"}), \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(main(["--config", str(path), "connections", "github", "--probe"]), 0)
+        self.assertEqual(json.loads(output.getvalue())["configuration"], "ready")
+        self.assertFalse(self.config.runtime.exists())
         self.data["repositories"] = {"Ceng-0324/Test": {"base": "main"}}
         with patch.object(github, "request", side_effect=[{"login": "Mikasa-0910"},
                 {"full_name": "Ceng-0324/Test"}, MikasaError("GitHub HTTP 404")]):

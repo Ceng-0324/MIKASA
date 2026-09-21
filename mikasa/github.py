@@ -57,8 +57,10 @@ class GitHub:
             except MikasaError as exc:
                 row["error"] = str(exc)
             repositories.append(row)
-        return {"connection": "passed" if repositories and all(r["read_access"] == "passed" for r in repositories) else "incomplete",
+        accessible = all(r["read_access"] == "passed" for r in repositories)
+        return {"connection": "passed" if accessible else "incomplete",
                 "identity": "passed", "account": self.config.bot, "repositories": repositories,
+                "repository_access": ("passed" if accessible else "incomplete") if repositories else "not_checked",
                 "write_access": "not_checked", "webhook": "not_checked"}
 
     def paginate(self, path, field=None):
