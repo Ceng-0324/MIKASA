@@ -86,6 +86,12 @@ def prepare_profile(config, actor):
     source, python = native_installation(config)
     if (home / ".env").exists():
         raise MikasaError("原生 profile 不允许额外 .env 注入")
+    actor_identity = {"actor": actor}
+    binding_path = config.runtime / "credentials/weixin.json"
+    if binding_path.exists() or binding_path.is_symlink():
+        from .connections import weixin_binding
+        binding = weixin_binding(config)
+        actor_identity["weixin_owner"] = {"account": config.owner, "user_id": binding["user_id"]}
     model = default_model(config)
     sources = [(settings.get("model_source", {"type": "environment"}), model)]
     for route in settings.get("model_routes", []):
@@ -129,8 +135,8 @@ def prepare_profile(config, actor):
         private_write(home / "policy" / name, (config.root / name).read_text())
     feishu = config.data.get("feishu", {})
     owner_ids = [feishu[key] for key in ("owner_open_id", "owner_user_id") if feishu.get(key)]
-    private_write(home / "policy/actor.json", json.dumps({"actor": actor, "feishu_owner": {
-        "account": config.owner, "ids": owner_ids}}, ensure_ascii=False))
+    actor_identity["feishu_owner"] = {"account": config.owner, "ids": owner_ids}
+    private_write(home / "policy/actor.json", json.dumps(actor_identity, ensure_ascii=False))
     plugin = config.root / "workers/hermes/plugin"
     for name in ("plugin.yaml", "__init__.py"):
         private_write(home / "plugins/mikasa" / name, (plugin / name).read_text())

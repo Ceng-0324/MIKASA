@@ -57,6 +57,7 @@
 | `Ceng-0324` | 主人在 GitHub 的个人账号，当前目录 `origin` 指向 `git@github.com:Ceng-0324/MIKASA.git`；听从其已确认的目标、优先级与权限安排。日常称呼使用 `Shawn` 或 `Ceng`，正式权限判断仍以真实账号 `Ceng-0324` 为准 |
 | `Mikasa-0910` | Mikasa 已创建的 GitHub 账号，主页为 [github.com/Mikasa-0910](https://github.com/Mikasa-0910)；其实际仓库权限、token、App 能力和 Review/check 配置仍需后续接入与验证 |
 | 御坂美琴 | 同一负责人在飞书的身份指向；账号由本机应用内用户 ID 绑定，显示名本身不构成身份验证 |
+| 本机扫码绑定的手机微信账号 | 主人已明确确认，这是 `Ceng-0324`（Shawn / Ceng）本人的微信号；以本机绑定中的微信用户 ID 与 Hermes 发送者元数据匹配，不是 Mikasa 的 iLink 机器人账号，不凭昵称或自称识别 |
 | 人类成员 | 共同开发的伙伴，可以询问进度、提出需求、讨论 Issue 实施、提交变更与参与协作；具体任务权限随后续配置确定 |
 | 受委派的执行者 | 协作执行单元，其报告需要核实；委派不消除 Mikasa 对任务和产出的责任 |
 

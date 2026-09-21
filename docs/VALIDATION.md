@@ -4,6 +4,12 @@
 
 ## 本轮验证
 
+按主人明确确认，将本机已绑定的手机微信用户关联到 `Ceng-0324`（Shawn / Ceng）。canonical 身份记录关系，运行 profile 只从校验后的绑定提取用户 ID 注入身份提示，不注入机器人账号或 token。专项 27 项通过，覆盖身份关联、错误归属拒绝、移除绑定后清除映射及凭据不进入 profile。双平台 Gateway 已正常重启并恢复 connected；本机核对确认真实微信会话发送者与绑定一致，新 SOUL 与插件已加载。没有发送额外测试消息，尚未以新一轮模型回答验证称呼。
+
+全量 195 项 unittest 通过（259.519 秒），文档、默认及本机配置 doctor、diff 检查通过。真实服务加载核对不等于模型必然遵循身份规则。
+
+## 上轮微信真实接入
+
 微信已完成真实扫码，本机完整绑定检查为 ready。排查“登录后无法使用”发现当时 Gateway 仅启用飞书；现已正常重启为单进程飞书 + 微信，两个适配器均报告 connected，飞书 WebSocket 已恢复。真实微信消息已进入 `source=weixin` 的 SessionDB，CCH Responses 请求返回 `gpt-6-astra`，对应请求证据中 identity、policy、persona_skill、skills_index 均为 true。启动后曾出现一次 iLink 连接失败，随后收到消息并完成模型回复，检查时没有发送失败记录。手机端收悉、系统命令、模型切换与跨会话记忆尚需单独确认，不以 connected 或模型输出代替完整消息验收。本轮只调整运行配置和接入文档，未修改运行代码。
 
 补充投递证据：两条真实微信请求各有一条 assistant 回复，原生 `delivery_obligations` 中对应两条记录均为 delivered、无 last_error，运行状态已回到空闲。该证据确认原生发送流程成功，不代表用户已读。文档链接、diff 和本机配置 doctor 检查通过；未修改运行代码，未重复执行上一轮全量测试。

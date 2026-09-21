@@ -72,6 +72,36 @@ class NativeProfileTests(unittest.TestCase):
         self.assertIn(self.config.owner + ' 对应 ou_owner, owner_tenant_id', prompt)
         self.assertIn('仅说明身份，不限制其他人聊天', prompt)
 
+    def test_weixin_owner_identity_uses_validated_user_not_bot_or_token(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from workers.hermes.plugin import register
+        from mikasa.native import private_write
+        binding = self.config.runtime / 'credentials/weixin.json'
+        value = {'actor': self.config.owner, 'account_id': 'bot@im.bot',
+                 'user_id': 'owner@im.wechat', 'token': 'private-weixin-token',
+                 'base_url': 'https://ilinkai.weixin.qq.com'}
+        private_write(binding, json.dumps(value))
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        identity = json.loads((home/'policy/actor.json').read_text())
+        self.assertEqual(identity['weixin_owner'], {'account': self.config.owner, 'user_id': value['user_id']})
+        context = Mock()
+        with patch.dict(sys.modules, {'hermes_constants': SimpleNamespace(get_hermes_home=lambda: home)}):
+            register(context)
+        prompt = ''.join(call.args[1] for call in context.register_system_prompt_section.call_args_list)
+        self.assertIn('微信发送者 ID owner@im.wechat 对应主人 ' + self.config.owner, prompt)
+        self.assertIn('仅在微信发送者 ID 匹配时适用', prompt)
+        self.assertNotIn(value['account_id'], prompt)
+        self.assertFalse(any(value['token'].encode() in p.read_bytes() for p in home.rglob('*') if p.is_file()))
+        private_write(binding, json.dumps({**value, 'actor': 'stranger'}))
+        before = (home/'policy/actor.json').read_bytes()
+        with self.assertRaises(MikasaError):
+            prepare_profile(self.config, self.config.owner)
+        self.assertEqual((home/'policy/actor.json').read_bytes(), before)
+        binding.unlink()
+        prepare_profile(self.config, self.config.owner)
+        self.assertNotIn('weixin_owner', json.loads((home/'policy/actor.json').read_text()))
+
     def test_refresh_preserves_native_preferences_and_refreshes_integration_routes(self):
         home, *_ = prepare_profile(self.config, self.config.owner)
         path = home / 'config.yaml'

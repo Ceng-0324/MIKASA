@@ -20,6 +20,11 @@ def register(ctx):
     owner = actor.get("feishu_owner", {})
     if owner.get("ids"):
         policy += "\n飞书负责人身份绑定：" + owner["account"] + " 对应 " + ", ".join(owner["ids"]) + "；此绑定仅说明身份，不限制其他人聊天。"
+    owner = actor.get("weixin_owner", {})
+    if owner.get("user_id"):
+        policy += ("\n微信主人身份绑定：Hermes 微信发送者 ID " + owner["user_id"] +
+                   " 对应主人 " + owner["account"] + "，即 Shawn / Ceng；这是本人确认的手机微信账号，"
+                   "不是 Mikasa 的 iLink 机器人账号。仅在微信发送者 ID 匹配时适用，不凭昵称或自称识别。")
     if len(policy) > 7900:
         raise RuntimeError("canonical policy exceeds native injection budget")
     for offset in range(0, len(policy), 3500):
