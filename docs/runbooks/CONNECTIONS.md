@@ -1,6 +1,6 @@
-# GitHub 与飞书接入
+# 平台接入
 
-本阶段连接 `Mikasa-0910` GitHub 账号及国内飞书的 Mikasa 应用机器人。Hermes 负责飞书长连接、消息处理、系统命令、会话与记忆，CCH 继续提供模型；Mikasa 只补配置、负责人身份绑定和诊断。真实平台验收需要下面的外部信息，当前不代表已上线。
+GitHub 使用 `Mikasa-0910` 独立账号，飞书使用企业自建应用机器人，微信使用 iLink 扫码身份。Hermes 负责消息连接、系统命令、会话与记忆，CCH 提供模型；Mikasa 补充配置、账号绑定和诊断。当前接入结果见[验证边界](../VALIDATION.md)。
 
 以下命令使用本机已有的 `config/local/hermes-cch.json`；其他机器替换为自己的配置路径。合并平台字段时保留已有 CCH 设置。
 
@@ -57,7 +57,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections github --
 3. 在 **凭证与基础信息** 找到 `App ID`（通常 `cli_...`）和 `App Secret`，存入本机 `MIKASA_FEISHU_APP_ID`、`MIKASA_FEISHU_APP_SECRET`。不要把它们写入 Git JSON 或聊天消息。
 4. 在 **权限管理** 保留 `im:message.p2p_msg:readonly`（单聊读取）和 `im:message:send_as_bot`（发送回复）；群聊补充 `im:message.group_at_msg:readonly`（接收群内 @ 机器人的消息）。要让普通未 @ 的群消息也送达，申请 `im:message.group_msg`（获取群组中所有消息，敏感权限，以控制台审批为准）。项目取消 @ 限制不等于飞书自动投递全部消息。Hermes 查询显示名、引用和附件所需额外权限按实际使用补充。
 5. 在 **版本管理与发布** 创建版本，把应用可用范围扩大到需要与 Mikasa 交互的成员或部门，提交并完成企业审批/发布。原先只选负责人会限制其他人的使用。修改权限或可用范围后按控制台要求重新发布。
-6. 负责人的 Open ID 已写入本机 `config/local/hermes-cch.json` 的 `feishu.owner_open_id`，不需要再次提供。这个 ID 必须是你在 Mikasa 应用中的 `ou_...`，不能是机器人自己的 ID。默认不申请通讯录权限；如果应用已经启用 User ID 权限，再把同一人的租户 ID 作为 `owner_user_id` 写入本机配置即可。
+6. 可选 `feishu.owner_open_id` 填负责人在 Mikasa 应用中的 `ou_...`，不是机器人 ID；用于身份说明，不限制准入。如已有 User ID 权限，可补同一人的 `owner_user_id`；本机已有绑定无需重复配置。
 7. 检查配置中的 `feishu` 段应类似下面这样，App ID 和 App Secret 仍只通过环境变量提供：
 
 ```json
@@ -98,7 +98,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json weixin-login
 python3.12 -m mikasa --config config/local/hermes-cch.json connections weixin
 ```
 
-用负责人本人微信扫描终端二维码并在手机确认。扫码得到的是独立 iLink 机器人身份，不是对普通个人微信号的全面控制；第一阶段只验收本人单聊，不承诺普通微信群能力。登录不调用模型、不收发消息，也不修改正在运行的飞书 profile。账号绑定来自原生扫码返回的用户 ID，不要求你手工抄写。不要分享登录二维码。
+用负责人本人微信扫描终端二维码并在手机确认。扫码得到独立 iLink 机器人身份，不接管个人微信账号；当前支持主人私聊，通常无法加入普通微信群，放开本地策略不能让 iLink 投递未支持的群消息。登录不调用模型、不收发消息，也不修改正在运行的飞书 profile。绑定来自扫码返回的用户 ID，无需手工抄写；不要分享登录二维码。
 
 主人已确认本机绑定的手机微信账号属于 `Ceng-0324`（Shawn / Ceng）。准备原生 profile 时，从经校验的本机绑定提取 `user_id` 注入主人身份关系，以 Hermes 微信发送者元数据匹配；不将机器人 `account_id` 当作主人，也不向身份提示传入 token。没有绑定时不注入微信身份，绑定错误时拒绝更新；重新绑定后重启 Gateway 使新的身份映射生效。实际微信标识仅留在本机运行数据，不写入公开身份文档。
 
@@ -116,7 +116,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json gateway --platform fe
 
 已有可用本机配置时在原配置中合并上述字段，保留 CCH 设置，不覆盖成默认示例。可将 [环境模板](../../config/examples/platforms.env.example) 复制为 `config/local/platforms.env`，设置 `chmod 600 config/local/platforms.env` 后，用本机编辑器填写值。该目录已被 Git 忽略；不要把整个文件内容发到聊天。
 
-`hermes-cch.json` 中的 `app_id_env` / `app_secret_env` 填的是变量名，不能替换成凭据值。实际值填写在 `platforms.env` 中，例如 `MIKASA_FEISHU_APP_ID='cli_...'` 和 `MIKASA_FEISHU_APP_SECRET='实际密钥'`。本机这两项已配置并通过真实认证，不要再次覆盖该文件；GitHub token 保留在原文件中，无需复制到飞书凭据文件。公开文档仅使用 Open ID 占位符，真实绑定保存在本机配置。
+`app_id_env` / `app_secret_env` 填变量名，实际值放在 `platforms.env`，例如 `MIKASA_FEISHU_APP_ID='cli_...'` 和 `MIKASA_FEISHU_APP_SECRET='实际密钥'`。已有凭据和绑定保留在原本机文件中，不重复复制或覆盖；公开文档只使用占位符。
 
 在你自己控制的 shell 中加载自己编写的文件：
 
@@ -127,8 +127,6 @@ set +a
 ```
 
 文件按 shell 赋值语法填写，值用单引号包裹，不启用 `set -x`，不在带密钥的命令行中直接赋值。Mikasa 不自动加载这个文件，也不会复制 Codex/Claude 认证文件。配置只保存环境变量名；飞书子进程只得到模型与飞书凭据，不继承 GitHub token。诊断不会打印 secret 或原始 SDK 响应。
-
-准备好后只需告知：**App ID 和 App Secret 是否已注入 `MIKASA_FEISHU_APP_ID` / `MIKASA_FEISHU_APP_SECRET`，以及应用是否已发布**。负责人 Open ID 已写入本机配置，不需要重复提供；GitHub 仓库与分支在后续具体任务时确定。不用粘贴 token / App Secret。完成真实接入后再推进 VM，最后接聊天工程任务与 FluxCore。
 
 ## 依据与验证范围
 

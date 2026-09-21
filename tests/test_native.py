@@ -270,12 +270,13 @@ class NativeProfileTests(unittest.TestCase):
         prepare.assert_not_called()
         spawn.assert_not_called()
 
-    def test_legacy_feishu_command_remains_single_platform_compatibility_entry(self):
+    def test_gateway_command_passes_selected_platforms_to_native_entry(self):
         from mikasa.cli import main
         with patch('mikasa.cli.Config.load', return_value=self.config), \
                 patch('mikasa.native.interactive', return_value=0) as interactive:
-            self.assertEqual(main(['--config', str(self.path / 'config.json'), 'feishu']), 0)
-        interactive.assert_called_once_with(self.config, platforms=('feishu',))
+            self.assertEqual(main(['--config', str(self.path / 'config.json'),
+                                   'gateway', '--platform', 'feishu', '--platform', 'weixin']), 0)
+        interactive.assert_called_once_with(self.config, platforms=['feishu', 'weixin'])
 
     def test_native_launcher_terminates_child_and_restores_handler_on_sigterm(self):
         import fcntl
