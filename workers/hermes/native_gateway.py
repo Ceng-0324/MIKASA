@@ -2,6 +2,7 @@
 import os
 import sys
 import json
+import asyncio
 from pathlib import Path
 
 sys.path.insert(0, os.environ["MIKASA_HERMES_SOURCE"])
@@ -19,14 +20,33 @@ if __name__ == "__main__":
         raise SystemExit("Required persona skill not loaded; refusing to start")
     if "--config" in sys.argv:
         # Explicit messaging startup must not silently become a cron-only process.
-        from gateway.config import GatewayConfig
+        from gateway.config import GatewayConfig, Platform
         from gateway.platform_registry import platform_registry
+        from gateway.run import _instantiate_builtin_adapter, start_gateway, _exit_after_graceful_shutdown
         path = Path(sys.argv[sys.argv.index("--config") + 1])
         config = GatewayConfig.from_dict(json.loads(path.read_text()))
         for platform, settings in config.platforms.items():
+            if not settings.enabled:
+                continue
+            # Explicit config skips Hermes' env loader. Keep bot tokens in process
+            # memory, so neither generated config nor state backups acquire them.
+            if platform == Platform.WEIXIN:
+                settings.token = os.environ.get("WEIXIN_TOKEN")
+                if not settings.token or not settings.extra.get("account_id"):
+                    raise SystemExit("Messaging platform prerequisites missing: Weixin binding")
             entry = platform_registry.get(platform.value)
-            if settings.enabled and (entry is None or not entry.check_fn() or
-                    (entry.validate_config is not None and not entry.validate_config(settings))):
+            available = (entry.check_fn() and (entry.validate_config is None or entry.validate_config(settings))
+                         if entry else _instantiate_builtin_adapter(platform, settings) is not None)
+            if not available:
                 raise SystemExit("Messaging platform prerequisites missing; install the pinned dependency snapshot and check platform config")
-    from gateway.run import main
-    main()
+        # Native lifecycle includes all platforms, locks, dispatch, retries and shutdown.
+        # Use its programmatic entry so the in-memory token need not be serialized.
+        try:
+            success = asyncio.run(start_gateway(config))
+            code = 0 if success else 1
+        except SystemExit as exc:
+            code = exc.code if isinstance(exc.code, int) else 0 if exc.code is None else 1
+        _exit_after_graceful_shutdown(code)
+    else:
+        from gateway.run import main
+        main()

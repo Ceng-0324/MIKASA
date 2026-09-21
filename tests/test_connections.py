@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 from mikasa.cli import main
 from mikasa.config import Config
-from mikasa.connections import (diagnostics, feishu_environment, feishu_gateway_config, probe_feishu,
+from mikasa.connections import (diagnostics, feishu_environment, messaging_gateway, probe_feishu,
                                 login_weixin, validate_weixin_binding, weixin_binding)
 from mikasa.errors import Forbidden, MikasaError
 from mikasa.github import GitHub
@@ -185,7 +185,7 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         python = self.native_python("lark_oapi")
         self.data["feishu"]["owner_user_id"] = "owner_tenant_id"
         with patch.dict(os.environ, {"MIKASA_FEISHU_APP_ID": "cli_fixture", "MIKASA_FEISHU_APP_SECRET": "fixture-secret"}):
-            env = feishu_environment(self.config)
+            env, settings = messaging_gateway(self.config, ('feishu',))
         env.update(HERMES_HOME=str(self.path), MIKASA_HERMES_SOURCE=str(ROOT / "runtime/cache/hermes-source"),
                    HERMES_ENABLE_PROJECT_PLUGINS="0", PATH=os.environ.get("PATH", ""))
         code = '''
@@ -224,7 +224,7 @@ for tenant_id in (None, 'owner_tenant_id'):
 print('pinned Feishu SDK admission and Gateway configuration: passed')
 '''
         reply = subprocess.run([str(python), "-c", code], cwd=self.path, env=env,
-                               input=json.dumps(feishu_gateway_config('cli_fixture')), capture_output=True, text=True, timeout=30)
+                               input=json.dumps(settings), capture_output=True, text=True, timeout=30)
         self.assertEqual(reply.returncode, 0, reply.stderr)
 
     def test_pinned_gateway_entry_loads_identity_policy_and_persona_without_connecting(self):

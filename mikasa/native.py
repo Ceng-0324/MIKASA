@@ -108,7 +108,7 @@ def prepare_profile(config, actor):
         "model": {"default": model, "provider": provider_id(select_source(settings, model))},
         "providers": providers,
         "model_aliases": {m: {"model": m, "provider": provider_id(select_source(settings, m))} for m in choices},
-        "platform_toolsets": {name: ["memory", "skills"] for name in ("api_server", "cli", "feishu")},
+        "platform_toolsets": {name: ["memory", "skills"] for name in ("api_server", "cli", "feishu", "weixin")},
         "memory": {"memory_enabled": True, "user_profile_enabled": True},
         "skills": {"external_dirs": [str(config.root / "skills")], "auto_load": ["mikasa-persona"]},
         "plugins": {"enabled": ["mikasa"]},
@@ -140,16 +140,14 @@ def prepare_profile(config, actor):
 
 
 @runtime_operation
-def interactive(config, session=None, *, platform="cli"):
+def interactive(config, session=None, *, platforms=()):
     """Foreground native CLI or messaging Gateway; Hermes owns interaction."""
     platform_env = {}
-    if platform == "feishu":
-        from .connections import feishu_environment
-        platform_env = feishu_environment(config)
+    if platforms:
+        from .connections import messaging_gateway
+        platform_env, settings = messaging_gateway(config, platforms)
         if session:
-            raise MikasaError("飞书会话由 Hermes Gateway 管理")
-    elif platform != "cli":
-        raise MikasaError("不支持的原生交互平台")
+            raise MikasaError("消息平台会话由 Hermes Gateway 管理")
     actor = config.owner
     home = profile_home(config, actor)
     home.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -172,10 +170,9 @@ def interactive(config, session=None, *, platform="cli"):
             if imported.returncode:
                 raise MikasaError("旧会话导入失败；原数据库保留，CLI 未启动")
         command = [str(python), str(config.root / "workers/hermes/native_cli.py")]
-        if platform == "feishu":
-            from .connections import feishu_gateway_config
-            gateway_config = home / "gateway-feishu.json"
-            private_write(gateway_config, json.dumps(feishu_gateway_config(platform_env["FEISHU_APP_ID"])))
+        if platforms:
+            gateway_config = home / "gateway-messaging.json"
+            private_write(gateway_config, json.dumps(settings))
             command = [str(python), str(config.root / "workers/hermes/native_gateway.py"), "--config", str(gateway_config)]
         if session:
             command += ["--resume", session]

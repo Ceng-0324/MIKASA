@@ -155,7 +155,7 @@ class NativeProfileTests(unittest.TestCase):
                                      'FEISHU_HOME_CHANNEL': 'oc_unwanted', 'GH_TOKEN': 'private'}), \
                 patch('mikasa.native.prepare_profile', return_value=prepared), \
                 patch('mikasa.native.subprocess.Popen', return_value=process) as spawn:
-            self.assertEqual(interactive(self.config, platform='feishu'), 0)
+            self.assertEqual(interactive(self.config, platforms=('feishu',)), 0)
         command = spawn.call_args.args[0]
         env = spawn.call_args.kwargs['env']
         self.assertEqual(Path(command[1]).name, 'native_gateway.py')
@@ -183,9 +183,49 @@ class NativeProfileTests(unittest.TestCase):
                 patch('mikasa.native.subprocess.Popen') as spawn:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             with self.assertRaises(Conflict):
-                interactive(self.config, platform='feishu')
+                interactive(self.config, platforms=('feishu',))
         spawn.assert_not_called()
-        self.assertFalse((home / 'gateway-feishu.json').exists())
+        self.assertFalse((home / 'gateway-messaging.json').exists())
+
+    def test_multiple_platforms_use_one_native_process_without_persisting_bot_token(self):
+        from mikasa.native import interactive, private_write
+        from unittest.mock import Mock
+        self.config.data['feishu'] = {'owner_open_id': 'ou_owner'}
+        private_write(self.config.runtime / 'credentials/weixin.json', json.dumps({
+            'actor': self.config.owner, 'account_id': 'bot@im.bot', 'user_id': 'owner@im.wechat',
+            'token': 'private-weixin-token', 'base_url': 'https://ilinkai.weixin.qq.com'}))
+        prepared = prepare_profile(self.config, self.config.owner)
+        process = Mock()
+        process.wait.return_value = process.poll.return_value = 0
+        with patch.dict(os.environ, {'MIKASA_FEISHU_APP_ID': 'cli_fixture', 'MIKASA_FEISHU_APP_SECRET': 'secret',
+                                     'WEIXIN_ALLOW_ALL_USERS': 'true', 'WEIXIN_HOME_CHANNEL': 'stranger'}), \
+                patch('mikasa.native.prepare_profile', return_value=prepared), \
+                patch('mikasa.native.subprocess.Popen', return_value=process) as spawn:
+            self.assertEqual(interactive(self.config, platforms=('feishu', 'weixin')), 0)
+        self.assertEqual(spawn.call_count, 1)
+        env = spawn.call_args.kwargs['env']
+        self.assertEqual(env['HERMES_HOME'], str(prepared[0]))
+        self.assertEqual(env['WEIXIN_TOKEN'], 'private-weixin-token')
+        self.assertEqual(env['WEIXIN_ALLOW_ALL_USERS'], 'false')
+        self.assertNotIn('WEIXIN_HOME_CHANNEL', env)
+        gateway = json.loads((prepared[0] / 'gateway-messaging.json').read_text())
+        self.assertEqual(set(gateway['platforms']), {'feishu', 'weixin'})
+        self.assertFalse(any(b'private-weixin-token' in p.read_bytes() for p in prepared[0].rglob('*') if p.is_file()))
+        native = json.loads((prepared[0] / 'config.yaml').read_text())
+        self.assertEqual(native['platform_toolsets']['weixin'], ['memory', 'skills'])
+        (self.config.runtime / 'credentials/weixin.json').unlink()
+        with patch('mikasa.native.prepare_profile') as prepare, patch('mikasa.native.subprocess.Popen') as spawn, \
+                self.assertRaises(MikasaError):
+            interactive(self.config, platforms=('weixin',))
+        prepare.assert_not_called()
+        spawn.assert_not_called()
+
+    def test_legacy_feishu_command_remains_single_platform_compatibility_entry(self):
+        from mikasa.cli import main
+        with patch('mikasa.cli.Config.load', return_value=self.config), \
+                patch('mikasa.native.interactive', return_value=0) as interactive:
+            self.assertEqual(main(['--config', str(self.path / 'config.json'), 'feishu']), 0)
+        interactive.assert_called_once_with(self.config, platforms=('feishu',))
 
     def test_native_launcher_terminates_child_and_restores_handler_on_sigterm(self):
         import fcntl

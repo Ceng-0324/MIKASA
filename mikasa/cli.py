@@ -23,7 +23,9 @@ def parser():
     connections = commands.add_parser("connections", help="检查平台配置；--probe 只读联网，不发消息或发布")
     connections.add_argument("platform", choices=("github", "feishu", "weixin"))
     connections.add_argument("--probe", action="store_true")
-    commands.add_parser("feishu", help="以前台方式启动 Hermes 原生飞书负责人单聊")
+    gateway = commands.add_parser("gateway", help="启动一个 Hermes 原生 Gateway，可同时接入多个消息平台")
+    gateway.add_argument("--platform", choices=("feishu", "weixin"), action="append", required=True)
+    commands.add_parser("feishu", help="兼容入口：启动仅接入飞书的 Hermes 原生 Gateway")
     commands.add_parser("weixin-login", help="用 Hermes 原生二维码绑定微信；不启动收发或调用模型")
     chat = commands.add_parser("chat", help="启动原生 Hermes 交互；/model、/new 等由 Hermes 处理")
     chat.add_argument("--session", help="恢复原生会话 ID；--message 模式使用旧 API 聊天 ID")
@@ -110,9 +112,9 @@ def main(argv=None):
             value = diagnostics(config, args.platform, probe=args.probe)
             print(json.dumps(value, ensure_ascii=False, indent=2))
             return int(value["configuration"] != "ready" or (args.probe and value["connection"] != "passed"))
-        if args.command == "feishu":
+        if args.command == "gateway" or args.command == "feishu":
             from .native import interactive
-            return interactive(config, platform="feishu")
+            return interactive(config, platforms=args.platform if args.command == "gateway" else ("feishu",))
         if args.command == "restore":
             from .backup import restore_state
             print(json.dumps(restore_state(config, args.source, args.destination), ensure_ascii=False, indent=2))

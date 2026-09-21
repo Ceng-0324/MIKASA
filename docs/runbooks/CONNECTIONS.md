@@ -76,11 +76,11 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu
 python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu --probe
 ```
 
-10. 准备事件订阅：在 **事件与回调 → 事件配置** 选择 **使用长连接接收事件**。该方式不需要公网 URL、Encrypt Key 或 Verification Token。先检查 CCH 已配置，关闭同账号正在运行的 CLI/API Gateway，然后在终端执行 `python3.12 -m mikasa --config config/local/hermes-cch.json feishu`，保持前台运行；不要让两个进程使用同一应用。
+10. 准备事件订阅：在 **事件与回调 → 事件配置** 选择 **使用长连接接收事件**。该方式不需要公网 URL、Encrypt Key 或 Verification Token。先检查 CCH 已配置，关闭同账号正在运行的 CLI/API Gateway，然后执行 `python3.12 -m mikasa --config config/local/hermes-cch.json gateway --platform feishu`。微信绑定完成后改为同一条 Gateway 命令追加 `--platform weixin`；不要让两个进程使用同一 profile。
 11. 控制台若要求先建立长连接，等待启动输出确认连接后，再保存订阅方式，添加 **接收消息 v2.0** 事件 `im.message.receive_v1`，按控制台提示发布新版本。无需订阅 Hermes 支持的所有事件。
 12. 用负责人本人账号在飞书打开机器人，主动发送一条普通文字消息，再测试 `/help`、`/model 完整模型ID` 和 `/new`。这一步才验证真实事件、CCH 推理、机器人回复和系统命令；同时检查人格/skills 加载证据和原生记忆跨会话保留。其他账号和群聊当前不会进入负责人 profile。
 
-`feishu` 启动意味着允许 Hermes 接收并回复已绑定负责人的消息。这里只开放模型的 memory 与只读 skills；**原生系统命令是受信任控制面，并非沙箱**，不要将负责人身份授予陌生用户。当前不接聊天工程任务、不主动群发。CLI、HTTP Gateway 与飞书共享同一负责人 profile 和 MEMORY/USER，但聊天会话各自由 Hermes 管理，三个进程互斥，不能同时启动。Ctrl-C 停止前台；启动失败需处理错误后重启，不自动修改身份或放宽准入。
+`gateway` 启动意味着一个 Hermes 原生 Gateway 接收并回复已绑定负责人的消息。这里只开放模型的 memory 与只读 skills；**原生系统命令是受信任控制面，并非沙箱**，不要将负责人身份授予陌生用户。当前不接聊天工程任务、不主动群发。CLI、HTTP Gateway 与消息 Gateway 共享同一负责人 profile 和 MEMORY/USER，但进程互斥，不能同时启动。Ctrl-C 停止前台；启动失败需处理错误后重启，不自动修改身份或放宽准入。
 
 已知限制：原生 `/sethome` 会保存默认投递设置并生成 profile `.env`，与当前禁止额外环境注入的启动检查冲突。本阶段只验收单聊，不依赖默认投递；遇到此情况先核对文件字段并保留原设置，不能删除未知凭据或直接放开任意 `.env`。macOS 上过长的 profile 路径还会使 Hermes 可选 liveness socket 无法创建，消息长连接仍可工作；VM 使用短路径后复验存活检测。
 

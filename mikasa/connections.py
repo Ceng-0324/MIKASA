@@ -92,12 +92,27 @@ def feishu_environment(config):
     }
 
 
-def feishu_gateway_config(app_id):
-    return {"platforms": {"feishu": {"enabled": True, "gateway_restart_notification": False,
-                                     "typing_indicator": False, "extra": {"app_id": app_id}}},
-            "unauthorized_dm_behavior": "ignore", "multiplex_profiles": False,
-            "stt_enabled": False, "max_concurrent_sessions": 1,
-            "streaming": {"enabled": False}}
+def messaging_gateway(config, platforms):
+    """Supply credentials and native configuration; Hermes owns all message routing."""
+    if not platforms or set(platforms) - {"feishu", "weixin"}:
+        raise MikasaError("请选择 feishu 或 weixin 消息平台")
+    env = {"GATEWAY_ALLOW_ALL_USERS": "false", "GATEWAY_MULTIPLEX_PROFILES": "false"}
+    settings = {"platforms": {}, "unauthorized_dm_behavior": "ignore", "multiplex_profiles": False,
+                "stt_enabled": False, "max_concurrent_sessions": 1, "streaming": {"enabled": False}}
+    for platform in dict.fromkeys(platforms):
+        if platform == "feishu":
+            env.update(feishu_environment(config))
+            extra = {"app_id": env["FEISHU_APP_ID"]}
+        else:
+            binding = weixin_binding(config)
+            env.update(WEIXIN_TOKEN=binding["token"], WEIXIN_ALLOW_ALL_USERS="false",
+                       WEIXIN_ALLOWED_USERS=binding["user_id"])
+            extra = {"account_id": binding["account_id"], "base_url": binding["base_url"],
+                     "dm_policy": "allowlist", "allow_from": [binding["user_id"]],
+                     "group_policy": "disabled", "group_allow_from": []}
+        settings["platforms"][platform] = {"enabled": True, "gateway_restart_notification": False,
+                                           "typing_indicator": False, "extra": extra}
+    return env, settings
 
 
 def diagnostics(config, platform, *, probe=False):
