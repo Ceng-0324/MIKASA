@@ -38,7 +38,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor
 
 工程执行已直接复用完整 Hermes CLI，使用持久 Git 工作区和原生工具/扩展。旧 worker、快照、串行 runner、HTTP 兼容层与发布业务引擎已退休；旧状态保留在备份中。工程会话独立，长期记忆与同账号聊天共享。
 
-飞书、微信共用 Hermes Gateway；微信用于主人私聊，团队群协作用飞书。普通群及话题共享上下文，同一 profile 共享长期记忆和历史。人格常驻，完整工程规则按需读取。GitHub `Mikasa-0910` 已完成 FluxCore PR 创建与合并验收；当前重点是日常使用中的通知质量、会话接续和实际工程交付。
+飞书、微信共用 Hermes Gateway；微信用于主人私聊，团队群协作用飞书。普通群及话题各自共享上下文，飞书和微信的具体会话按平台与聊天标识隔离；同一 profile 共享长期记忆、SessionDB 和历史检索范围，不会自动把两条渠道拼成一条对话。人格常驻，完整工程规则按需读取。GitHub `Mikasa-0910` 已完成 FluxCore PR 创建与合并验收；当前重点是日常使用中的通知质量、会话接续和实际工程交付。
 
 已迁入专用 OrbStack `mikasa` 工作机：机内可免密 sudo 管理系统、依赖和容器，宿主共享与机器间网络关闭。聊天与终端均使用原生工程工具，身份和记忆保留。部署入口支持干净版本包、健康检查、失败回切和加密备份；外部工具仍需相应依赖、账号和服务权限。下一步见[推进计划](MIKASA_FUNCTION_PLAN.md)，机器使用见[工作机手册](deploy/vm/README.md)。
 
