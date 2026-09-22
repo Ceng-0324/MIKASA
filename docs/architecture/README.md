@@ -25,6 +25,8 @@ flowchart LR
 
 工程目标、推送、发布和审查安排由用户授权、skills 与记忆指导，不再由宿主角色/任务类型硬门槛执行。Mikasa 不自动合并。
 
+部署使用 Mikasa 自己的隔离工作机。普通用户具有完整 sudo，可自主安装依赖、运行容器和管理系统服务；服务进程不再套只写状态目录的沙箱。宿主文件、命令、SSH Agent 和其他机器网络在 OrbStack 配置层关闭。专用机原生普通命令审批设为 off，规则文件保护保留；运行权限及 OrbStack 共享内核的边界见 [工作机手册](../../deploy/vm/README.md)。
+
 ## 聊天
 
 一个 `gateway --platform feishu --platform weixin` 管理两个消息平台。飞书开放群聊、无需 @，保留原生回环保护；微信使用已绑定主人私聊。发言人依据 Hermes 发送者元数据识别，不能用 profile 归属替代。
