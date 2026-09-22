@@ -7,7 +7,7 @@
 | `check_docs.py` | 标准库；相对链接、空白及 canonical 顺序 |
 | `probe_commands.py --config CONFIG` | 固定 SDK；命令注册、别名、参数与版本，无模型请求 |
 | `probe_native_cli.py` | 固定 SDK/本地模型目录夹具；原生命令、跨协议选择、偏好、恢复与启动退出 |
-| `probe_native_offline.py` | 固定 SDK；旧会话迁移、身份、工程 skills、原生记忆与工具策略 |
+| `probe_native_offline.py` | 固定 SDK；旧会话迁移、身份、按需工程 skills、历史检索及工具发现、原生记忆与工具策略 |
 | `probe_native_events.py` | 真实 Gateway/本地模型夹具；SSE、幂等、取消、完整备份及新目录恢复后的会话/记忆/回执 |
 | `probe_engineering_state.py` | 固定 SDK、Docker 和本地模型夹具；工程续话、压缩、共享记忆、工具修复和最终验收 |
 | `probe_native_sandbox.py` | 固定 SDK/Docker；文件与终端隔离、网络、密钥、资源和清理 |

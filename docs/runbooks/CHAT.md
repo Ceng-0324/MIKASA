@@ -38,6 +38,21 @@ python3.12 -m mikasa --config config/local/hermes-cch.json chat --session NATIVE
 
 本地 CLI 按负责人身份执行；多人使用应走鉴权 HTTP。中文“切换为……”在原生 CLI 是普通模型消息，可靠的系统切换使用 `/model`。`chat --message` 暂保留下面的 JSON API 语义，使用旧 API 聊天 ID；原生 CLI 新建的会话不会自动登记成 HTTP chat_id。
 
+## 飞书与微信
+
+两端使用同一个 Hermes Gateway，直接输入原生命令；群聊中的“本会话”指本群或当前话题的共享会话。
+
+| 命令 | 作用范围 |
+| --- | --- |
+| `/model` | 查看当前模型与原生选择菜单 |
+| `/model claude-opus-4-6 --session` | 切换本会话，保留上下文；省略 `--session` 同样默认本会话 |
+| `/model gpt-6-astra --once` | 只覆盖下一轮，之后恢复原选择 |
+| `/model gpt-6-astra --global` | 保存共享 profile 默认值；其他会话已有的显式选择仍优先 |
+| `/busy queue` | 本 Gateway 忙碌输入采用原生排队，之后的消息接续处理 |
+| `/new` | 新建当前会话，历史与长期记忆保留；不是重启服务 |
+
+模型切换由原生反馈说明作用范围；保存失败只报告会话选择，不声称已更改默认值。默认使用中文界面，部分上游提示仍为英文。工程入口的模型配置和 CCH 后台分组独立于聊天选择；共享 profile 的默认设置会影响共用该 profile 的参与者。
+
 ## HTTP
 
 按 [操作手册](OPERATIONS.md) 配置 Mikasa API token 后启动服务：
@@ -80,7 +95,9 @@ CLI 启动原生 CLI 子进程，HTTP 启动原生 Gateway 子进程；同一账
 
 首次打开账号 profile，会用 Hermes SessionDB 的原生接口导入旧聊天的全部普通消息；命令回执不进入模型历史。原 SQLite 保留，导入标记防止重复；冲突会阻止启动，不覆盖数据。新请求只保存摘要与 native run 引用，不复制正文。已接受但中断的请求先检查原生状态，重试使用同一幂等键，不重新推理。
 
-不同账号的 SessionDB、MEMORY、USER 和 home 独立。身份由 canonical 生成 SOUL，工程规则经官方插件注入。人格 skill 通过原生 `skills.auto_load` 必需加载，缺失时拒绝启动；工程 skills 由原生索引与 skill_view 加载。聊天模型目前仅授权 memory、skills_list、skill_view，plugin 阻止其他模型工具。CLI 系统命令与模型工具调用是不同通道；HTTP 的 `/init` 仍暂缓。
+不同账号 profile 的 SessionDB、MEMORY、USER 和 home 独立；消息 Gateway 的所有参与者共用主人 profile。身份由 canonical 生成 SOUL，人格 skill 原生 auto_load；聊天常驻精简交互提示，完整工程规章生成 mikasa-engineering skill 按需读取。通用工程 skills 用自然语言交流，只有独立工程入口提供 JSON 输出契约。
+
+聊天可使用 memory、skills_list、skill_view、session_search。问“上次聊到哪里”时，使用 Hermes 原生检索当前 profile 的历史；/new 保留旧历史，换渠道也可通过检索续上。跨 profile 检索被拒绝；同 profile 的私聊和群聊并非数据隔离，记录与回答应区分发言人、渠道和项目，不自行转述私聊内容到群聊。CLI 系统命令与模型工具调用是不同通道；HTTP 的 `/init` 仍暂缓。
 
 工程任务与提交账号共用原生 MEMORY/USER，聊天中经确认并写入长期记忆的约定会在新的工程 Agent 实例加载；工程写入的长期约定也可由新聊天实例读取。同一实例的系统提示记忆快照不立即重建，不承诺热刷新。普通聊天正文不会自动成为工程上下文，临时安排须随任务提供；工程完整工具历史仍按任务隔离。旧工程记忆留在任务 profile 的 `memories.legacy`，不自动并入账号记忆；详见 [当前架构](../architecture/README.md)。这不代表聊天已经开放仓库执行工具。
 

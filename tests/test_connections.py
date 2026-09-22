@@ -298,6 +298,23 @@ assert config.streaming.enabled
 from gateway.session import SessionSource, build_session_key
 from gateway.platforms.event import MessageEvent
 assert GatewayRunner._load_busy_input_mode() == 'queue'
+from agent.i18n import get_language, t
+assert get_language() == 'zh'
+assert '会话' in t('gateway.model.session_only_hint')
+from unittest.mock import AsyncMock, patch
+result = N(new_model='fixture-model', target_provider='custom', provider_label='CCH',
+           base_url='', api_key='', model_info=None, api_mode='codex_responses', warning_message=None)
+ctx = N(persist_global=False, current_base_url='', current_api_key='', custom_provs=[])
+with patch('hermes_cli.model_switch.resolve_display_context_length_async', new=AsyncMock(return_value=None)):
+    reply = asyncio.run(GatewayRunner._model_switch_confirmation(N(), result, ctx, one_turn=False, picker=False))
+    assert t('gateway.model.session_only_hint') in reply
+    once = asyncio.run(GatewayRunner._model_switch_confirmation(N(), result, ctx, one_turn=True, picker=False))
+    assert 'next turn only' in once
+    ctx.persist_global = True
+    saved = asyncio.run(GatewayRunner._model_switch_confirmation(N(), result, ctx, one_turn=False, picker=False))
+    assert t('gateway.model.saved_global') in saved
+    failed = asyncio.run(GatewayRunner._model_switch_confirmation(N(), result, ctx, one_turn=False, picker=False, global_error='fixture write failed'))
+    assert t('gateway.model.session_only_hint') in failed and t('gateway.model.saved_global') not in failed
 runner = object.__new__(GatewayRunner)
 runner.config = config
 runner._session_state('user-a').turn.agent = object()
@@ -391,6 +408,42 @@ else:
         self.assertGreater(loaded["policy_chars"], 0)
         self.assertTrue(loaded["native_memory"])
         self.assertEqual((home / "SOUL.md").read_text(), (ROOT / "identity.md").read_text())
+        # Full canonical rules are native skill content, not permanent chat sections.
+        generated = (home / 'skills/mikasa-engineering/SKILL.md').read_text()
+        code = '''
+import os,sys,json
+from pathlib import Path
+sys.path.insert(0, os.environ['MIKASA_HERMES_SOURCE'])
+from hermes_cli.plugins import discover_plugins, render_system_prompt_sections, get_pre_tool_call_directive
+from tools.skills_tool import skill_view
+discover_plugins()
+sections=''.join(s.content for s in render_system_prompt_sections({}))
+home=Path(os.environ['HERMES_HOME'])
+for name in ('engineering-contract.md', 'engineering-workflow.md'):
+    assert (home/'policy'/name).read_text() not in sections
+skill=json.loads(skill_view('mikasa-engineering'))
+assert '工程工作流' in json.dumps(skill,ensure_ascii=False)
+assert get_pre_tool_call_directive('session_search', {'query': 'past discussion'})[0] is None
+for name in ('tool_search', 'tool_describe', 'tool_call'):
+    assert get_pre_tool_call_directive(name, {})[0] is None
+from model_tools import handle_function_call
+from agent.tool_executor import _unwrap_tool_search_call
+from types import SimpleNamespace
+toolsets=['memory','skills','session_search']
+described=json.loads(handle_function_call('tool_describe', {'names':['session_search']}, enabled_toolsets=toolsets))
+assert 'session_search' in described.get('tools',{})
+name,args,blocked=_unwrap_tool_search_call(SimpleNamespace(enabled_toolsets=toolsets), 'tool_call', {'name':'session_search','arguments':{'profile':'other','query':'private'}})
+assert name == 'session_search' and blocked is None
+assert get_pre_tool_call_directive(name, args)[0] == 'block'
+for args in ({'profile':'other'}, {'session_id':'other/id'}):
+    assert get_pre_tool_call_directive('session_search', args)[0] == 'block'
+assert get_pre_tool_call_directive('terminal', {})[0] == 'block'
+'''
+        for name in ('engineering-contract.md', 'engineering-workflow.md'):
+            self.assertIn((ROOT / name).read_text(), generated)
+        reply = subprocess.run([str(python), '-c', code], cwd=home / 'workspace', env=env,
+                               capture_output=True, text=True, timeout=30)
+        self.assertEqual(reply.returncode, 0, reply.stderr)
         # A broken explicit platform must exit before the native cron-only fallback.
         invalid = home / 'invalid-gateway.json'
         invalid.write_text(json.dumps({'platforms': {'feishu': {'enabled': True}}}))

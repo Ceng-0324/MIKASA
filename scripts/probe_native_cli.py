@@ -57,7 +57,7 @@ from hermes_constants import get_hermes_home
 from hermes_cli.plugins import discover_plugins
 discover_plugins()
 from cli import HermesCLI
-c=HermesCLI(toolsets=['memory','skills'],compact=True)
+c=HermesCLI(toolsets=['memory','skills','session_search'],compact=True)
 checks={}
 checks['native_version_command']=c.process_command('/version')
 c.process_command('/model claude-opus-4-6 --session')

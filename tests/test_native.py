@@ -45,7 +45,7 @@ class NativeProfileTests(unittest.TestCase):
         self.assertFalse(any(b'sensitive-fixture-key' in p.read_bytes() for p in home.rglob('*') if p.is_file()))
         config = json.loads((home/'config.yaml').read_text())
         self.assertEqual(config['skills']['auto_load'], ['mikasa-persona'])
-        self.assertEqual(set(config['platform_toolsets']['api_server']), {'memory','skills'})
+        self.assertEqual(set(config['platform_toolsets']['api_server']), {'memory','skills','session_search'})
         self.assertEqual((home/'SOUL.md').read_bytes(), (ROOT/'identity.md').read_bytes())
 
     def test_actor_home_and_memory_isolation_and_authorization(self):
@@ -236,7 +236,7 @@ class NativeProfileTests(unittest.TestCase):
         self.assertNotIn('GH_TOKEN', env)
         self.assertFalse(any(b'feishu-secret' in p.read_bytes() for p in prepared[0].rglob('*') if p.is_file()))
         native = json.loads((prepared[0] / 'config.yaml').read_text())
-        self.assertEqual(native['platform_toolsets']['feishu'], ['memory', 'skills'])
+        self.assertEqual(native['platform_toolsets']['feishu'], ['memory', 'skills', 'session_search'])
         self.assertEqual(native['skills']['auto_load'], ['mikasa-persona'])
         self.assertEqual(json.loads((prepared[0] / 'policy/actor.json').read_text())['actor'], self.config.owner)
 
@@ -282,7 +282,7 @@ class NativeProfileTests(unittest.TestCase):
         self.assertEqual(set(gateway['platforms']), {'feishu', 'weixin'})
         self.assertFalse(any(b'private-weixin-token' in p.read_bytes() for p in prepared[0].rglob('*') if p.is_file()))
         native = json.loads((prepared[0] / 'config.yaml').read_text())
-        self.assertEqual(native['platform_toolsets']['weixin'], ['memory', 'skills'])
+        self.assertEqual(native['platform_toolsets']['weixin'], ['memory', 'skills', 'session_search'])
         (self.config.runtime / 'credentials/weixin.json').unlink()
         with patch('mikasa.native.prepare_profile') as prepare, patch('mikasa.native.subprocess.Popen') as spawn, \
                 self.assertRaises(MikasaError):

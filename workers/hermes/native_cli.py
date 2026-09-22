@@ -23,4 +23,4 @@ if __name__ == "__main__":
     if "mikasa-persona" not in loaded or missing:
         raise SystemExit("Mikasa persona failed to load")
     from cli import main
-    main(resume=args.resume, toolsets="memory,skills")
+    main(resume=args.resume, toolsets="memory,skills,session_search")

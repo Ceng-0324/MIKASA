@@ -7,12 +7,16 @@ import threading
 def register(ctx):
     from hermes_constants import get_hermes_home
     home = get_hermes_home()
-    policy = "\n\n".join((home / "policy" / name).read_text() for name in
-                           ("engineering-contract.md", "engineering-workflow.md"))
-    policy += ("\n当前聊天入口仅配置记忆与只读 skills，工程工具尚未接入该入口。"
+    policy = ("当前聊天可使用记忆、历史检索与只读 skills，工程执行尚未接入。"
                "持久记忆按 SOUL.md 和当前用户的明确要求使用原生 memory 工具；"
                "只有工具确认写入成功后才说已长期记住，失败时如实说明。"
-               "人格依据 SOUL.md；涉及工程任务先用 skill_view 加载对应 mikasa-plan、mikasa-implement 或 mikasa-review。")
+               "询问过去的讨论时先用 session_search 查找真实历史，找到后按发言人、渠道、项目和时间核对，"
+               "不要把另一人的偏好套给当前发言人，也不要让用户重复提供已有历史。"
+               "同一 profile 共享记忆和历史；记录偏好须注明对象与适用范围，私聊内容不要自行转述到群聊。"
+               "人格依据 SOUL.md；实质工程讨论先用 skill_view 加载 mikasa-engineering，再按需读取 plan、implement 或 review skill。"
+               "日常聊天不加载工程流程，不背诵内部账号校验、工具边界或规则；仅在影响当前请求时说明。"
+               "模型与会话操作使用 Hermes 原生 /model、/new、/busy、/stop；不能仅靠文字声称切换成功。"
+               "解释模型设置时区分本会话、单轮和 profile 默认；CCH 分组由服务端决定，工程入口有独立默认。")
     actor = json.loads((home / "policy/actor.json").read_text())
     policy += ("\n当前运行 profile 所属账号：" + actor["actor"] +
                "；消息平台的发言人以 Hermes 提供的发送者元数据为准，共用 profile 不代表是同一人。"
@@ -30,9 +34,16 @@ def register(ctx):
     for offset in range(0, len(policy), 3500):
         ctx.register_system_prompt_section(f"mikasa.policy.{offset // 3500}", policy[offset:offset + 3500], max_chars=3500)
 
-    def guard(tool_name, **kwargs):
-        if tool_name not in {"memory", "skills_list", "skill_view"}:
+    def guard(tool_name, args=None, **kwargs):
+        # Hermes defers session_search behind its native discovery bridge. The
+        # executor unwraps tool_call before checking this hook on the real tool.
+        if tool_name not in {"memory", "skills_list", "skill_view", "session_search",
+                             "tool_search", "tool_describe", "tool_call"}:
             return {"action": "block", "message": "此入口尚未接入该工具；使用已配置的工程入口。"}
+        if tool_name == "session_search":
+            args = args or {}
+            if args.get("profile") or "/" in str(args.get("session_id", "")):
+                return {"action": "block", "message": "历史检索仅使用当前 Mikasa profile。"}
 
     ctx.register_hook("pre_tool_call", guard)
     lock = threading.Lock()
@@ -62,7 +73,7 @@ def register(ctx):
                 "identity": (home / "SOUL.md").read_text().strip() in system_prompt,
                 "policy": all(policy[o:o + 3500] in system_prompt for o in range(0, len(policy), 3500)),
                 "persona_skill": "do not reconstruct personality from anime knowledge" in system_prompt,
-                "skills_index": all(n in system_prompt for n in ("mikasa-persona", "mikasa-plan", "mikasa-implement", "mikasa-review"))})
+                "skills_index": all(n in system_prompt for n in ("mikasa-persona", "mikasa-engineering", "mikasa-plan", "mikasa-implement", "mikasa-review"))})
 
     def tool_evidence(tool_name="", session_id="", status="", **kwargs):
         record({"event": "tool", "session_id": session_id, "tool": tool_name, "status": status})

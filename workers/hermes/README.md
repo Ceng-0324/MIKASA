@@ -79,7 +79,7 @@ Mikasa 将当前暂存树（实现/修复）或固定 PR head（计划/审查）
 | `feishu_probe.py` | 复用官方机器人认证探针，隔离 home，不发送消息、不回显 SDK 诊断 |
 | `weixin_login.py` | 复用原生 iLink 扫码登录，临时 home，完整绑定才写入本机私密凭据文件 |
 | `profile_config.py` | 保留原生偏好，刷新受管 providers/aliases/skills/plugin |
-| `plugin/` | 聊天工程规则、身份加载证据与已开放工具范围 |
+| `plugin/` | 精简聊天提示、按需工程 skill 指引、身份加载证据与已开放工具范围 |
 | `task_session.py` | 工程原生续话与压缩后续 |
 | `import_legacy.py` | 旧聊天导入原生 SessionDB，保留原档案 |
 | `command_adapter.py` | 既有 HTTP/单条消息命令契约；终端不用此适配 |

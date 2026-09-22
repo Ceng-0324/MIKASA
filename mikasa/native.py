@@ -112,7 +112,7 @@ def prepare_profile(config, actor):
         "model": {"default": model, "provider": provider_id(select_source(settings, model))},
         "providers": providers,
         "model_aliases": {m: {"model": m, "provider": provider_id(select_source(settings, m))} for m in choices},
-        "platform_toolsets": {name: ["memory", "skills"] for name in ("api_server", "cli", "feishu", "weixin")},
+        "platform_toolsets": {name: ["memory", "skills", "session_search"] for name in ("api_server", "cli", "feishu", "weixin")},
         "memory": {"memory_enabled": True, "user_profile_enabled": True},
         "skills": {"external_dirs": [str(config.root / "skills")], "auto_load": ["mikasa-persona"]},
         "plugins": {"enabled": ["mikasa"]},
@@ -138,6 +138,11 @@ def prepare_profile(config, actor):
     # Snapshots are generated from the canonical files, never maintained separately.
     for name in ("engineering-contract.md", "engineering-workflow.md"):
         private_write(home / "policy" / name, (config.root / name).read_text())
+    # On-demand native skill generated from canonical rules; never a second maintained copy.
+    private_write(home / "skills/mikasa-engineering/SKILL.md",
+                  "---\nname: mikasa-engineering\ndescription: Load Mikasa's canonical engineering contract and workflow for substantive engineering decisions.\n---\n\n" +
+                  "\n\n".join((config.root / name).read_text() for name in
+                                ("engineering-contract.md", "engineering-workflow.md")))
     feishu = config.data.get("feishu", {})
     owner_ids = [feishu[key] for key in ("owner_open_id", "owner_user_id") if feishu.get(key)]
     actor_identity["feishu_owner"] = {"account": config.owner, "ids": owner_ids}

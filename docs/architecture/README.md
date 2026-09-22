@@ -27,7 +27,7 @@ flowchart LR
 
 `mikasa gateway --platform feishu [--platform weixin]` 启动一个固定 Hermes Gateway；飞书开放用户、群聊和机器人，不要求 @，保留原生回环保护；微信限扫码主人单聊。主人 ID 用于身份说明，profile 归属不等于发言人。私聊按平台划分，普通群与话题配置为群内共享上下文；所有会话共用 profile 身份、skills 和 MEMORY/USER。不同会话采用原生并发，同会话使用原生 queue；全局准入上限不再固定为 1。飞书启用输入状态及流式回复，微信采用完整回复和长任务通知，不发启动通知。原生偏好在一次迁移后继续保留。CLI/API 维护锁仍有效。平台配置见[接入手册](../runbooks/CONNECTIONS.md)。
 
-原生 `/model` 支持 session/once/global，由配置别名选择模型、provider、协议和 Key。HTTP 暂仅支持 session，中文直接切换命令经额外推理验证后保存。模型选择不改变 CCH Key 分组、个人配置或工程默认值。聊天模型工具当前只有 memory 和只读 skills；原生系统命令是独立通道，不构成操作系统沙箱。
+原生 `/model` 支持 session/once/global，由配置别名选择模型、provider、协议和 Key，原生中文反馈说明作用范围。HTTP 暂仅支持 session，中文直接切换命令经额外推理验证后保存。模型选择不改变 CCH Key 分组、个人配置或工程默认值。聊天工具为 memory、只读 skills 和当前 profile 的原生 session_search；原生系统命令是独立通道，不构成操作系统沙箱。
 
 ## 状态与记忆
 
@@ -46,7 +46,9 @@ flowchart LR
 
 工程根会话为 `mikasa-task-<task-id>`，用原生 compression tip 和 resume conversations 恢复完整工具历史。随机 run_id 用于本次容器与证据，不复用旧容器。中断后不自动重放未完成的工具副作用。旧任务实体 memories 留档为 memories.legacy，旧随机会话不自动合并；绑定冲突保留现场并报错。
 
-身份以 SOUL 加载，工程规则通过 plugin 或工程 system 注入，persona 与任务 skills 来自受信任 manifest。实际请求指纹证明加载链路，不能保证模型必然遵循。审查分工由规则与记忆指导，Mikasa 不维护审批归属引擎、不自动合并。
+身份以 SOUL 加载，聊天 plugin 常驻精简的交互与账号上下文。完整工程契约、工作流从 canonical 生成原生 mikasa-engineering skill，实质工程讨论时按需读取；工程执行入口继续注入完整规则。通用工程 skills 不携带 worker 的 JSON/派发协议，这些要求由 Worker.request 按任务提供。policy 证据表示当前精简提示已加载，不代表完整工程规则已读取；按需读取另看原生 skill_view 事件。Mikasa 不维护审批引擎、不自动合并。
+
+session_search 直接读取 Hermes SessionDB，无自研历史镜像；可找回 /new 之前或其他渠道的讨论。范围是当前 profile，其他 profile 查询被拒绝。同 profile 的群与私聊历史、MEMORY/USER 共享，按对象、渠道、项目区分和不转述私人内容属于身份与交互约定，不冒充程序隔离。新群上下文不拼接旧成员会话；需要时检索原记录。
 
 ## 任务与调度
 
