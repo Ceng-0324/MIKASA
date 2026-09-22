@@ -6,8 +6,8 @@
 
 | 组件 | 负责什么 |
 | --- | --- |
-| Hermes | 原生 CLI 与多平台 Gateway、系统命令、模型调用与工具循环、SessionDB、MEMORY/USER、skills、Kanban、Cron、运行事件及 SQLite 快照 |
-| CCH | 模型供应、协议对应的供应商路由、模型重写和分组 |
+| [Hermes](https://github.com/NousResearch/hermes-agent) | 原生 CLI 与多平台 Gateway、系统命令、模型调用与工具循环、SessionDB、MEMORY/USER、skills、Kanban、Cron、运行事件及 SQLite 快照 |
+| [CCH](https://github.com/ding113/claude-code-hub) | 模型供应、协议对应的供应商路由、模型重写和分组 |
 | Mikasa | 身份与工程 skills、配置和账号绑定、共享记忆与必要的 API/平台/备份适配 |
 
 优先复用 Hermes，不另建 Agent harness 或审批引擎。审查分工等协作约定由身份、skills、会话和原生记忆承载，实际权限由平台配置决定。Mikasa 默认不自动合并。
