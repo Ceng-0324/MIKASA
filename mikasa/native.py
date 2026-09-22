@@ -119,6 +119,13 @@ def prepare_profile(config, actor):
         "agent": {"max_turns": 12},
         "terminal": {"cwd": str(home / "workspace")},
         "gateway": {"api_server": {"max_concurrent_runs": 1}},
+        "max_concurrent_sessions": None,
+        "group_sessions_per_user": False,
+        "thread_sessions_per_user": False,
+        "streaming": {"enabled": True},
+        "display": {"language": "zh", "busy_input_mode": "queue", "busy_ack_detail": False,
+                    "tool_progress": "off", "show_reasoning": False,
+                    "platforms": {"weixin": {"streaming": False, "long_running_notifications": True}}},
         "fallback_providers": [],
     }
     (home / "workspace").mkdir(exist_ok=True, mode=0o700)

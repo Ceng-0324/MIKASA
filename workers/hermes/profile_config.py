@@ -25,6 +25,17 @@ def validate_home_env(path):
 def merge(current, generated):
     # Hermes owns user preferences, including /model --global and reasoning.
     merged = {**generated, **current}
+    # One-time migration from Mikasa's single-session, silent message defaults.
+    # Afterwards /busy and native display/session preferences remain Hermes-owned.
+    if current.get("_mikasa_interaction_defaults") != 1:
+        for name in ("max_concurrent_sessions", "group_sessions_per_user", "thread_sessions_per_user", "streaming"):
+            merged[name] = generated[name]
+        display = {**current.get("display", {}), **generated["display"]}
+        display.pop("busy_text_mode", None)  # old override would defeat /busy queue
+        display["platforms"] = {**current.get("display", {}).get("platforms", {}),
+                                **generated["display"]["platforms"]}
+        merged["display"] = display
+        merged["_mikasa_interaction_defaults"] = 1
     # cch-<source digest> is Mikasa's namespace; removed sources must not linger
     # in the native picker. Keep unrelated native providers and aliases intact.
     managed = lambda name: isinstance(name, str) and re.fullmatch(r"cch-[0-9a-f]{16}", name)

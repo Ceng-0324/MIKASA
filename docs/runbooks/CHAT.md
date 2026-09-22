@@ -64,6 +64,10 @@ HTTP 和单条 `chat --message` 仍使用旧命令适配：支持中文切换、
 
 ## 原生运行与数据迁移
 
+消息 Gateway 默认允许不同会话并发；同一会话忙碌时使用 Hermes `queue` 模式，后续消息按原生队列接续，不要求用户反复重发。`/busy` 查看当前模式，`/busy queue` 设置排队，`/queue 内容` 显式排队，`/stop` 沿用原生停止语义。全局 `max_concurrent_sessions` 是准入上限，达到上限会拒绝新会话，并不是全局轮询队列；当前不再写死为 1，仍受 VM 资源及 CCH 限流影响。
+
+普通群聊和话题共用各自上下文，私聊按平台和聊天分开，发送者仍使用 Hermes 元数据区分。首次从旧的按成员群会话切换时开启新的群上下文，旧历史保留。飞书使用原生输入状态和流式回复，微信保留完整回复和长任务通知；系统界面默认中文，尚未本地化的上游提示仍可能是英文。偏好迁移只执行一次，之后原生 `/busy`、显示及会话设置保留。
+
 CLI 启动原生 CLI 子进程，HTTP 启动原生 Gateway 子进程；同一账号使用同一 profile、SessionDB 和 MEMORY/USER。`mikasa gateway --platform feishu [--platform weixin]` 使用负责人 profile，由同一个 Hermes Gateway 处理开放的飞书私聊/群聊及已绑定负责人的微信单聊；飞书不要求 @，其他机器人也可进入。会话按 Hermes 原生规则划分，长期记忆仍为 profile 共享；开放用户也能调用原生系统命令，不将其描述为每人的独立沙箱。平台配置和生效步骤见[接入手册](CONNECTIONS.md)。CLI、HTTP 和消息 Gateway 不能同时管理同一账号 profile，锁冲突会在更新配置前报错。退出会收回对应子进程，重新打开继续使用原生数据。模型凭据只从显式 CCH 来源读取到子进程环境，不复制个人认证文件。
 
 初始化更新身份/规则、必需 skills/plugin 和生成的 CCH 配置，保留 Hermes 自己保存的默认模型、推理和显示偏好。`config.yaml` 的 YAML/JSON 都可读取，刷新写为 JSON（合法 YAML），不保留 YAML 注释；格式错误时保留原文件并阻止启动。长期记忆和原生数据库不由配置初始化覆盖。

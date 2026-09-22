@@ -11,8 +11,14 @@ sys.path.insert(0, os.environ["MIKASA_HERMES_SOURCE"])
 def messaging_config(path):
     from gateway.config import GatewayConfig
     from hermes_cli.config import load_config
-    config = GatewayConfig.from_dict(json.loads(path.read_text()))
-    saved = GatewayConfig.from_dict(load_config())
+    current = load_config()
+    explicit = json.loads(path.read_text())
+    # Native preferences stay editable; credentials and platform admission are explicit.
+    for field in ("max_concurrent_sessions", "group_sessions_per_user", "thread_sessions_per_user", "streaming"):
+        if field in current:
+            explicit[field] = current[field]
+    config = GatewayConfig.from_dict(explicit)
+    saved = GatewayConfig.from_dict(current)
     for platform, settings in config.platforms.items():
         # Hermes owns /sethome persistence, including user/scope/thread provenance.
         settings.home_channel = saved.get_home_channel(platform)

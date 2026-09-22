@@ -96,7 +96,7 @@ def messaging_gateway(config, platforms):
         raise MikasaError("请选择 feishu 或 weixin 消息平台")
     env = {"GATEWAY_ALLOW_ALL_USERS": "false", "GATEWAY_MULTIPLEX_PROFILES": "false"}
     settings = {"platforms": {}, "unauthorized_dm_behavior": "ignore", "multiplex_profiles": False,
-                "stt_enabled": False, "max_concurrent_sessions": 1, "streaming": {"enabled": False}}
+                "stt_enabled": False}
     for platform in dict.fromkeys(platforms):
         if platform == "feishu":
             env.update(feishu_environment(config))
@@ -110,7 +110,7 @@ def messaging_gateway(config, platforms):
                      "dm_policy": "allowlist", "allow_from": [binding["user_id"]],
                      "group_policy": "disabled", "group_allow_from": []}
         settings["platforms"][platform] = {"enabled": True, "gateway_restart_notification": False,
-                                           "typing_indicator": False, "extra": extra}
+                                           "typing_indicator": True, "extra": extra}
     return env, settings
 
 

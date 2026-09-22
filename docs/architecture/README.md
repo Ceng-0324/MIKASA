@@ -25,7 +25,7 @@ flowchart LR
 
 终端直接调用官方 `cli.main()`，完整系统命令与输入循环由 Hermes 提供。HTTP/`chat --message` 保留现有鉴权、命令和幂等回执契约，运行使用官方 Gateway。CLI 新会话不会自动登记为旧 API chat_id。同账号 CLI/Gateway 共用 profile 且进程互斥；本地 shell 是受信任负责人入口。
 
-`mikasa gateway --platform feishu [--platform weixin]` 以前台方式启动一个固定 Hermes Gateway；显式平台配置可同时启用飞书插件和微信内置适配器，凭据仅经环境传入。飞书原生策略开放所有用户、群聊和机器人，不要求 @，保留 Hermes 自身回环和循环保护；微信仍限扫码负责人单聊。飞书负责人 ID 仅用于身份说明，不是准入白名单；profile 归属不等于消息发送者。Hermes 默认区分私聊与普通群内成员的会话，话题会话默认共享；所有会话共用 profile 级身份、skills 和 MEMORY/USER。保持与 CLI/API 相同的维护锁，默认无启动通知、输入状态或流式预览。`connections` 本地检查不初始化任务数据库，显式 `--probe` 只用于支持只读探针的平台；微信必须扫码后由真实 Gateway 验收。详见[接入手册](../runbooks/CONNECTIONS.md)。
+`mikasa gateway --platform feishu [--platform weixin]` 启动一个固定 Hermes Gateway；飞书开放用户、群聊和机器人，不要求 @，保留原生回环保护；微信限扫码主人单聊。主人 ID 用于身份说明，profile 归属不等于发言人。私聊按平台划分，普通群与话题配置为群内共享上下文；所有会话共用 profile 身份、skills 和 MEMORY/USER。不同会话采用原生并发，同会话使用原生 queue；全局准入上限不再固定为 1。飞书启用输入状态及流式回复，微信采用完整回复和长任务通知，不发启动通知。原生偏好在一次迁移后继续保留。CLI/API 维护锁仍有效。平台配置见[接入手册](../runbooks/CONNECTIONS.md)。
 
 原生 `/model` 支持 session/once/global，由配置别名选择模型、provider、协议和 Key。HTTP 暂仅支持 session，中文直接切换命令经额外推理验证后保存。模型选择不改变 CCH Key 分组、个人配置或工程默认值。聊天模型工具当前只有 memory 和只读 skills；原生系统命令是独立通道，不构成操作系统沙箱。
 

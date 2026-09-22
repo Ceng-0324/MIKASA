@@ -293,6 +293,32 @@ if sys.argv[2] == 'save':
     assert (home / '.env').exists()
 config = messaging_config(home / 'gateway-messaging.json')
 assert set(config.platforms) == {Platform.FEISHU, Platform.WEIXIN}
+assert config.max_concurrent_sessions is None
+assert config.streaming.enabled
+from gateway.session import SessionSource, build_session_key
+from gateway.platforms.event import MessageEvent
+assert GatewayRunner._load_busy_input_mode() == 'queue'
+runner = object.__new__(GatewayRunner)
+runner.config = config
+runner._session_state('user-a').turn.agent = object()
+assert runner._active_session_limit_message('user-b') is None
+config.max_concurrent_sessions = 1
+assert '(1/1)' in runner._active_session_limit_message('user-b')
+config.max_concurrent_sessions = None
+adapter = N(_pending_messages={})
+received = []
+for user in ('a', 'b'):
+    source = SessionSource(platform=Platform.FEISHU, chat_id='group', chat_type='group', user_id=user)
+    key = build_session_key(source, group_sessions_per_user=config.group_sessions_per_user)
+    received.append(key)
+    runner._enqueue_fifo(key, MessageEvent(text=user, source=source), adapter)
+assert received[0] == received[1], 'group participants must share context'
+key = received[0]
+assert runner._queue_depth(key, adapter=adapter) == 2
+first = adapter._pending_messages.pop(key)
+assert runner._promote_queued_event(key, adapter, first).text == 'a'
+assert adapter._pending_messages.pop(key).text == 'b'
+assert runner._queue_depth(key, adapter=adapter) == 0
 for name in ('feishu', 'weixin'):
     settings = config.platforms[Platform(name)]
     assert settings.home_channel.chat_id == name+'-chat'
