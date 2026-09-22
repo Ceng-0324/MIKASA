@@ -100,3 +100,7 @@ sudo systemd-run --pty --wait --collect --property=User=mikasa --property=Group=
 替换 REPO 为已有仓库，或省略 `--cwd ...` 使用默认持久 workspace。也可以在飞书、微信直接说明仓库绝对路径和任务；Hermes 在当前会话执行并反馈。消息 Gateway 自带原生 Cron/Kanban 调度，独立工程 profile 需要常驻调度时使用工程入口的 `gateway run`，不恢复 Mikasa runner。
 
 Mac 管理命令明确指定 `orb -m mikasa -u root -w / ...`。启动和重启机器分别用 `orb start mikasa`、`orb restart mikasa`；由 Mac 发起，不让机内程序控制 OrbStack 其他机器。`connected` 只证明当前连接状态，不能代替持续收发和用户交互验收。
+
+## 版本与恢复
+
+宿主在干净 checkout 上运行 `python3.12 scripts/package_vm.py /private/tmp/mikasa-release.tar.gz`，再将包传入 VM，由 root 执行 `sudo /opt/mikasa/deploy/vm/manage.py deploy /path/to/mikasa-release.tar.gz`。入口会校验 Git revision 和每个文件的 SHA-256，停 Gateway 后复用 Hermes 原生排空，启动后检查身份摘要、飞书和微信连接；失败会回切到上一个版本。首次 `init` 会把现有 `/opt/mikasa` 保存为 `legacy-*` 回退目录，创建 Restic 加密仓库并安装每日备份 timer。`backup` 覆盖 `/home/mikasa/work`、Git 凭据、Hermes 状态、服务配置和固定运行环境，但排除缓存；`restore SNAPSHOT DIR` 只恢复到新目录，不覆盖运行中的服务。

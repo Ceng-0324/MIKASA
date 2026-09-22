@@ -28,11 +28,11 @@
 | Docker | 独立 Docker/Compose 已启用，普通用户经原生 terminal 成功构建并运行本地 scratch/BusyBox 镜像 | Docker Hub registry 当前 TLS/EOF 失败，公网镜像拉取未通过；没有通过开放宿主共享规避 |
 | CCH default 分组 | 模型连接与双协议路由通过 | 仍缺网关管理端同次 providerGroup/供应商日志，响应模型名不能证明分组或底层身份 |
 
-真实工程使用临时 profile 和合成仓库，未访问 FluxCore、未触碰正式记忆或向平台发送消息。完整工程执行不再受 Mikasa 的 worker.timeout 限制，模型服务延迟及 Hermes 原生预算仍有效。
+真实工程已访问 FluxCore：`Mikasa-0910` 创建 [PR #28](https://github.com/Ceng-0324/FluxCore/pull/28)，由 `Ceng-0324` 合并；该证据只覆盖一次依赖修复交付，不覆盖审查他人 PR。完整工程执行不再受 Mikasa 的 worker.timeout 限制，模型服务延迟及 Hermes 原生预算仍有效。
 
 ## 部署与恢复
 
-正式代码在 /opt/mikasa，状态在 /var/lib/mikasa；消息 Gateway 与工程 profile 独立运行。工程默认 workspace 持久，memories 链接正式账号。无工程 platform_toolsets 或 agent 预算覆写，CCH 来源与原生偏好继续保存。
+正式代码在 /opt/mikasa，状态在 /var/lib/mikasa；消息 Gateway 与工程 profile 独立运行。工程默认 workspace 持久，memories 链接正式账号。无工程 platform_toolsets 或 agent 预算覆写，CCH 来源与原生偏好继续保存。VM 维护入口负责干净版本包、健康检查、失败回切和 Restic 加密备份；外部恢复副本与密码由部署者单独保管。
 
 2026-09-22 从 mylinux 停服备份 561 项状态，恢复到新机相同路径；21 个会话、103 条消息、MEMORY/USER 字节和单独传输的微信绑定均一致，工程记忆链接正确。旧 mylinux 服务已 disabled，旧机原始数据和 `/var/backups/mikasa/dedicated-machine-20260922` 恢复点保留；新机另存该快照。旧任务继续作为档案，未自动重跑。
 
@@ -44,7 +44,7 @@ GitHub 登录使用 VM 独立用户的原生 gh 认证，文件 0600，不复制
 
 ## 保留的原生边界
 
-- 聊天已开放原生工程工具和进度/结果反馈；本页早期迁移数据不代表消息平台工程交互或所有外部工具均已验收。FluxCore 真实仓库协作仍需指定任务。
+- 聊天已开放原生工程工具和进度/结果反馈；本页早期迁移数据不代表所有外部工具均已验收。FluxCore 首次真实仓库交付已完成，审查他人 PR 的证据仍待补充。
 - 专用机聊天和工程 profile 使用 Hermes 原生 approvals.mode=off，普通命令不逐次等待确认；默认规则文件保护及原生不可绕过的检查保留。例如 AGENTS.md 文件工具修改仍需交互批准。GH_TOKEN 不直接继承给 terminal，新机已通过 gh 自身认证解决。
 - 不同聊天会话并发，同会话 FIFO；有限准入上限满额时仍按原生行为拒绝，不是全局队列。群上下文共享，区分发言人与不转述私人内容依靠身份约定。
 - 固定版本原生 CLI 的自定义 CCH provider 下 /new 不可靠地重置默认模型，同进程 --global 不刷新启动快照；显式 /model ID 可切换，保存值重启生效。

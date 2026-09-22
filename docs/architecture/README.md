@@ -55,6 +55,6 @@ SOUL 来自 identity.md；人格 skill 常驻。工程契约与工作流生成 m
 
 旧 worker v1 RPC、任务 CLI、runner 和工程 webhook 已退休；旧 HTTP /tasks 与 webhook 返回 410。既有任务、工作区和发布回执不自动重跑、不删除。需要历史执行环境时从 Git 中的迁移前版本独立恢复副本；不要将旧 runner 对准正在使用的新 runtime。
 
-`backup`/ `restore` 复用 Hermes SQLite 快照，保留旧档案并纳入 engineer，支持 v2 备份读取与 v3 生成。只备份受管 runtime；外部 cwd、认证、自定义工具数据须独立管理。详见 [操作手册](../runbooks/OPERATIONS.md)。FluxCore 真实仓库协作留到指定任务验收。
+`backup`/ `restore` 复用 Hermes SQLite 快照，保留旧档案并纳入 engineer，支持 v2 备份读取与 v3 生成。VM 级维护入口另用 Restic 覆盖运行状态、`/home/mikasa/work`、服务配置和固定依赖，可在源码版本失败时回切旧目录。详见 [操作手册](../runbooks/OPERATIONS.md)。FluxCore PR #28 已完成首轮真实仓库交付验收。
 
 Hermes 自身的确认与安全语义仍然保留：例如仓库 AGENTS.md 的文件工具修改默认要求交互确认，即使 --yolo 也不越过该原生保护。原生 security 配置可由用户维护，Mikasa 不追加第二套文件禁改规则。

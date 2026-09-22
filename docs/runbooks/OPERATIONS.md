@@ -39,3 +39,16 @@ v3 清单覆盖 runtime 下 native、engineer、mikasa.sqlite3 及旧 engineerin
 外部工程 cwd、外部符号链接、认证文件及未受管数据不包含；外部链接会拒绝备份。配置密钥字段被排除，key_env 引用保留。备份包含私密会话和本机 .api-key，不能公开。恢复后重新注入外部凭据并核对工作区、原生配置与自定义路径；Git worktree 的外部或绝对链接按 Git 原生 repair 流程处理。自定义 Cron 脚本的绝对路径和外部仓库需另行核对。
 
 备份不会把工程限制为受管 workspace；选择外部 cwd 时同时承担独立备份责任。目录权限 0700，文件 0600/可执行文件 0700。VM 启动、恢复点与部署步骤见 [VM 手册](../../deploy/vm/README.md)。
+
+### 专用 VM 维护
+
+在 `mikasa` VM 内以 root 运行 [维护入口](../../deploy/vm/manage.py)：
+
+```sh
+sudo /opt/mikasa/deploy/vm/manage.py status
+sudo /opt/mikasa/deploy/vm/manage.py backup
+sudo /opt/mikasa/deploy/vm/manage.py check
+sudo /opt/mikasa/deploy/vm/manage.py restore SNAPSHOT /var/lib/mikasa-restore-check
+```
+
+源码发布包由宿主的 `scripts/package_vm.py` 从干净 Git checkout 生成，再用 `manage.py deploy` 安装。部署前会停止 Gateway；systemd 的 `SIGTERM` 交给 Hermes 原生排空当前工作，忙碌任务不会被维护脚本强制杀掉。新版本身份加载、双平台连接和服务健康检查失败会自动回切，运行状态不回滚。`mikasa-backup.timer` 每日执行一次加密备份并保留 7 个日、4 个周、3 个月快照。Restic 密码文件只在 `/etc/mikasa-backup/password`，恢复到 VM 外时需另外保管该密码，不能提交 Git。

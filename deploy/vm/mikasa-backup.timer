@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Mikasa backup while idle
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=15min
+Persistent=true
+Unit=mikasa-backup.service
+
+[Install]
+WantedBy=timers.target
