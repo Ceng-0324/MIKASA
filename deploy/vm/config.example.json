@@ -9,7 +9,6 @@
   "worker": {
     "hermes_source": "/opt/hermes",
     "native_python": "/opt/hermes-venv/bin/python",
-    "timeout": 240,
     "model_source": {
       "type": "environment",
       "env": {
@@ -57,12 +56,5 @@
   },
   "github": {
     "token_env": "MIKASA_GITHUB_TOKEN"
-  },
-  "server": {
-    "host": "127.0.0.1",
-    "port": 8765,
-    "tokens": {
-      "Ceng-0324": "MIKASA_OWNER_API_TOKEN"
-    }
   }
 }

@@ -15,7 +15,6 @@ Hermes 承载执行和原生工具，CCH 提供模型，Mikasa 保留身份、sk
 | 配置与状态 | `/etc/mikasa/config.json`、私密 `/etc/mikasa/runtime.env`、`/var/lib/mikasa` |
 | 消息入口 | [mikasa-gateway.service](mikasa-gateway.service)，统一飞书与微信 |
 | 工程入口 | `engineer --cwd DIR -- chat`，完整原生 Hermes CLI |
-| HTTP | [mikasa-api.service](mikasa-api.service) 仅保留模板，未启用公网 API |
 
 `mylinux` 是迁移前环境，保留回退数据，不再作为 Mikasa 的工作机。具体迁移和验收结果见[验证边界](../../docs/VALIDATION.md)。
 
@@ -74,7 +73,7 @@ Exa 免费入口和 Edge TTS 仍依赖外网服务可用性。图像理解使用
 
 先在新机验证依赖、真实模型和平台认证，旧机继续服务。路径一致时保留 provider、模型选择、会话路由和记忆链接；模型来源改变导致 provider ID 变化时，按模型对应关系单独重绑。
 
-切换前检查没有活跃任务，停止旧消息、HTTP、工程及调度进程，按[状态手册](../../docs/runbooks/OPERATIONS.md)执行 `backup`。在新机 `restore` 到尚不存在的 `/var/lib/mikasa`，核验数据库数量、记忆哈希和内部链接，再调整为新机 mikasa 用户所有。不要覆盖运行中的 SQLite。
+切换前检查没有活跃任务，停止旧消息、工程及调度进程，按[状态手册](../../docs/runbooks/OPERATIONS.md)执行 `backup`。在新机 `restore` 到尚不存在的 `/var/lib/mikasa`，核验数据库数量、记忆哈希和内部链接，再调整为新机 mikasa 用户所有。不要覆盖运行中的 SQLite。
 
 微信 `credentials/weixin.json`、服务凭据和 gh 认证不在普通状态备份内，分别私密迁移或重新登录；既有机器人绑定无需重新扫码。外部仓库、用户工具和 `/home/mikasa` 数据须另行备份；管理员权限不会自动扩大 `backup` 范围。
 

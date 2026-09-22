@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from mikasa.config import Config
 from mikasa.errors import Forbidden, MikasaError
-from mikasa.native import HERMES_REVISION, NativeGateways, prepare_profile
+from mikasa.native import HERMES_REVISION, prepare_profile
 from tests.support import ROOT
 
 
@@ -69,19 +69,16 @@ class NativeProfileTests(unittest.TestCase):
         self.env = patch.dict(os.environ, {'MIKASA_MODEL':'fixture-model','MIKASA_MODEL_BASE_URL':'https://cch.invalid/v1','MIKASA_MODEL_API_KEY':'sensitive-fixture-key', 'MIKASA_MODEL_API_MODE':'codex_responses'})
         self.env.start(); self.addCleanup(self.env.stop)
 
-    def test_native_regeneration_preserves_memory_session_and_service_key(self):
+    def test_native_regeneration_preserves_memory_and_session(self):
         home, _, _, credentials = prepare_profile(self.config, self.config.owner)
         (home/'memories').mkdir()
         (home/'memories/MEMORY.md').write_text('user fact')
         (home/'memories/USER.md').write_text('confirmed collaboration preference')
         (home/'state.db').write_bytes(b'existing-native-database')
-        key = (home/'.api-key').read_bytes()
         prepare_profile(self.config, self.config.owner)
         self.assertEqual((home/'memories/MEMORY.md').read_text(), 'user fact')
         self.assertEqual((home/'memories/USER.md').read_text(), 'confirmed collaboration preference')
         self.assertEqual((home/'state.db').read_bytes(), b'existing-native-database')
-        self.assertEqual((home/'.api-key').read_bytes(), key)
-        self.assertEqual((home/'.api-key').stat().st_mode & 0o777, 0o600)
         self.assertIn('sensitive-fixture-key', credentials.values())
         self.assertFalse(any(b'sensitive-fixture-key' in p.read_bytes() for p in home.rglob('*') if p.is_file()))
         config = json.loads((home/'config.yaml').read_text())
@@ -112,7 +109,6 @@ class NativeProfileTests(unittest.TestCase):
         owner, *_ = prepare_profile(self.config, self.config.owner)
         human, *_ = prepare_profile(self.config, 'human')
         self.assertNotEqual(owner, human)
-        self.assertNotEqual((owner/'.api-key').read_bytes(), (human/'.api-key').read_bytes())
         self.assertEqual(json.loads((human/'policy/actor.json').read_text())['actor'], 'human')
         with self.assertRaises(Forbidden):
             prepare_profile(self.config, 'unknown')
@@ -386,21 +382,11 @@ class NativeProfileTests(unittest.TestCase):
         with (prepared[0] / 'mikasa.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
-    def test_native_dotenv_preserved_and_unsafe_service_credentials_rejected(self):
+    def test_native_dotenv_preserved(self):
         home, *_ = prepare_profile(self.config, self.config.owner)
         (home/'.env').write_text('NATIVE_TOOL_KEY=fixture')
         prepare_profile(self.config, self.config.owner)
         self.assertEqual((home/'.env').read_text(), 'NATIVE_TOOL_KEY=fixture')
-        (home/'.api-key').chmod(0o644)
-        with self.assertRaises(MikasaError):
-            prepare_profile(self.config, self.config.owner)
-
-    def test_closed_runtime_cannot_restart_from_late_http_request(self):
-        gateways = NativeGateways(self.config)
-        gateways.close()
-        with self.assertRaises(MikasaError):
-            gateways.for_actor(self.config.owner)
-
     def test_chat_upgrade_preserves_history_and_user_preferences(self):
         home, *_ = prepare_profile(self.config, self.config.owner)
         path = home / 'config.yaml'
@@ -409,7 +395,7 @@ class NativeProfileTests(unittest.TestCase):
         current.pop('_mikasa_live_progress', None)
         current.update(platform_toolsets={'feishu': ['memory', 'skills', 'session_search'], 'weixin': ['terminal']},
                        agent={'max_turns': 12, 'reasoning_effort': 'high'},
-                       gateway={'api_server': {'max_concurrent_runs': 1, 'port': 9000}})
+                       gateway={'retired_api_server': {'max_concurrent_runs': 1, 'port': 9000}})
         current['display']['tool_progress'] = 'off'
         path.write_text(json.dumps(current))
         (home/'state.db').write_bytes(b'existing-history')
@@ -417,7 +403,7 @@ class NativeProfileTests(unittest.TestCase):
         migrated = json.loads(path.read_text())
         self.assertEqual(migrated['platform_toolsets'], {'weixin': ['terminal']})
         self.assertEqual(migrated['agent'], {'reasoning_effort': 'high', 'gateway_notify_interval': 60})
-        self.assertEqual(migrated['gateway']['api_server'], {'port': 9000})
+        self.assertEqual(migrated['gateway']['retired_api_server'], {'max_concurrent_runs': 1, 'port': 9000})
         self.assertEqual(migrated['display']['tool_progress'], 'new')
         self.assertEqual((home/'state.db').read_bytes(), b'existing-history')
         migrated['agent']['max_turns'] = 12

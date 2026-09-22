@@ -30,7 +30,7 @@ GitHub 使用 `Mikasa-0910` 独立账号，飞书使用企业自建应用机器�
 "repositories": {
   "Ceng-0324/YOUR_REPOSITORY": {"base": "main"}
 },
-"github": {"token_env": "MIKASA_GITHUB_TOKEN", "publish_enabled": false}
+"github": {"token_env": "MIKASA_GITHUB_TOKEN"}
 ```
 
 **为什么暂用 classic PAT**：GitHub 官方列明，fine-grained PAT 不能用于 outside/repository collaborator 场景；Mikasa 个人账号无法据此选择你个人账号拥有的仓库。classic PAT 的范围覆盖该账号在相应 scope 下可访问的仓库，不能在 token 上精确限定单仓。repositories 仅用于连接探针清单，不限制原生工程工具；实际范围由 token 与账号的 GitHub 权限决定。独立账号应只加入需要的仓库。GitHub App installation token 适合长期集成，但发布身份会成为 App bot，也不兼容当前 `/user` 账号校验，不能直接替换。
@@ -44,11 +44,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections github --
 
 联网探针只 GET `/user`，有已配置仓库时再检查仓库、base 分支、Issue/PR 列表，不创建 Issue、PR、Review 或 push。无仓库时账号认证成功即 `connection=passed`，`repository_access=not_checked`。`account_push_role=true` 只说明账号角色，不证明 token 写权限；正式写入与 CI Checks 权限仍需分别验收。账号接通不代表所有 GitHub 操作或聊天工程工具均已实现。
 
-### GitHub Webhook 留到公网入口就绪
-
-只读连接不需要 webhook。VM/TLS 就绪后，由负责人进入仓库 **Settings → Webhooks → Add webhook**：URL 为部署域名的 `/webhooks/github`，Content type 选 `application/json`，启用 SSL 校验，Secret 与服务的 `MIKASA_GITHUB_WEBHOOK_SECRET` 一致，选择 `Pull requests` 事件。服务另需现有 `server.tokens` API 凭据。先用 ping / Recent Deliveries 核对签名与送达，再做 PR 事件验收。
-
-旧自动审查 webhook 与发布业务引擎已退休；原生工程按交互授权操作 gh/Git。正式 Review 在你指定可写测试 PR 并授权该次发布后验收，不把新建真实 PR 当作连接探针。
+原生工程按交互授权使用 gh/Git，不需要 GitHub webhook。旧自动审查服务及 HTTP 入口已删除；不配置 `/webhooks/github`。本轮不单独安排正式 Review 流程验收。
 
 ## 国内飞书操作步骤
 
@@ -76,7 +72,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu
 python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu --probe
 ```
 
-9. 准备事件订阅：在 **事件与回调 → 事件配置** 选择 **使用长连接接收事件**。该方式不需要公网 URL、Encrypt Key 或 Verification Token。先检查 CCH 已配置，关闭同账号正在运行的 CLI/API Gateway，然后执行 `python3.12 -m mikasa --config config/local/hermes-cch.json gateway --platform feishu`。微信绑定完成后改为同一条 Gateway 命令追加 `--platform weixin`；不要让两个进程使用同一 profile。代码更新后需重启现有 Gateway 才会加载新策略。
+9. 准备事件订阅：在 **事件与回调 → 事件配置** 选择 **使用长连接接收事件**。该方式不需要公网 URL、Encrypt Key 或 Verification Token。先检查 CCH 已配置，关闭同账号正在运行的 CLI，然后执行 `python3.12 -m mikasa --config config/local/hermes-cch.json gateway --platform feishu`。微信绑定完成后改为同一条 Gateway 命令追加 `--platform weixin`；不要让两个进程使用同一 profile。代码更新后需重启现有 Gateway 才会加载新策略。
 10. 控制台若要求先建立长连接，等待启动输出确认连接后，再保存订阅方式，添加 **接收消息 v2.0** 事件 `im.message.receive_v1`，按控制台提示发布新版本。无需订阅 Hermes 支持的所有事件。
 11. 在目标飞书群打开 **群设置 → 群机器人 → 添加机器人**，搜索 Mikasa 并添加。若搜索不到或不能添加，检查应用是否发布、操作者是否在应用可用范围，以及群管理员的添加限制；项目的消息过滤无法影响飞书客户端的添加列表。
 12. 在私聊和群内分别发送 `/help`、普通文字、`/model 完整模型ID` 和 `/new`；再用另一成员账号验证。群内先 @ Mikasa，再测试未 @ 消息，区分事件权限与本地策略。只有真实收到回复才算完成平台验收；同时检查身份/skills 加载与记忆保留。
@@ -85,7 +81,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu --
 
 私聊按平台和聊天区分；普通群及话题内共享上下文，发送者仍使用 Hermes 元数据识别。同一 Gateway 共用负责人 profile 的 MEMORY/USER、历史、身份与 skills，并非每人的私有记忆空间。开放用户可调用原生系统命令与工程工具，部分操作影响共享 profile 和工作机。不同会话并发，同会话忙碌时排队；工程进度与结果直接回复原会话，详细语义见[聊天手册](CHAT.md)。
 
-CLI、HTTP Gateway 与消息 Gateway 使用同一负责人 profile，进程互斥。Ctrl-C 停止前台；启动失败需处理错误后重启，不覆盖会话或记忆。
+CLI 与消息 Gateway 使用同一负责人 profile，进程互斥。Ctrl-C 停止前台；启动失败需处理错误后重启，不覆盖会话或记忆。
 
 已知限制：原生 `/sethome` 会保存默认投递设置并生成 profile `.env`，与当前禁止额外环境注入的启动检查冲突。当前验收不依赖默认投递；遇到此情况先核对文件字段并保留原设置，不能删除未知凭据或直接放开任意 `.env`。macOS 上过长的 profile 路径还会使 Hermes 可选 liveness socket 无法创建，消息长连接仍可工作；VM 使用短路径后复验存活检测。
 

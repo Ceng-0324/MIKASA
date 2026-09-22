@@ -28,8 +28,8 @@
 | 用途 | 配置与说明 |
 | --- | --- |
 | GitHub / 飞书 / 微信 | [接入手册](../docs/runbooks/CONNECTIONS.md)：GitHub token、飞书应用与可选主人 ID、微信扫码、统一 Gateway 和只读诊断 |
-| 仓库、检查、API、发布 | [操作手册](../docs/runbooks/OPERATIONS.md) |
+| 仓库、检查、发布 | [操作手册](../docs/runbooks/OPERATIONS.md) |
 | 工程环境 | `engineering.cwd` 为独立工程 CLI 的可选绝对工作目录；`engineering.env_allowlist` 向所有入口显式注入额外工具环境变量。聊天和独立工程的工具、预算、MCP、终端与调度分别保存在各自 profile 的原生 `config.yaml`；原生 `.env` 可提供专用工具凭据，认证不进入普通备份 |
 | 执行资源与工具边界 | [Hermes 执行器](../workers/hermes/README.md) |
 
-旧 worker.command/home/预算、schedules、auto_review、publish_enabled 均已退出执行；保留读取兼容并在 doctor 中提示。工程预算由 Hermes 配置管理，worker.timeout 仅用于 HTTP 聊天等待。repositories 仅为 GitHub 只读探针清单，不是工程仓库白名单。
+旧 worker.command/home/timeout/预算、schedules、auto_review、publish_enabled 和 server 均已退出执行；不再提供 HTTP 聊天入口。工程预算由 Hermes 配置管理，repositories 仅为 GitHub 只读探针清单，不是工程仓库白名单。

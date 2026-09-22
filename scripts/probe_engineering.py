@@ -9,15 +9,12 @@ import sys
 import tempfile
 import uuid
 from contextlib import ExitStack
-from types import SimpleNamespace
-from urllib.request import Request, urlopen
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mikasa.config import Config
-from mikasa.native import HERMES_REVISION, NativeGateway, prepare_profile, profile_home
+from mikasa.native import HERMES_REVISION, prepare_profile, profile_home
 from mikasa.process import git
-from mikasa.store import Store
 
 
 def main():
@@ -25,7 +22,6 @@ def main():
     parser.add_argument('--config', required=True)
     parser.add_argument('--model', required=True)
     parser.add_argument('--report', help='Optional private summary; omitted by default')
-    parser.add_argument('--entry', choices=('cli', 'gateway'), default='cli')
     args = parser.parse_args()
     original = Config.load(args.config)
     checks = {}
@@ -48,7 +44,7 @@ def main():
         git(['add', '.'], repo)
         git(['commit', '-m', 'fixture baseline'], repo)
         baseline = git(['rev-parse', 'HEAD'], repo)
-        home, *_ = prepare_profile(config, config.owner, engineering=args.entry == 'cli')
+        home, *_ = prepare_profile(config, config.owner, engineering=True)
         # Optional language servers are unrelated to this probe and need no downloads.
         native = json.loads((home/'config.yaml').read_text())
         native['lsp'] = {'enabled': False}
@@ -65,28 +61,7 @@ def main():
 5. 用原生 memory 将“{marker}”存到长期记忆。验证文件和测试后创建一个本地 Git 提交。
 不推送、不发布、不访问外部账号、不修改仓库外文件（原生记忆除外）。最后自然语言说明实际结果，不输出 JSON。''')
 
-        gateway, chat_id, events = None, uuid.uuid4().hex, []
-        if args.entry == 'gateway':
-            Store(config.runtime)
-            gateway = stack.enter_context(NativeGateway(config, config.owner))
-            gateway.create(chat_id, args.model)
-
         def invoke(arguments):
-            if gateway:
-                run = gateway.start(chat_id, prompt.read_text(), args.model, uuid.uuid4().hex)
-                request = Request(gateway.url + '/v1/runs/' + run['run_id'] + '/events', headers={
-                    'Authorization': 'Bearer ' + gateway.key, 'Accept': 'text/event-stream'})
-                # Single SSE consumer; observe names only, never persist content or tool arguments.
-                with urlopen(request, timeout=60) as response:
-                    for line in response:
-                        if line.startswith(b'data:'):
-                            event = json.loads(line[5:])
-                            events.append(event.get('event'))
-                            if event.get('event') in ('run.completed','run.failed','run.cancelled','run.interrupted'):
-                                break
-                result = gateway.wait(run['run_id'])
-                return SimpleNamespace(returncode=0 if result['status'] == 'completed' else 1,
-                                       stdout=result.get('output',''))
             command = [sys.executable, '-B', '-m', 'mikasa', '--config', str(path), 'engineer', '--cwd', str(repo), '--', *arguments]
             return subprocess.run(command, cwd=original.root, stdin=subprocess.DEVNULL,
                                   capture_output=True, text=True, timeout=900)
@@ -121,18 +96,13 @@ def main():
         for tool in ('terminal','process_manage','delegate_task','memory','skill_view'):
             checks['native_' + tool] = tool in tools
         # Dispatcher and scheduler use the public native commands, no Mikasa runner.
-        if gateway:
-            checks['native_progress_events'] = 'tool.started' in events and 'tool.completed' in events
-            checks['native_final_event'] = 'run.completed' in events
-        else:
-            for command in ('kanban', 'cron'):
-                checks[command + '_entry'] = invoke([command, '--help']).returncode == 0
+        for command in ('kanban', 'cron'):
+            checks[command + '_entry'] = invoke([command, '--help']).returncode == 0
         report = {'hermes_revision': HERMES_REVISION, 'requested_model': args.model,
                   'checks': checks, 'tools_observed': tools,
                   'reported_models': sorted({e['reported_model'] for e in evidence if e.get('reported_model')}),
                   'passed': all(checks.values()),
-                  'entry': args.entry, 'events': sorted(set(events)),
-                  'scope': 'disposable repo and profile; Gateway uses local API, no messaging-platform delivery'}
+                  'scope': 'disposable repo and native CLI profile; no messaging-platform delivery'}
         if args.report:
             output = Path(args.report)
             output.parent.mkdir(parents=True, exist_ok=True)

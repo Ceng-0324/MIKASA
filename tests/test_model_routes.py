@@ -1,21 +1,16 @@
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
-from mikasa.chat import Chat
 from mikasa.cli import doctor
 from mikasa.errors import MikasaError
 from mikasa.model_settings import model_environment, select_source, validate_routes
-from tests.support import BaseTest, resolved_command
+from tests.support import BaseTest
 
 
 class ModelRouteTests(BaseTest):
     def setUp(self):
         super().setUp()
-        adapter = patch("mikasa.chat.resolve", side_effect=resolved_command)
-        adapter.start()
-        self.addCleanup(adapter.stop)
         self.codex = self.path / 'codex.toml'
         self.auth = self.path / 'auth.json'
         self.claude = self.path / 'claude.json'
@@ -72,36 +67,9 @@ class ModelRouteTests(BaseTest):
             model_environment(settings)
 
 
-    def test_model_menu_and_switch_use_native_boundary(self):
-        from tests.native_support import Gateways
-        gateways = Gateways()
-        chat = Chat(self.config, gateways)
-        session = chat.create(self.config.owner)
-        def send(message, key):
-            return chat.send(session['id'], self.config.owner, message, key)
-        menu = send('/model', 'menu')
-        self.assertEqual(menu['model_options'], ['claude-test'])
-        self.assertNotIn('secret', menu['reply'])
-        send('记住代号蓝鲸', 'before')
-        switched = send('/model claude-test', 'switch')
-        self.assertEqual(switched['model'], 'claude-test')
-        send('代号是什么', 'after')
-        self.assertEqual(gateways.for_actor(self.config.owner).calls[-1]['model'], 'claude-test')
-        self.assertIn('蓝鲸', chat.get(session['id'], self.config.owner)['turns'][0]['message'])
-        self.assertEqual(send('/model default', 'reset')['model'], 'gpt-test')
-        self.assertEqual(chat.create(self.config.owner)['model'], 'gpt-test')
+    def test_model_diagnostics_use_selected_protocol_without_probe(self):
         with patch('mikasa.cli.run_model_probe') as call:
             report = doctor(self.config, selected_model='claude-test')
             call.assert_not_called()
         self.assertEqual(report['model']['source'], 'claude')
         self.assertEqual(report['model']['api_mode'], 'anthropic_messages')
-
-    def test_unimplemented_system_commands_never_reach_model(self):
-        from tests.native_support import Gateways
-        chat = Chat(self.config, Gateways())
-        session = chat.create(self.config.owner)
-        with patch('mikasa.cli.run_model_probe') as call:
-            for message in ['/init', '/unknown value']:
-                result = chat.send(session['id'], self.config.owner, message, message)
-                self.assertEqual(result['kind'], 'deferred_command' if message == '/init' else 'unsupported_command')
-            call.assert_not_called()

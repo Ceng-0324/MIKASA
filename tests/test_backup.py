@@ -9,7 +9,6 @@ from unittest.mock import patch
 from mikasa.backup import backup_state, restore_state
 from mikasa.errors import Conflict, MikasaError
 from mikasa.maintenance import runtime_lock
-from mikasa.native import NativeGateway
 from mikasa.process import git
 from tests.support import BaseTest
 
@@ -74,6 +73,8 @@ class BackupTests(BaseTest):
             self.assertEqual(db.execute('SELECT workspace_path FROM tasks').fetchone()[0], str(restored / 'engineer/account/workspace'))
         legacy = runtime / 'kanban'
         legacy.mkdir()
+        with sqlite3.connect(runtime / 'mikasa.sqlite3') as db:
+            db.execute('CREATE TABLE archived_receipts(id TEXT)')
         with sqlite3.connect(legacy / 'kanban.db') as db:
             db.execute('CREATE TABLE tasks(id TEXT, workspace_path TEXT, result TEXT)')
         old_backup = self.path / 'v2-backup'
@@ -106,7 +107,6 @@ class BackupTests(BaseTest):
         memory = home / 'memories'
         memory.mkdir(parents=True)
         (memory / 'MEMORY.md').write_text('Persistent memory')
-        (home / '.api-key').write_text('local-service-identity')
         home_channel = {'platform': 'feishu', 'chat_id': 'test-chat', 'name': 'Test home',
                         'thread_id': 'test-thread', 'user_id': 'test-user', 'scope_id': 'test-scope'}
         (home / '.env').write_text("FEISHU_HOME_CHANNEL='test-chat'\n")
@@ -146,7 +146,6 @@ class BackupTests(BaseTest):
             self.assertTrue(copied_fixture.with_name('fixture.db-wal').exists())
         restored = self.path / 'restored'
         restore_state(self.config, backup, restored)
-        self.assertEqual((restored / 'native/account/.api-key').read_text(), 'local-service-identity')
         self.assertEqual((restored / 'engineering' / task['id'] / 'memories').resolve(),
                          restored / 'native/account/memories')
         self.assertEqual((restored / 'engineering' / task['id'] / 'memories/MEMORY.md').read_text(), 'Persistent memory')
@@ -203,20 +202,16 @@ class BackupTests(BaseTest):
             with self.assertRaises(Conflict):
                 self.snapshot()
         self.assertFalse((self.path / 'backup').exists())
+        from mikasa.native import interactive
         with runtime_lock(self.config.runtime, exclusive=True):
             with self.assertRaises(Conflict):
-                self.store.pause(True, 'test')
-            with self.assertRaises(Conflict):
-                NativeGateway(self.config, self.config.owner)
-
-    def test_failed_gateway_initialization_releases_maintenance_lock(self):
-        with patch('mikasa.native.profile_home', side_effect=OSError('fixture')):
-            with self.assertRaises(OSError):
-                NativeGateway(self.config, self.config.owner)
-        with runtime_lock(self.config.runtime, exclusive=True):
-            pass
+                interactive(self.config)
 
     def test_tampering_paths_links_and_partial_restore_fail_without_target(self):
+        home = self.config.runtime / 'native/account'
+        home.mkdir(parents=True)
+        with sqlite3.connect(home / 'state.db') as db:
+            db.execute('CREATE TABLE fixture(value TEXT)')
         backup = self.snapshot()
         marker = backup / 'manifest.json'
         original = marker.read_text()
@@ -235,7 +230,7 @@ class BackupTests(BaseTest):
             with self.assertRaises(MikasaError):
                 restore_state(self.config, backup, restored)
         self.assertFalse(restored.exists())
-        with (backup / 'mikasa.sqlite3').open('ab') as stream:
+        with (backup / 'native/account/state.db').open('ab') as stream:
             stream.write(b'tampered')
         with self.assertRaisesRegex(MikasaError, '校验失败'):
             restore_state(self.config, backup, restored)

@@ -73,8 +73,6 @@ def register(ctx):
     refreshed = refresh_identity_prompts(home, sections)
 
     lock = threading.Lock()
-    evidence_dir = home / "request-evidence"
-    evidence_dir.mkdir(exist_ok=True, mode=0o700)
 
     def record(event):
         # Structured metadata only; never retain messages, tool arguments or credentials.
@@ -82,13 +80,6 @@ def register(ctx):
         event["run_id"] = get_current_session_key()
         with lock, (home / "native-evidence.jsonl").open("a") as stream:
             stream.write(json.dumps(event, ensure_ascii=False) + "\n")
-            if event["event"] in {"request", "response"}:
-                path = evidence_dir / (hashlib.sha256(event["run_id"].encode()).hexdigest() + ".json")
-                previous = json.loads(path.read_text()) if path.exists() else {}
-                previous.update(event)
-                temporary = path.with_suffix(".tmp")
-                temporary.write_text(json.dumps(previous))
-                temporary.replace(path)
 
     def request_evidence(session_id="", system_prompt="", api_mode="", **kwargs):
         if isinstance(system_prompt, list):

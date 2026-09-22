@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Pinned-SDK verification of legacy import and native plugin/skill policy; no model calls."""
+"""Pinned-SDK verification of native history, memory and plugin/skill policy; no model calls."""
 import argparse
-import hashlib
 import json
 import os
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -13,7 +11,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mikasa.config import Config
 from mikasa.native import HERMES_REVISION, prepare_profile
-from mikasa.store import Store
 
 
 def main():
@@ -24,32 +21,14 @@ def main():
     with tempfile.TemporaryDirectory(prefix='mko-', dir='/tmp') as directory:
         data = json.loads(json.dumps(base.data)); data['runtime'] = directory
         config = Config(base.root, data)
-        store = Store(config.runtime)
-        session = 'a'*32
-        with store.connect() as db:
-            db.execute('INSERT INTO chats(id,actor,model,created) VALUES(?,?,?,0)',(session,config.owner,'gpt-6-astra'))
-            db.execute('INSERT INTO chats(id,actor,model,created) VALUES(?,?,?,0)',('b'*32,'unrelated','gpt-6-astra'))
-            for i in range(51):
-                db.execute('INSERT INTO chat_turns(chat_id,request_key,message,response,created) VALUES(?,?,?,?,?)',
-                           (session,str(i),f'user-{i}',json.dumps({'kind':'chat','reply':f'reply-{i}'}),i))
-            db.execute('INSERT INTO chat_turns(chat_id,request_key,message,response,created) VALUES(?,?,?,?,99)',
-                       (session,'command','/model',json.dumps({'kind':'status','reply':'model menu'})))
-        legacy_digest = hashlib.sha256(store.path.read_bytes()).hexdigest()
+        checks = {}
         home, source, python, _ = prepare_profile(config, config.owner)
         env = {'PATH':os.environ.get('PATH','/usr/bin:/bin'), 'HERMES_HOME':str(home), 'MIKASA_HERMES_SOURCE':str(source)}
-        command = [str(python), str(base.root/'workers/hermes/import_legacy.py'),str(store.path),config.owner]
         def execute(argv):
             r = subprocess.run(argv, env=env, cwd=home/'workspace', capture_output=True, text=True, timeout=60)
             if r.returncode:
                 raise RuntimeError('offline SDK check failed: '+r.stderr[-1800:])
             return r.stdout
-        execute(command); execute(command)
-        with sqlite3.connect(home/'state.db') as db:
-            rows = db.execute('SELECT role,content FROM messages WHERE session_id=? ORDER BY id',(session,)).fetchall()
-            checks = {'all_51_turns_imported':len(rows)==102,
-                      'import_order_and_idempotency':rows==[item for i in range(51) for item in [('user',f'user-{i}'),('assistant',f'reply-{i}')]],
-                      'unrelated_actor_not_imported':db.execute('SELECT COUNT(*) FROM sessions WHERE id=?',('b'*32,)).fetchone()[0]==0,
-                      'old_database_untouched':hashlib.sha256(store.path.read_bytes()).hexdigest()==legacy_digest}
         output = execute([str(python),'-c', '''import os,sys,json
 from pathlib import Path
 sys.path.insert(0,os.environ['MIKASA_HERMES_SOURCE'])
@@ -64,6 +43,11 @@ from types import SimpleNamespace
 discover_plugins()
 p = next(p for p in get_plugin_manager().list_plugins() if p['name']=='mikasa')
 home=Path(os.environ['HERMES_HOME'])
+from hermes_state import SessionDB
+db=SessionDB(home/'state.db')
+db.create_session('history-fixture',source='feishu')
+db.append_message('history-fixture','user','reply-50')
+db.close()
 prompt,loaded,missing=build_auto_load_prompt(home_override=home)
 sections=''.join(s.content for s in render_system_prompt_sections({}))
 engineering=[]

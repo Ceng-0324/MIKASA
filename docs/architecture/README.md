@@ -5,7 +5,7 @@
 ```mermaid
 flowchart LR
     Messaging[飞书 / 微信] --> Gateway[Hermes 消息 Gateway]
-    Chat[终端 / HTTP 聊天] --> NativeChat[Hermes CLI / API Gateway]
+    Chat[终端聊天] --> NativeChat[Hermes CLI]
     Engineer[engineer + 原生参数] --> CLI[完整 Hermes CLI]
     CLI --> Tools[原生工具 / 会话 / Kanban / Cron]
     Gateway --> Tools
@@ -33,11 +33,11 @@ flowchart LR
 
 一个 `gateway --platform feishu --platform weixin` 管理两个消息平台。飞书开放群聊、无需 @，保留原生回环保护；微信使用已绑定主人私聊。发言人依据 Hermes 发送者元数据识别，不能用 profile 归属替代。
 
-不同会话原生并发，同会话 FIFO；普通群及话题共享上下文，私聊按平台隔离。聊天直接使用原生平台完整工具集，在同一工作机执行工程任务；没有工具白名单或 Mikasa 轮数预算。进度、阶段说明、长任务通知与最终回复由 Hermes 回传原会话，不另建任务转发或通知服务。同一聊天 profile 的 CLI、HTTP Gateway 与消息 Gateway 互斥；独立工程 CLI 的 profile 可与消息服务同时使用，历史分别保存。
+不同会话原生并发，同会话 FIFO；普通群及话题共享上下文，私聊按平台隔离。聊天直接使用原生平台完整工具集，在同一工作机执行工程任务；没有工具白名单或 Mikasa 轮数预算。进度、阶段说明、长任务通知与最终回复由 Hermes 回传原会话，不另建任务转发或通知服务。同一聊天 profile 的 CLI 与消息 Gateway 互斥；独立工程 CLI 的 profile 可与消息服务同时使用，历史分别保存。
 
 各入口继承真实系统账号的 HOME、PATH 和显式工具环境变量，使用同一 gh 认证与系统依赖。原生 config.yaml、.env、插件和 MCP 由 Hermes 管理；初始化只清除旧聊天适配写入的工具子集和默认预算一次，保留用户后续偏好。飞书开放成员可调用工程工具，权限按现有整机和平台配置执行，没有新增负责人专用工具门禁。
 
-原生系统命令直接交给 Hermes。HTTP/单条消息模式保留鉴权、命令解析、取消和幂等回执，使用原生 Gateway 和 SSE 等待结果；流断开后读取同一 run 的持久状态，不重新发起推理。详见 [API](API.md)。
+原生系统命令直接交给 Hermes。旧 `serve`、`chat --message`、HTTP 聊天和任务端点已删除；模型诊断也使用临时原生 CLI，不再启动本地 API 服务。
 
 ## 状态和身份
 
@@ -46,14 +46,14 @@ flowchart LR
 | `native/<账号摘要>/` | 原生聊天会话、MEMORY/USER、配置和消息路由 |
 | `engineer/<账号摘要>/` | 原生工程会话、配置、Kanban、Cron、默认持久 workspace |
 | `engineer/<账号摘要>/memories` | 链接同账号聊天 memories，由 Hermes 负责锁和原子写入 |
-| `mikasa.sqlite3` | HTTP 聊天鉴权关联、幂等回执、暂停设置及旧档案 |
+| `mikasa.sqlite3` | 旧状态档案，仅备份保留，不再创建或写入 |
 | `engineering/`、`kanban/`、`scheduler/`、`workspaces/` | 旧任务档案，保留备份，不再执行 |
 
-SOUL 来自 identity.md；人格 skill 常驻。工程契约与工作流生成 mikasa-engineering skill，工程入口自动加载，聊天按需加载。通用方法 skills 由原生发现和选择，没有指定任务白名单。长期记忆共享不等于当前实例即时刷新；会话历史分别保存在原生 SessionDB，可使用原生能力续接。
+SOUL 来自 identity.md；人格 skill 常驻。工程契约与工作流生成 mikasa-engineering skill，工程入口自动加载，聊天按需加载。通用方法 skills 由原生发现和选择，没有指定任务白名单。长期记忆共享不等于当前实例即时刷新；会话历史分别保存在原生 SessionDB，同 profile 使用 session_search、/resume 或 --resume 续接；独立工程与聊天历史不会自动合并。
 
 ## 迁移与恢复
 
-旧 worker v1 RPC、任务 CLI、runner 和工程 webhook 已退休；旧 HTTP /tasks 与 webhook 返回 410。既有任务、工作区和发布回执不自动重跑、不删除。需要历史执行环境时从 Git 中的迁移前版本独立恢复副本；不要将旧 runner 对准正在使用的新 runtime。
+旧 worker v1 RPC、任务 CLI、runner、HTTP 聊天和工程 webhook 已删除。既有任务、工作区和发布回执不自动重跑、不删除。需要历史执行环境时从 Git 中的迁移前版本独立恢复副本；不要将旧 runner 对准正在使用的新 runtime。
 
 `backup`/ `restore` 复用 Hermes SQLite 快照，保留旧档案并纳入 engineer，支持 v2 备份读取与 v3 生成。VM 级维护入口另用 Restic 覆盖运行状态、`/home/mikasa/work`、服务配置和固定依赖，可在源码版本失败时回切旧目录。详见 [操作手册](../runbooks/OPERATIONS.md)。FluxCore PR #28 已完成首轮真实仓库交付验收。
 

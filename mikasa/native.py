@@ -3,28 +3,15 @@ import fcntl
 import hashlib
 import json
 import os
-import secrets
 import signal
-import socket
 import subprocess
-import threading
-import time
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, build_opener, ProxyHandler
 
 from .errors import Conflict, MikasaError
 from .model_settings import default_model, model_choices, model_environment, select_source, validate_environment
-from .run_events import RunEvents, TERMINAL
-from .maintenance import runtime_lock, runtime_operation
+from .maintenance import runtime_operation
 
 HERMES_REVISION = "f9524d3f119c672e4a4444f56d582e7475716ba3"
-
-
-class NativeAPIError(MikasaError):
-    def __init__(self, status):
-        self.status = status
-        super().__init__(f"Hermes 原生 API 请求失败（HTTP {status}）")
 
 
 def private_write(path, content):
@@ -183,11 +170,6 @@ def prepare_profile(config, actor, *, engineering=False):
     plugin = config.root / "workers/hermes/plugin"
     for name in ("plugin.yaml", "__init__.py"):
         private_write(home / "plugins/mikasa" / name, (plugin / name).read_text())
-    key_path = home / ".api-key"
-    if not key_path.exists():
-        private_write(key_path, secrets.token_urlsafe(48))
-    if key_path.is_symlink() or key_path.stat().st_mode & 0o077:
-        raise MikasaError("原生 API 本机凭据必须为独立的 0600 文件")
     return home, source, python, credentials
 
 
@@ -211,13 +193,6 @@ def interactive(config, session=None, *, platforms=()):
         home, source, python, credentials = prepare_profile(config, actor)
         env = runtime_environment(config, home, source, python, credentials)
         env.update(platform_env)
-        # Import only existing legacy state; starting native CLI needs no Mikasa database.
-        database = config.runtime / "mikasa.sqlite3"
-        if database.exists():
-            imported = subprocess.run([str(python), str(config.root / "workers/hermes/import_legacy.py"), str(database), actor],
-                                      cwd=home / "workspace", env=env, capture_output=True, timeout=60)
-            if imported.returncode:
-                raise MikasaError("旧会话导入失败；原数据库保留，CLI 未启动")
         command = [str(python), str(config.root / "workers/hermes/native_cli.py")]
         if platforms:
             gateway_config = home / "gateway-messaging.json"
@@ -249,209 +224,3 @@ def interactive(config, session=None, *, platforms=()):
                         process.wait()
             finally:
                 signal.signal(signal.SIGTERM, previous)
-
-
-class NativeGateway:
-    def __init__(self, config, actor):
-        config.authorize(actor)
-        self.config, self.actor = config, actor
-        self.process = None
-        self._lock = None
-        self._maintenance = runtime_lock(config.runtime)
-        self._maintenance.__enter__()
-        try:
-            self.home = profile_home(config, actor)
-            self.home.mkdir(parents=True, exist_ok=True, mode=0o700)
-            self._lock = (self.home / "mikasa.lock").open("a")
-            fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            home, source, python, credentials = prepare_profile(config, actor)
-            self.key = (home / ".api-key").read_text()
-            with socket.socket() as listener:
-                listener.bind(("127.0.0.1", 0))
-                port = listener.getsockname()[1]
-            self.url = f"http://127.0.0.1:{port}"
-            self.http = build_opener(ProxyHandler({}))
-            env = runtime_environment(config, home, source, python, credentials)
-            env.update(API_SERVER_KEY=self.key, API_SERVER_HOST="127.0.0.1", API_SERVER_PORT=str(port))
-            with open(home / "gateway.log", "a", opener=lambda p, f: os.open(p, f, 0o600)) as log:
-                imported = subprocess.run([str(python), str(config.root / "workers/hermes/import_legacy.py"),
-                                           str(config.runtime / "mikasa.sqlite3"), actor],
-                                          cwd=home / "workspace", env=env, stdin=subprocess.DEVNULL,
-                                          stdout=log, stderr=log, timeout=60)
-                if imported.returncode:
-                    raise MikasaError("旧聊天导入未通过；原始 SQLite 保留，原生 Gateway 未启动")
-                self.process = subprocess.Popen([str(python), str(config.root / "workers/hermes/native_gateway.py")],
-                                                cwd=home / "workspace", env=env, stdin=subprocess.DEVNULL,
-                                                stdout=log, stderr=log, start_new_session=True)
-            deadline = time.monotonic() + 45
-            while time.monotonic() < deadline:
-                if self.process.poll() is not None:
-                    raise MikasaError("原生 Hermes Gateway 启动失败；检查隔离 home 的 gateway.log")
-                try:
-                    self.request("GET", "/v1/capabilities")
-                    return
-                except MikasaError:
-                    time.sleep(.2)
-            raise MikasaError("原生 Hermes Gateway 启动超时")
-        except BlockingIOError:
-            self.close()
-            raise Conflict("该账号的原生 Gateway 已由其他 Mikasa 进程管理") from None
-        except BaseException:
-            self.close()
-            raise
-
-    def request(self, method, path, body=None, key=None):
-        headers = {"Authorization": "Bearer " + self.key, "Content-Type": "application/json"}
-        if key:
-            headers["Idempotency-Key"] = key
-        data = None if body is None else json.dumps(body, ensure_ascii=False).encode()
-        try:
-            with self.http.open(Request(self.url + path, data=data, headers=headers, method=method), timeout=10) as response:
-                return json.load(response)
-        except HTTPError as exc:
-            # Do not reflect upstream response text, which can contain credentials or prompts.
-            exc.close()
-            raise NativeAPIError(exc.code) from None
-        except (URLError, OSError, ValueError):
-            raise MikasaError("Hermes 原生 API 不可用") from None
-
-    def selection(self, model):
-        return {"model": model, "provider": provider_id(select_source(self.config.data.get("worker", {}), model))}
-
-    def create(self, session, model):
-        return self.request("POST", "/api/sessions", {"id": session, **self.selection(model), "require_model_lock": True})
-
-    def set_model(self, session, model):
-        session = self.messages(session)["session_id"]
-        return self.request("POST", f"/api/sessions/{session}/model",
-                            {**self.selection(model), "require_model_lock": True})
-
-    def ensure_session(self, session, model):
-        try:
-            return self.create(session, model)
-        except NativeAPIError as exc:
-            if exc.status != 409:
-                raise
-            return self.session(session)
-
-    def session(self, session):
-        live_id = self.messages(session)["session_id"]
-        return self.request("GET", "/api/sessions/" + live_id)["session"]
-
-    def messages(self, session):
-        return self.request("GET", f"/api/sessions/{session}/messages")
-
-    def start(self, session, message, model, key):
-        # Hermes loads its own full persisted history, including compression rotations.
-        return self.request("POST", "/v1/runs", {"session_id": session, "input": message, **self.selection(model)}, key)
-
-    def wait(self, run_id, cancelled=lambda: False):
-        deadline = time.monotonic() + self.config.data.get("worker", {}).get("timeout", 600)
-        path = '/v1/runs/' + run_id
-
-        def read_status(cancel_requested=False):
-            status = self.request('GET', path)
-            if cancel_requested or cancelled():
-                if status['status'] not in TERMINAL:
-                    self.request('POST', path + '/stop', {})
-                raise MikasaError("运行已暂停；原生历史与请求回执保留")
-            if status["status"] in {"failed", "cancelled", "interrupted"}:
-                raise MikasaError("Hermes 原生运行失败或已中止；历史保留，未重新发起请求")
-            return status
-
-        def check_stop():
-            cancel_requested = cancelled()
-            if cancel_requested or time.monotonic() >= deadline:
-                status = read_status(cancel_requested)  # A just-completed run needs no stop.
-                if status['status'] != 'completed':
-                    self.request('POST', path + '/stop', {})
-                    raise MikasaError('原生运行已请求取消；后续请检查会话记录')
-                return status
-
-        status = read_status()  # Receipts can already be terminal, even after restart.
-        if status['status'] != 'completed':
-            with RunEvents(self.url, self.key, run_id) as events:
-                while not events.done.wait(.1):
-                    completed = check_stop()
-                    if completed is not None:
-                        status = completed
-                        break
-                else:
-                    if events.http_status in {401, 403}:
-                        raise NativeAPIError(events.http_status)
-                    status = read_status()
-            # Pinned Hermes retires the transport on disconnect. There is no
-            # Last-Event-ID replay: recover this same run's durable state only.
-            while status['status'] != 'completed':
-                until = min(deadline, time.monotonic() + 1)
-                while time.monotonic() < until:
-                    completed = check_stop()
-                    if completed is not None:
-                        status = completed
-                        break
-                    time.sleep(.1)
-                if status['status'] == 'completed':
-                    break
-                completed = check_stop()
-                status = completed if completed is not None else read_status()
-        evidence_path = self.home / 'request-evidence' / (hashlib.sha256(run_id.encode()).hexdigest() + '.json')
-        if evidence_path.exists():
-            evidence = json.loads(evidence_path.read_text())
-            status.setdefault('runtime', {}).update({k: evidence[k] for k in
-                ('api_mode', 'reported_model', 'identity', 'policy', 'skills_index', 'persona_skill') if k in evidence})
-        return status
-
-    def close(self):
-        if self.process and self.process.poll() is None:
-            os.killpg(self.process.pid, signal.SIGTERM)
-            try:
-                self.process.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                os.killpg(self.process.pid, signal.SIGKILL)
-                self.process.wait(timeout=5)
-        if self._lock:
-            self._lock.close()
-            self._lock = None
-        if getattr(self, '_maintenance', None):
-            self._maintenance.__exit__(None, None, None)
-            self._maintenance = None
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        self.close()
-
-
-class NativeGateways:
-    """Owned by the HTTP server or CLI, not a process-global agent registry."""
-    def __init__(self, config):
-        self.config, self.instances = config, {}
-        self.lock = threading.Lock()
-        self.closed = False
-
-    def for_actor(self, actor):
-        self.config.authorize(actor)
-        with self.lock:
-            if self.closed:
-                raise MikasaError("原生 Gateway 管理器已关闭")
-            previous = self.instances.get(actor)
-            if previous is not None and previous.process.poll() is not None:
-                previous.close()
-                del self.instances[actor]
-            if actor not in self.instances:
-                self.instances[actor] = NativeGateway(self.config, actor)
-            return self.instances[actor]
-
-    def close(self):
-        with self.lock:
-            self.closed = True
-            for instance in self.instances.values():
-                instance.close()
-            self.instances.clear()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        self.close()

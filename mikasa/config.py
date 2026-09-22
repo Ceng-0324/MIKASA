@@ -72,10 +72,6 @@ class Config:
                     raise MikasaError(f"worker.{field} 必须为路径")
             if "native_gateway" in worker:
                 raise MikasaError("聊天已统一使用原生 Gateway；删除旧 native_gateway 开关")
-            # Legacy worker limits remain readable but do not constrain engineering.
-            timeout = worker.get('timeout', 600)
-            if type(timeout) is not int or timeout < 1:
-                raise MikasaError('worker.timeout 必须为正整数，仅用于 HTTP 聊天等待')
             members = data.get("members", [])
             engineering = data.get('engineering', {})
             if not isinstance(engineering, dict) or set(engineering) - {'cwd', 'env_allowlist'}:
@@ -91,17 +87,6 @@ class Config:
             interval = data.get("schedules", {}).get("audit_interval_seconds", 0)
             if type(interval) is not int or (interval != 0 and not 60 <= interval <= 604800):
                 raise MikasaError("审计间隔必须为 0（关闭）或 60–604800 秒")
-            server = data.get("server", {})
-            if not isinstance(server.get("tokens", {}), dict):
-                raise MikasaError("server.tokens 必须为账号到环境变量名的映射")
-            for actor, variable in server.get("tokens", {}).items():
-                if actor not in {data["owner"], *members} or not isinstance(variable, str) or not re.fullmatch(r"[A-Z_][A-Z0-9_]*", variable):
-                    raise MikasaError("server.tokens 含未知账号或非法环境变量名称")
-            if type(server.get("port", 8765)) is not int or not 1 <= server.get("port", 8765) <= 65535:
-                raise MikasaError("server.port 必须为合法端口")
-            for section, field in (("server", "auto_review"), ("github", "publish_enabled")):
-                if type(data.get(section, {}).get(field, False)) is not bool:
-                    raise MikasaError(f"{section}.{field} 必须为布尔值")
             feishu = data.get("feishu", {})
             if not isinstance(feishu, dict) or set(feishu) - {"domain", "owner_open_id", "owner_user_id", "app_id_env", "app_secret_env"}:
                 raise MikasaError("feishu 只接受 domain、负责人 ID 和凭据环境变量名称")

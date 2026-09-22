@@ -92,8 +92,7 @@ class ModelSettingsTests(BaseTest):
         self.assertEqual(report["model"]["connection"], "passed")
         self.assertEqual(report["model"]["model_match"], "unreported")
         self.assertEqual(report["model"]["provider_group"], "unverified")
-        with self.store.connect() as db:
-            self.assertEqual(db.execute("SELECT COUNT(*) FROM chats").fetchone()[0], 0)
+        self.assertFalse((self.config.runtime / 'mikasa.sqlite3').exists())
 
     def test_probe_failure_exit_and_missing_config(self):
         self.data["worker"].update(self.settings)

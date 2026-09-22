@@ -36,7 +36,7 @@
 
 2026-09-22 从 mylinux 停服备份 561 项状态，恢复到新机相同路径；21 个会话、103 条消息、MEMORY/USER 字节和单独传输的微信绑定均一致，工程记忆链接正确。旧 mylinux 服务已 disabled，旧机原始数据和 `/var/backups/mikasa/dedicated-machine-20260922` 恢复点保留；新机另存该快照。旧任务继续作为档案，未自动重跑。
 
-新机配置 4 核、6 GiB 内存和 32 GiB 磁盘上限。Gateway/API 服务模板移除只读文件系统与禁止提权设置，普通用户可使用 sudo；Gateway 将正常 SIGTERM 对应的 143 视为成功。模拟主进程 SIGKILL 后 NRestarts 增加并恢复双平台连接；`orb restart mikasa` 后服务自动启动、sudo 及共享记忆配置保留。journal 限额 256 MiB、14 天。恢复点和日常命令见 [工作机手册](../deploy/vm/README.md)。
+新机配置 4 核、6 GiB 内存和 32 GiB 磁盘上限。Gateway 服务模板移除只读文件系统与禁止提权设置，普通用户可使用 sudo；Gateway 将正常 SIGTERM 对应的 143 视为成功。模拟主进程 SIGKILL 后 NRestarts 增加并恢复双平台连接；`orb restart mikasa` 后服务自动启动、sudo 及共享记忆配置保留。journal 限额 256 MiB、14 天。恢复点和日常命令见 [工作机手册](../deploy/vm/README.md)。
 
 新机首次临时 Gateway 探针曾启动超时；保留 profile 的诊断复验通过，最终运行环境的全新临时探针也通过。未据此声称永不冷启动超时。Ubuntu 系统 Python 的旧 SQLite 会触发 Hermes 原生 DELETE journal 回退，正式 venv 已切换到上述已修复运行环境。
 

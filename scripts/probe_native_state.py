@@ -1,105 +1,81 @@
 #!/usr/bin/env python3
-"""Real CCH acceptance of native memory, skills, identity, isolation and cancellation."""
+"""Real CCH continuity through native CLI sessions, history and shared memory."""
 import argparse
 import json
+import sqlite3
 import sys
 import tempfile
-import time
 import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from mikasa.chat import Chat
 from mikasa.config import Config
-from mikasa.errors import MikasaError
-from mikasa.native import HERMES_REVISION
+from mikasa.native import HERMES_REVISION, prepare_profile, runtime_environment
+from mikasa.process import run
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', default='config/local/hermes-cch.json')
-    parser.add_argument('--report', required=True)
+    parser.add_argument('--config', required=True)
+    parser.add_argument('--model', required=True)
     args = parser.parse_args()
-    base = Config.load(args.config)
-    report_path = Path(args.report).resolve()
-    if not report_path.is_relative_to(base.runtime):
-        raise SystemExit('report must be inside the configured runtime')
-    checks, runtime_evidence = {}, []
-    marker = 'memory-' + uuid.uuid4().hex[:12]
-    # Short disposable paths also avoid macOS AF_UNIX limits. No production memory mutation.
-    with tempfile.TemporaryDirectory(prefix='mkn-', dir='/tmp') as directory:
-        data = json.loads(json.dumps(base.data))
-        data.update(runtime=directory, members=['native-probe-reader'])
-        config = Config(base.root, data)
-        with Chat(config) as chat:
-            owner = config.owner
-            first = chat.create(owner)
-            sid = first['id']
-            message = ('请实际使用 skill_view 读取 mikasa-review，再使用 memory 工具保存到你的 agent memory：'
-                       '这是一条联调测试事实，测试编号是 ' + marker + '。只在完成真实工具调用后简短确认。')
-            result = chat.send(sid, owner, message, 'remember')
-            runtime_evidence.append(result['execution'])
-            gateway = chat.gateways.for_actor(owner)
-            home = gateway.home
-            events = [json.loads(line) for line in (home/'native-evidence.jsonl').read_text().splitlines()]
-            checks['native_skill_view'] = any(e['event']=='tool' and e.get('tool')=='skill_view' and e.get('status')=='ok' for e in events)
-            checks['native_memory_write'] = any(e['event']=='tool' and e.get('tool')=='memory' and e.get('status')=='ok' for e in events)
-            checks['memory_on_disk'] = marker in (home/'memories/MEMORY.md').read_text()
-            checks['normal_replay'] = chat.send(sid, owner, message, 'remember') == result
-            saved_key = (home/'.api-key').read_bytes()
-            native_rows = gateway.messages(sid)['data']
-            checks['native_transcript_has_tools'] = any(r.get('role')=='tool' for r in native_rows)
-            with chat.store.connect() as db:
-                checks['no_transcript_mirror'] = db.execute('SELECT COUNT(*) FROM chat_turns').fetchone()[0] == 0
-                checks['receipt_has_no_prompt'] = marker not in json.dumps([dict(r) for r in db.execute('SELECT * FROM chat_requests')])
-        with Chat(config) as chat:
-            gateway = chat.gateways.for_actor(owner)
-            checks['api_namespace_survives_restart'] = (gateway.home/'.api-key').read_bytes() == saved_key
-            checks['native_history_survives_restart'] = gateway.messages(sid)['data'] == native_rows
-            checks['replay_survives_restart'] = chat.send(sid, owner, message, 'remember') == result
-            new = chat.send(sid, owner, '/new', 'new')
-            fresh = chat.get(new['chat_id'], owner)
-            checks['new_context_empty'] = fresh['turns'] == []
-            recall_text = '从你的长期记忆读取联调测试编号，仅输出编号；如果没有记录则说未提供。'
-            recalled = chat.send(new['chat_id'], owner, recall_text, 'recall')
-            checks['memory_loaded_after_restart_and_new'] = marker in recalled['reply']
-            runtime_evidence.append(recalled['execution'])
-            switched = chat.send(new['chat_id'], owner, '/model claude-opus-4-6', 'claude')
-            checks['native_cross_protocol_switch'] = switched['kind']=='switch' and switched['model']=='claude-opus-4-6'
-            runtime_evidence.append(switched['execution'])
-            checks['old_run_evidence_stable'] = chat.send(new['chat_id'], owner, recall_text, 'recall') == recalled
-            peer = chat.create('native-probe-reader')
-            peer_reply = chat.send(peer['id'], 'native-probe-reader', recall_text, 'peer')
-            checks['actor_memory_isolation'] = marker not in peer_reply['reply']
-            other = chat.gateways.for_actor('native-probe-reader')
-            checks['actor_homes_and_keys_isolated'] = other.home != gateway.home and other.key != gateway.key
-            runtime_evidence.append(peer_reply['execution'])
-            cancel_session = uuid.uuid4().hex
-            gateway.ensure_session(cancel_session, first['model'])
-            run = gateway.start(cancel_session, '请详细解释会话恢复。', first['model'], 'cancel-'+uuid.uuid4().hex)
-            try:
-                gateway.wait(run['run_id'], lambda: True)
-            except MikasaError:
-                pass
-            stop = gateway.request('GET', '/v1/runs/'+run['run_id'])
-            deadline = time.monotonic() + 30
-            while stop['status'] not in {'cancelled','interrupted','completed','failed'} and time.monotonic() < deadline:
-                time.sleep(.2)
-                stop = gateway.request('GET', '/v1/runs/'+run['run_id'])
-            checks['native_cancel'] = stop['status'] in {'cancelled', 'interrupted'}
-            from mikasa.model_settings import model_environment
-            credentials = {model_environment(config.data['worker'], m)['MIKASA_MODEL_API_KEY'].encode() for m in (first['model'], 'claude-opus-4-6')}
-            checks['no_cch_secrets_written'] = not any(key in p.read_bytes() for p in Path(directory).rglob('*') if p.is_file() and not p.is_symlink() for key in credentials)
-        checks['native_injection_all_protocols'] = all(all(e.get(k) for k in ('identity','policy','persona_skill','skills_index')) for e in runtime_evidence)
-        checks['protocols_observed'] = {e.get('api_mode') for e in runtime_evidence} == {'codex_responses','anthropic_messages'}
-        report = {'created': time.time(), 'hermes_revision': HERMES_REVISION, 'checks': checks,
-                  'passed': all(checks.values()), 'protocols': sorted({e.get('api_mode','unknown') for e in runtime_evidence})}
-        report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n')
-        report_path.chmod(0o600)
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        return 0 if report['passed'] else 1
+    original = Config.load(args.config)
+    with tempfile.TemporaryDirectory(prefix='mkstate-', dir='/tmp') as directory:
+        data = {**original.data, 'runtime': directory, 'engineering': {},
+                'github': {'token_env': 'MIKASA_PROBE_NO_GITHUB_TOKEN'}}
+        config = Config(original.root, data)
+        homes = {}
+        for engineering in (True, False):
+            prepared = prepare_profile(config, config.owner, engineering=engineering)
+            home = prepared[0]
+            native = json.loads((home / 'config.yaml').read_text())
+            native['lsp'] = {'enabled': False}
+            (home / 'config.yaml').write_text(json.dumps(native))
+            homes[engineering] = prepared
+
+        def invoke(engineering, prompt, resume=None):
+            home, source, python, credentials = homes[engineering]
+            query = Path(directory) / 'query.txt'
+            query.write_text(prompt)
+            command = [str(python), str(config.root / 'workers/hermes/native_engineer.py'),
+                       'chat', '--model', args.model, '--query-file', str(query), '--quiet',
+                       '--toolsets', 'memory,skills,session_search']
+            if resume:
+                command += ['--resume', resume]
+            result = run(command, cwd=home / 'workspace', timeout=240,
+                         env=runtime_environment(config, home, source, python, credentials))
+            return result['code'] == 0, result['stdout']
+
+        stable = 'stable-' + uuid.uuid4().hex[:12]
+        transient = 'task-' + uuid.uuid4().hex[:12]
+        ok, _ = invoke(True, f'隔离验收：请通过 memory 工具长期保存这个测试约定：{stable}。'
+                       f'当前临时工程名为青桥接续，暂停位置代号为 {transient}，下一步是检查测试结果。'
+                       '临时工程内容只留在本次会话，不要写入长期记忆。不要执行其他操作。')
+        home = homes[True][0]
+        memory = home / 'memories/MEMORY.md'
+        text = memory.read_text() if memory.exists() else ''
+        checks = {'initial_turn': ok, 'memory_persisted': stable in text,
+                  'temporary_task_not_in_memory': transient not in text}
+        with sqlite3.connect(home / 'state.db') as db:
+            session = db.execute('SELECT id FROM sessions WHERE parent_session_id IS NULL ORDER BY started_at LIMIT 1').fetchone()[0]
+        ok, reply = invoke(True, '继续这个会话：给出青桥接续的暂停位置代号和下一步。不要改记忆。', session)
+        checks['resume_after_process_restart'] = ok and transient in reply and '测试' in reply
+        ok, reply = invoke(True, '这是新会话。继续上次青桥接续的工程，找回临时暂停位置代号、下一步和长期测试约定。不要修改记忆。')
+        checks['new_session_recovers_history'] = ok and transient in reply and stable in reply
+        ok, reply = invoke(False, '长期记忆中的 stable- 开头的测试约定是什么？直接回答，不修改记忆。')
+        checks['chat_reads_shared_engineering_memory'] = ok and stable in reply
+        events = [json.loads(line) for line in (home / 'native-evidence.jsonl').read_text().splitlines()]
+        checks['native_history_tool_used'] = any(e.get('tool') == 'session_search' for e in events)
+        requests = [e for e in events if e.get('event') == 'request']
+        checks['identity_and_skills_loaded'] = bool(requests) and all(
+            all(e.get(k) for k in ('identity', 'policy', 'persona_skill', 'skills_index')) for e in requests)
+        checks['temporary_task_still_not_in_memory'] = transient not in memory.read_text()
+        print(json.dumps({'hermes_revision': HERMES_REVISION, 'model': args.model,
+                          'checks': checks, 'passed': all(checks.values()),
+                          'scope': 'isolated native CLI; no external messages or production memory writes'},
+                         ensure_ascii=False, indent=2))
+        return 0 if all(checks.values()) else 1
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     raise SystemExit(main())

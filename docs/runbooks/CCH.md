@@ -18,7 +18,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor --probe-model
 python3.12 -m mikasa --config config/local/hermes-cch.json doctor --model claude-opus-4-6 --probe-model
 ```
 
-第一条只检查本地条件，`connection=not_checked`。第二条通过临时原生 Gateway 发送一次聊天请求，会消耗一次模型调用；成功为 `connection=passed`，失败或配置不完整时退出码为 1。探针只使用临时 profile，会话和日志随探针清理，不改正式聊天、工程状态或默认模型。配置、进程、协议或输出契约失败都不能报告连接通过。
+第一条只检查本地条件，`connection=not_checked`。第二条通过临时原生 CLI 发送一次聊天请求，会消耗一次模型调用；成功为 `connection=passed`，失败或配置不完整时退出码为 1。探针只使用临时 profile，会话和日志随探针清理，不改正式聊天、工程状态或默认模型。配置、进程、协议或输出契约失败都不能报告连接通过。
 
 输出的 `requested_model` 是请求名，`reported_model` 是响应标识，`model_match` 为 same/different/unreported。即使 same，也不能独立证明供应商实际底层模型。`backend=hermes-gateway` 表示原生探针入口；本地夹具不能作为真实 CCH 联调。默认 doctor 的退出码仍只表示命令执行成功，模型配置状态读取 `model.configuration`。
 
@@ -30,7 +30,7 @@ VM 使用 `environment` 来源，不复制个人 Codex/Claude 认证文件。`mo
 
 ## /model 跨 GPT 与 Claude 切换
 
-终端 `/model` 直接由 Hermes CLI 执行；HTTP 和 `chat --message` 暂保留旧 API 命令适配。两者均可使用 `/model gpt-6-astra` 或 `/model claude-opus-4-6`，保留上下文。原生 CLI 支持 session/once/global、provider/reasoning 等官方参数；原生选择器与目录校验不额外发送推理探针，实际可用性由请求验证。旧 API 只开放 session 范围，中文“切换为 完整模型ID”仍由适配器识别，真实推理验证成功后保存新选择。具体差异见 [聊天手册](CHAT.md)。
+终端和消息网关中的 `/model` 均由 Hermes 原生执行，可使用 `/model gpt-6-astra` 或 `/model claude-opus-4-6` 并保留上下文。session/once/global、provider/reasoning 等参数按原生语义处理。选择器与目录校验不额外发送推理探针；实际可用性通过 `doctor --model ID --probe-model` 或真实对话验证。见[聊天手册](CHAT.md)。
 
 在 worker 中添加以下配置，模型名为配置示例，可按 CCH 实际提供的名称调整：
 
@@ -52,13 +52,13 @@ VM 使用 `environment` 来源，不复制个人 Codex/Claude 认证文件。`mo
 }
 ```
 
-Mikasa 配置匹配优先级：完整 models 匹配 → 最长 prefixes 匹配 → worker 默认来源。同一完整模型或前缀不允许重复配置。旧 API 使用这套选择规则；工程与聊天原生 CLI 将默认模型和显式 models 生成精确别名，由 Hermes 选择相应 provider。新模型推荐加入对应 models；未列出的模型需显式选择原生 provider，CLI 不复刻前缀路由。候选不是 CCH 完整目录。`model_source` 只存来源引用，拒绝内嵌密钥；不同路由可以引用不同受信任配置文件。API 请求体、聊天文本和模型回复不能指定配置路径或任意端点。
+Mikasa 配置匹配优先级：完整 models 匹配 → 最长 prefixes 匹配 → worker 默认来源。同一完整模型或前缀不允许重复配置。配置生成和模型诊断使用这套选择规则；工程与聊天原生 CLI 将默认模型和显式 models 生成精确别名，由 Hermes 选择相应 provider。新模型推荐加入对应 models；未列出的模型需显式选择原生 provider，CLI 不复刻前缀路由。候选不是 CCH 完整目录。`model_source` 只存来源引用，拒绝内嵌密钥；不同路由可以引用不同受信任配置文件。聊天文本和模型回复不能指定配置路径或任意端点。
 
-原生 profile 启动时读取已配置来源，将端点、协议、模型别名和 key_env 写入 Hermes 配置；实际 Key 仅在子进程环境中。`/model` 由 Hermes 同时解析目标模型、provider、协议和 Key。`--global` 写入原生 profile，下次初始化保留该选择；工程 profile 独立保存原生默认值；旧 API 新会话默认值来自 Mikasa 的模型来源配置。配置或认证变更后需重启对应 CLI/Gateway；不迁移正在生成的请求。来源缺失或损坏时直接失败，不借用其他来源凭据。
+原生 profile 启动时读取已配置来源，将端点、协议、模型别名和 key_env 写入 Hermes 配置；实际 Key 仅在子进程环境中。`/model` 由 Hermes 同时解析目标模型、provider、协议和 Key。`--global` 写入原生 profile，下次初始化保留该选择；工程 profile 独立保存原生默认值。配置或认证变更后需重启对应 CLI/Gateway；不迁移正在生成的请求。来源缺失或损坏时直接失败，不借用其他来源凭据。
 
 固定 CCH 源码按协议筛选供应商：Responses → codex，Messages → claude/claude-auth，Chat Completions → openai-compatible。Hermes 已原生支持这些 transport，因此切换 Claude 时采用 Messages，GPT 按 Codex 配置采用 Responses；不自研协议转换代理，不把所有名字塞进同一个 Responses 端点。
 
-Hermes 的交互命令不会由嵌入式 AIAgent.run_conversation 或现有 `/v1/runs` 自动分派。因此终端直接调用官方 `cli.main()`，不再维护 Mikasa 输入循环。HTTP 的命令适配暂留，等待原生渠道完整接管其鉴权、回执与取消契约。聊天直接使用原生工程工具，工程任务使用当前会话的模型选择。
+Mikasa 直接启动 Hermes 官方 CLI 或消息 Gateway，系统命令由对应原生入口分派，不维护额外命令解析器。
 
 ## default 分组
 
@@ -70,6 +70,6 @@ Hermes 的交互命令不会由嵌入式 AIAgent.run_conversation 或现有 `/v1
 
 ## 故障处理
 
-工程使用 Hermes 原生错误反馈与恢复，不再要求模型返回 JSON。HTTP/doctor 只报告已确认的本地配置、连接或运行失败，不将缺少结构化根因的错误猜测为认证、限流或 WAF。
+工程使用 Hermes 原生错误反馈与恢复，不再要求模型返回 JSON。`doctor` 只报告已确认的本地配置、连接或运行失败，不将缺少结构化根因的错误猜测为认证、限流或 WAF。
 
-遇到 403 需结合网关管理端判断，不等同于 Key 无效；检查模型完整 ID、协议、端点、Key 和上游容量。Mikasa 不增加自动换名或模型回退。HTTP 切换验证失败保留原模型与 revision；原生 CLI 的切换与推理失败沿用 Hermes 语义，不承诺自动回滚。恢复入口见 [操作手册](OPERATIONS.md)。
+遇到 403 需结合网关管理端判断，不等同于 Key 无效；检查模型完整 ID、协议、端点、Key 和上游容量。Mikasa 不增加自动换名或模型回退。原生 CLI 的切换与推理失败沿用 Hermes 语义，不承诺自动回滚。恢复入口见 [操作手册](OPERATIONS.md)。

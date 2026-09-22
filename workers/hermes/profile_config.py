@@ -13,15 +13,12 @@ def merge(current, generated):
         # Remove only the exact defaults installed by the former chat-only adapter.
         # User-selected limits, toolsets and subsequent native changes survive refresh.
         toolsets = current.get("platform_toolsets", {})
-        for platform in ("cli", "api_server", "feishu", "weixin"):
+        for platform in ("cli", "feishu", "weixin"):
             if toolsets.get(platform) == ["memory", "skills", "session_search"]:
                 del toolsets[platform]
         agent = current.get("agent", {})
         if agent.get("max_turns") == 12:
             del agent["max_turns"]
-        api = current.get("gateway", {}).get("api_server", {})
-        if api.get("max_concurrent_runs") == 1:
-            del api["max_concurrent_runs"]
         display = current.get("display", {})
         if display.get("tool_progress") == "off":
             display["tool_progress"] = "new"

@@ -120,7 +120,7 @@ runpy.run_path(sys.argv[0], run_name='__main__')
     def test_default_diagnostics_never_start_services_or_use_network(self):
         path = self.path / "config.json"
         path.write_text(json.dumps(self.data))
-        with patch.dict(os.environ, {}, clear=True), patch("mikasa.native.NativeGateways") as service, \
+        with patch.dict(os.environ, {}, clear=True), patch("mikasa.native.interactive") as service, \
                 patch("mikasa.github.GitHub.request") as request, contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(main(["--config", str(path), "connections", "github"]), 1)
         service.assert_not_called()

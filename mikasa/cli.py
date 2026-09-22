@@ -2,9 +2,7 @@ import argparse
 import json
 import os
 import shutil
-import signal
 import sys
-import uuid
 
 from .config import Config
 from .errors import MikasaError
@@ -16,9 +14,8 @@ def parser():
     p.add_argument('--config', default='config/examples/mikasa.json')
     commands = p.add_subparsers(dest='command', required=True)
     diagnostic = commands.add_parser('doctor')
-    diagnostic.add_argument('--probe-model', action='store_true', help='临时原生 Gateway 模型探针，会消耗额度')
+    diagnostic.add_argument('--probe-model', action='store_true', help='临时原生 CLI 模型探针，会消耗额度')
     diagnostic.add_argument('--model', help='只诊断指定模型，不改变默认值')
-    commands.add_parser('serve')
     engineer = commands.add_parser('engineer', help='-- 后参数直接交给完整 Hermes CLI')
     engineer.add_argument('--cwd', help='实际仓库或工作目录')
     engineer.add_argument('arguments', nargs=argparse.REMAINDER)
@@ -28,9 +25,8 @@ def parser():
     gateway = commands.add_parser('gateway', help='统一 Hermes 消息 Gateway')
     gateway.add_argument('--platform', choices=('feishu', 'weixin'), action='append', required=True)
     commands.add_parser('weixin-login')
-    chat = commands.add_parser('chat', help='原生聊天 CLI；--message 使用保留的 HTTP 聊天适配')
+    chat = commands.add_parser('chat', help='原生 Hermes 聊天 CLI')
     chat.add_argument('--session')
-    chat.add_argument('--message')
     backup = commands.add_parser('backup', help='停服后备份受管状态到新目录')
     backup.add_argument('destination')
     restore = commands.add_parser('restore', help='校验备份并恢复到新 runtime')
@@ -60,10 +56,10 @@ def doctor(config, *, probe_model=False, selected_model=None):
         native = {'installation': 'ready', 'execution': 'not_checked'}
     except (MikasaError, OSError, ValueError):
         native = {'installation': 'unavailable', 'execution': 'not_checked'}
-    deprecated = ['worker.' + k for k in ('command', 'home', 'max_attempts', 'max_output_bytes', 'max_context_bytes') if k in settings]
+    deprecated = ['worker.' + k for k in ('command', 'home', 'timeout', 'max_attempts', 'max_output_bytes', 'max_context_bytes') if k in settings]
     deprecated += [name for name, enabled in (
         ('schedules', bool(config.data.get('schedules'))),
-        ('server.auto_review', 'auto_review' in config.data.get('server', {})),
+        ('server', 'server' in config.data),
         ('github.publish_enabled', 'publish_enabled' in config.data.get('github', {}))) if enabled]
     return {'python': sys.version.split()[0], 'git': bool(shutil.which('git')), 'gh': bool(shutil.which('gh')),
             'rules': 'loaded', 'skills': skill_inventory(config.root), 'native': native, 'model': model,
@@ -95,25 +91,8 @@ def main(argv=None):
             print(json.dumps(value, ensure_ascii=False, indent=2))
             return int(args.probe_model and value['model']['connection'] != 'passed')
         if args.command == 'chat':
-            if args.message is None:
-                from .native import interactive
-                return interactive(config, args.session)
-            from .chat import Chat
-            with Chat(config) as chat:
-                session = chat.get(args.session, config.owner) if args.session else chat.create(config.owner)
-                value = chat.send(session['id'], config.owner, args.message, uuid.uuid4().hex)
-        elif args.command == 'serve':
-            from .server import make_server
-            server = make_server(config)
-            def stop_api(signum, frame):
-                raise SystemExit(0)
-            previous = signal.signal(signal.SIGTERM, stop_api)
-            try:
-                server.serve_forever()
-            finally:
-                server.server_close()
-                signal.signal(signal.SIGTERM, previous)
-            return 0
+            from .native import interactive
+            return interactive(config, args.session)
         elif args.command == 'backup':
             from .backup import backup_state
             value = backup_state(config, args.destination)

@@ -6,25 +6,10 @@ from pathlib import Path
 
 from mikasa.config import Config
 from mikasa.process import git
-from mikasa.store import Store
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "Ceng-0324/TestFixture"
 SHA = "a" * 40
-
-
-def command_reply(text, cancelled=lambda: False):
-    """Canned command RPC replies; real upstream semantics use probe_commands.py."""
-    from mikasa.chat import HELP
-    replies = {"/model": ("model", "status", None), "/model default": ("model", "reset", None),
-               "/new": ("new", "new", None), "/reset": ("new", "new", None),
-               "/init": ("init", "deferred_command", None), "/help": ("help", "help", None),
-               "/version": ("version", "version", None)}
-    for model in ("model-b", "model-c", "nonexistent", "claude-test"):
-        replies["/model " + model] = ("model", "switch", model)
-    name, kind, target = replies.get(text, (None, "unsupported_command", None))
-    return {"name": name, "kind": kind, "target": target,
-            "reply": HELP if kind == "help" else "fixture" if kind in {"version", "deferred_command"} else None}
 
 
 class BaseTest(unittest.TestCase):
@@ -44,12 +29,8 @@ class BaseTest(unittest.TestCase):
         self.data["repositories"] = {REPO: {"source": str(self.repo), "base": "main", "allow_local_checks": True, "checks": [[sys.executable, "-c", "from app import VALUE; assert VALUE == 2"]]}}
         self.config_path = self.path / "config.json"
         self.write_config()
-        self.store = Store(self.config.runtime)
+        self.config.runtime.mkdir(parents=True)
 
     def write_config(self):
         self.config_path.write_text(json.dumps(self.data))
         self.config = Config.load(self.config_path)
-
-
-def resolved_command(config, text, cancelled=lambda: False):
-    return command_reply(text, cancelled)
