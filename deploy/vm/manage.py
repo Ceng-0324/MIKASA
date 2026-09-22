@@ -116,6 +116,7 @@ def initialize():
     if not Path('/var/backups/mikasa-restic/config').exists():
         restic('init')
     RELEASES.mkdir(mode=0o755, exist_ok=True)
+    RELEASES.chmod(0o755)
     if not APP.is_symlink():
         with stopped():
             legacy = RELEASES / ('legacy-' + str(int(time.time())))
@@ -226,6 +227,7 @@ def switch(target):
 
 def deploy(archive):
     RELEASES.mkdir(exist_ok=True)
+    RELEASES.chmod(0o755)
     with tempfile.TemporaryDirectory(prefix='.incoming-', dir=RELEASES) as temporary:
         stage = Path(temporary)
         manifest = unpack(archive, stage)

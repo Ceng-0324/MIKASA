@@ -48,6 +48,17 @@ class VMOperationsTests(unittest.TestCase):
         (legacy / 'runtime-state.db').write_text('kept')
         self.assertEqual(vm.validate_release(legacy)['revision'], legacy.name)
 
+    def test_release_parent_is_explicitly_traversable_under_private_umask(self):
+        releases = self.root / 'releases'
+        with patch.object(vm, 'RELEASES', releases):
+            old_umask = __import__('os').umask(0o077)
+            try:
+                releases.mkdir(mode=0o755, exist_ok=True)
+                releases.chmod(0o755)
+            finally:
+                __import__('os').umask(old_umask)
+        self.assertEqual(releases.stat().st_mode & 0o777, 0o755)
+
     def test_tar_rejects_traversal_links_and_duplicates(self):
         for name, kind in [('../outside', 'file'), ('/absolute', 'file'), ('link', 'link'), ('same', 'duplicate')]:
             archive = self.root / 'bad.tar'
