@@ -38,6 +38,8 @@ orb create --isolated --isolate-network --user mikasa --cpus 4 --memory 6G --dis
 5. 安装服务模板，执行 `systemd-analyze verify`、`systemctl daemon-reload`。服务以 mikasa 运行，保留 0077 umask、进程组清理和异常重启；不设置阻断 sudo/全盘管理的 `NoNewPrivileges`、`ProtectSystem` 或 `ReadWritePaths`。此模板只适用于专用机器。
 6. 将 [journald.conf](journald.conf) 安装到 `/etc/systemd/journald.conf.d/mikasa.conf`：持久 journal 最多 256 MiB、14 天。Hermes 文件日志继续按原生机制管理；不限制工程产出和数据库空间。
 
+环境文件保留 `TMPDIR=/tmp`。Hermes 尊重显式临时目录；默认 profile 的深层 scratch 路径会使 Playwright Chromium 的 `SingletonSocket` 超过 Linux Unix socket 路径长度上限。Gateway 和下述工程入口共用环境文件，临时目录设置无需修改上游代码。
+
 聊天 profile 为 `/var/lib/mikasa/native/<账号摘要>`，独立工程 profile 为 `/var/lib/mikasa/engineer/<账号摘要>`。本机两者均采用原生 `approvals.mode: off` 处理普通命令；Hermes 的规则文件保护及其他不可绕过的原生检查仍保留。此项是专用机配置，不强制覆盖其他部署的选择，不修改上游源码。
 
 GitHub 使用 mikasa 自己的 `gh auth login --with-token` 和 `gh auth setup-git`。专用 token 经标准输入登录，不出现在命令行；`~/.config/gh/hosts.yml` 为 0600。固定 Hermes 会清除 terminal 子进程的 GH_TOKEN，只注入主进程不足以支持 gh。认证与普通状态备份分别管理。
