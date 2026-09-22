@@ -58,13 +58,17 @@ def merge(current, generated):
                                 **generated["display"]["platforms"]}
         merged["display"] = display
         merged["_mikasa_interaction_defaults"] = 1
-    # Retire only our noisy defaults once; native per-platform choices survive.
-    if "max_concurrent_sessions" in generated and current.get("_mikasa_progress_defaults") != 1:
-        if merged["display"].get("tool_progress") == "all":
-            merged["display"]["tool_progress"] = "new"
-        if merged["agent"].get("gateway_notify_interval") == 15:
-            merged["agent"]["gateway_notify_interval"] = 60
-        merged["_mikasa_progress_defaults"] = 1
+    # Restore the former observable native defaults once. A profile marked 1 was
+    # changed by Mikasa's quiet-progress migration; the explicit product choice to
+    # restore per-tool visibility upgrades it to version 2. Later Hermes choices
+    # remain untouched.
+    if "max_concurrent_sessions" in generated and current.get("_mikasa_progress_defaults") != 2:
+        if current.get("_mikasa_progress_defaults") == 1:
+            if merged["display"].get("tool_progress") == "new":
+                merged["display"]["tool_progress"] = "all"
+            if merged["agent"].get("gateway_notify_interval") == 60:
+                merged["agent"]["gateway_notify_interval"] = 15
+        merged["_mikasa_progress_defaults"] = 2
     merged.pop("_mikasa_live_progress", None)
     # cch-<source digest> is Mikasa's namespace; removed sources must not linger
     # in the native picker. Keep unrelated native providers and aliases intact.

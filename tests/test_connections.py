@@ -413,11 +413,11 @@ for platform in ('feishu','weixin'):
     enabled=sorted(_get_platform_tools(cfg,platform))
     tools={t['function']['name'] for t in get_tool_definitions(enabled_toolsets=enabled,quiet_mode=True,skip_tool_search_assembly=True)}
     assert {'terminal','read_file','write_file','process_manage','delegate_task','skill_manage'} <= tools, tools
-    assert resolve_display_setting(cfg,platform,'tool_progress') == 'new'
+    assert resolve_display_setting(cfg,platform,'tool_progress') == 'all'
     assert resolve_display_setting(cfg,platform,'tool_progress_grouping') == 'accumulate'
     assert resolve_display_setting(cfg,platform,'interim_assistant_messages')
     assert resolve_display_setting(cfg,platform,'long_running_notifications')
-assert cfg['agent']['gateway_notify_interval'] == 60
+assert cfg['agent']['gateway_notify_interval'] == 15
 assert cfg['display']['background_process_notifications'] == 'error'
 for name in ('terminal','write_file','delegate_task','skill_manage','web_search'):
     assert get_pre_tool_call_directive(name, {})[0] is None
