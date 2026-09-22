@@ -250,7 +250,7 @@ class NativeProfileTests(unittest.TestCase):
         self.assertIn('sensitive-fixture-key', kwargs['env'].values())
         self.assertFalse((self.config.runtime / 'mikasa.sqlite3').exists())
 
-    def test_native_cli_cannot_mutate_an_active_gateway_profile(self):
+    def test_native_cli_cannot_mutate_profile_during_initialization(self):
         import fcntl
         from mikasa.native import interactive
         from mikasa.errors import Conflict
@@ -261,6 +261,24 @@ class NativeProfileTests(unittest.TestCase):
             with self.assertRaises(Conflict):
                 interactive(self.config)
         self.assertEqual((home / 'config.yaml').read_bytes(), before)
+
+    def test_native_profile_lock_is_released_before_child_runtime(self):
+        import fcntl
+        from unittest.mock import Mock
+        from mikasa.native import interactive
+        prepared = prepare_profile(self.config, self.config.owner)
+        process = Mock()
+        process.wait.return_value = 0
+        process.poll.return_value = 0
+
+        def spawn(*args, **kwargs):
+            with (prepared[0] / 'mikasa.lock').open('a') as other:
+                fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return process
+
+        with patch('mikasa.native.prepare_profile', return_value=prepared), \
+                patch('mikasa.native.subprocess.Popen', side_effect=spawn):
+            self.assertEqual(interactive(self.config), 0)
 
     def test_feishu_launcher_uses_owner_profile_and_never_persists_app_secret(self):
         from mikasa.native import interactive
@@ -320,20 +338,28 @@ class NativeProfileTests(unittest.TestCase):
         prepared = prepare_profile(self.config, self.config.owner)
         process = Mock()
         process.wait.return_value = process.poll.return_value = 0
+        captured = []
+        def spawn(*args, **kwargs):
+            path = Path(args[0][args[0].index('--config') + 1])
+            captured.append((path, json.loads(path.read_text())))
+            return process
         with patch.dict(os.environ, {'MIKASA_FEISHU_APP_ID': 'cli_fixture', 'MIKASA_FEISHU_APP_SECRET': 'secret',
                                      'WEIXIN_ALLOW_ALL_USERS': 'true', 'WEIXIN_HOME_CHANNEL': 'stranger'}), \
                 patch('mikasa.native.prepare_profile', return_value=prepared), \
-                patch('mikasa.native.subprocess.Popen', return_value=process) as spawn:
+                patch('mikasa.native.subprocess.Popen', side_effect=spawn) as spawn_mock:
             self.assertEqual(interactive(self.config, platforms=('feishu', 'weixin')), 0)
-        self.assertEqual(spawn.call_count, 1)
-        env = spawn.call_args.kwargs['env']
+        self.assertEqual(spawn_mock.call_count, 1)
+        env = spawn_mock.call_args.kwargs['env']
         self.assertEqual(env['HERMES_HOME'], str(prepared[0]))
         self.assertEqual(env['WEIXIN_TOKEN'], 'private-weixin-token')
         self.assertEqual(env['WEIXIN_ALLOW_ALL_USERS'], 'false')
         self.assertEqual(env['FEISHU_ALLOW_ALL_USERS'], 'true')
         self.assertEqual(env['GATEWAY_ALLOW_ALL_USERS'], 'false')
         self.assertNotIn('WEIXIN_HOME_CHANNEL', env)
-        gateway = json.loads((prepared[0] / 'gateway-messaging.json').read_text())
+        gateway_path, gateway = captured[0]
+        self.assertNotEqual(gateway_path, prepared[0] / 'gateway-messaging.json')
+        self.assertFalse(gateway_path.exists())
+        self.assertFalse(gateway_path.parent.exists())
         self.assertEqual(set(gateway['platforms']), {'feishu', 'weixin'})
         self.assertFalse(any(b'private-weixin-token' in p.read_bytes() for p in prepared[0].rglob('*') if p.is_file()))
         native = json.loads((prepared[0] / 'config.yaml').read_text())

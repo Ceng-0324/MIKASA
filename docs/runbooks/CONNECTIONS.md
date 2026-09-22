@@ -81,7 +81,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu --
 
 私聊按平台和聊天区分；普通群及话题内共享上下文，发送者仍使用 Hermes 元数据识别。同一 Gateway 共用负责人 profile 的 MEMORY/USER、SessionDB、身份与 skills，具体会话仍按平台、聊天和话题标识隔离，并非每人的私有记忆空间。开放用户可调用原生系统命令与工程工具，部分操作影响共享 profile 和工作机。不同会话并发，同会话忙碌时排队；工程进度与结果直接回复原会话，详细语义见[聊天手册](CHAT.md)。
 
-CLI 与消息 Gateway 使用同一负责人 profile，进程互斥。Ctrl-C 停止前台；启动失败需处理错误后重启，不覆盖会话或记忆。
+CLI 与消息 Gateway 可以使用同一负责人 profile 并存。启动时会短暂锁住 profile 以完成身份和配置刷新；运行期由 Hermes 的会话 lease 与 Gateway runtime 锁管理并发，重复启动第二个 Gateway 会被原生拒绝。Ctrl-C 停止前台；启动失败需处理错误后重启，不覆盖会话或记忆。
 
 已知限制：原生 `/sethome` 会保存默认投递设置并生成 profile `.env`，与当前禁止额外环境注入的启动检查冲突。当前验收不依赖默认投递；遇到此情况先核对文件字段并保留原设置，不能删除未知凭据或直接放开任意 `.env`。macOS 上过长的 profile 路径还会使 Hermes 可选 liveness socket 无法创建，消息长连接仍可工作；VM 使用短路径后复验存活检测。
 

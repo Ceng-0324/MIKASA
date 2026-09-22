@@ -71,7 +71,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json chat --session NATIVE
 
 普通群聊和话题共用各自上下文，私聊按平台和聊天分开，发送者仍使用 Hermes 元数据区分。首次从旧的按成员群会话切换时开启新的群上下文，旧历史保留。飞书使用原生输入状态和流式回复，微信保留完整回复和长任务通知；系统界面默认中文，尚未本地化的上游提示仍可能是英文。偏好迁移只执行一次，之后原生 `/busy`、显示及会话设置保留。
 
-CLI 启动原生 CLI 子进程；同一账号使用同一 profile、SessionDB 和 MEMORY/USER。`mikasa gateway --platform feishu [--platform weixin]` 使用负责人 profile，由同一个 Hermes Gateway 处理开放的飞书私聊/群聊及已绑定负责人的微信单聊；飞书不要求 @，其他机器人也可进入。会话按 Hermes 原生规则划分，长期记忆仍为 profile 共享；开放用户也能调用原生系统命令，不将其描述为每人的独立沙箱。平台配置和生效步骤见[接入手册](CONNECTIONS.md)。CLI 和消息 Gateway 不能同时管理同一账号 profile，锁冲突会在更新配置前报错。退出会收回对应子进程，重新打开继续使用原生数据。模型凭据只从显式 CCH 来源读取到子进程环境，不复制个人认证文件。
+CLI 启动原生 CLI 子进程；同一账号使用同一 profile、SessionDB 和 MEMORY/USER。`mikasa gateway --platform feishu [--platform weixin]` 使用负责人 profile，由同一个 Hermes Gateway 处理开放的飞书私聊/群聊及已绑定负责人的微信单聊；飞书不要求 @，其他机器人也可进入。会话按 Hermes 原生规则划分，长期记忆仍为 profile 共享；开放用户也能调用原生系统命令，不将其描述为每人的独立沙箱。平台配置和生效步骤见[接入手册](CONNECTIONS.md)。CLI 与一个消息 Gateway 可以同时管理同一账号 profile；启动阶段短暂的 profile 初始化锁只防止配置刷新竞争，运行期并发由 Hermes 会话 lease 处理。两个 Gateway 同时启动时会被 Hermes 原生 runtime 锁拒绝。退出会收回对应子进程，重新打开继续使用原生数据。模型凭据只从显式 CCH 来源读取到子进程环境，不复制个人认证文件。
 
 初始化更新身份/规则、必需 skills/plugin 和生成的 CCH 配置，保留 Hermes 自己保存的默认模型、推理和显示偏好。`config.yaml` 的 YAML/JSON 都可读取，刷新写为 JSON（合法 YAML），不保留 YAML 注释；格式错误时保留原文件并阻止启动。长期记忆和原生数据库不由配置初始化覆盖。
 

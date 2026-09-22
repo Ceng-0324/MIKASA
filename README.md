@@ -28,7 +28,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor
 | 终端聊天 | `chat` | 直接进入 Hermes CLI |
 | 原生工程 | `engineer --cwd /absolute/repo -- chat` | 完整 Hermes CLI；工具、会话、worktree、Kanban/Cron 按原生方式使用 |
 
-**同一账号 profile 的终端和消息 Gateway 互斥**，切换入口前需停止占用它的进程。飞书和微信应在同一条 Gateway 命令中启动。
+终端 CLI 与消息 Gateway 可并存使用同一聊天 profile；Hermes 自己负责会话 lease 和 Gateway runtime 锁，两个 Gateway 仍不能同时占用同一运行态。飞书和微信应在同一条 Gateway 命令中启动。
 
 原生聊天使用 `/model 完整模型ID`、`/new`、`/help` 等系统命令；GPT/Claude 需配置相应 CCH provider 和协议。可以在飞书、微信中直接交付工程任务，由 Hermes 使用工作机上的仓库和原生工具执行，并在原会话反馈进度与结果。不同会话并发，同一会话忙碌时原生排队；使用方式见[聊天手册](docs/runbooks/CHAT.md)。
 

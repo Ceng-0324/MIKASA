@@ -5,6 +5,7 @@ import json
 import os
 import signal
 import subprocess
+import tempfile
 from pathlib import Path
 
 from .errors import Conflict, MikasaError
@@ -192,13 +193,20 @@ def interactive(config, session=None, *, platforms=()):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise Conflict("该账号的原生 profile 正在使用；先关闭对应 CLI 或 Gateway") from None
+            raise Conflict("该账号的原生 profile 正在初始化；稍后重试") from None
         home, source, python, credentials = prepare_profile(config, actor)
-        env = runtime_environment(config, home, source, python, credentials)
-        env.update(platform_env)
-        command = [str(python), str(config.root / "workers/hermes/native_cli.py")]
+    # The profile lock protects only bootstrap. Hermes owns concurrent sessions
+    # and the Gateway runtime lock once its child process has started.
+    env = runtime_environment(config, home, source, python, credentials)
+    env.update(platform_env)
+    command = [str(python), str(config.root / "workers/hermes/native_cli.py")]
+    gateway_tmp = None
+    previous = None
+    process = None
+    try:
         if platforms:
-            gateway_config = home / "gateway-messaging.json"
+            gateway_tmp = tempfile.TemporaryDirectory(prefix=".mikasa-gateway-", dir=home)
+            gateway_config = Path(gateway_tmp.name) / "config.json"
             private_write(gateway_config, json.dumps(settings))
             command = [str(python), str(config.root / "workers/hermes/native_gateway.py"), "--config", str(gateway_config)]
         if session:
@@ -207,23 +215,24 @@ def interactive(config, session=None, *, platforms=()):
             raise SystemExit(128 + signum)
 
         previous = signal.signal(signal.SIGTERM, terminate)
-        process = None
+        process = subprocess.Popen(command, cwd=home / "workspace", env=env)
+        return process.wait()
+    except KeyboardInterrupt:
+        # The foreground process group already received Ctrl-C; Hermes handles it.
+        if process is None:
+            raise
+        return process.wait()
+    finally:
         try:
-            process = subprocess.Popen(command, cwd=home / "workspace", env=env)
-            return process.wait()
-        except KeyboardInterrupt:
-            # The foreground process group already received Ctrl-C; Hermes handles it.
-            if process is None:
-                raise
-            return process.wait()
+            if process is not None and process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
         finally:
-            try:
-                if process is not None and process.poll() is None:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait()
-            finally:
+            if previous is not None:
                 signal.signal(signal.SIGTERM, previous)
+            if gateway_tmp is not None:
+                gateway_tmp.cleanup()
