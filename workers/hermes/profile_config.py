@@ -33,12 +33,6 @@ def merge(current, generated):
     merged["display"] = {**generated["display"], **current.get("display", {})}
     if "max_concurrent_sessions" in generated:
         merged["agent"] = {**generated["agent"], **current.get("agent", {})}
-        # Upgrade the former Mikasa progress default once, retaining custom
-        # platform overrides and subsequent user changes.
-        if current.get("_mikasa_live_progress") != 1:
-            if merged["display"].get("tool_progress") == "new":
-                merged["display"]["tool_progress"] = "all"
-            merged["_mikasa_live_progress"] = 1
     # One-time migration from Mikasa's single-session, silent message defaults.
     # Afterwards /busy and native display/session preferences remain Hermes-owned.
     if "max_concurrent_sessions" in generated and current.get("_mikasa_interaction_defaults") != 1:
@@ -50,6 +44,14 @@ def merge(current, generated):
                                 **generated["display"]["platforms"]}
         merged["display"] = display
         merged["_mikasa_interaction_defaults"] = 1
+    # Retire only our noisy defaults once; native per-platform choices survive.
+    if "max_concurrent_sessions" in generated and current.get("_mikasa_progress_defaults") != 1:
+        if merged["display"].get("tool_progress") == "all":
+            merged["display"]["tool_progress"] = "new"
+        if merged["agent"].get("gateway_notify_interval") == 15:
+            merged["agent"]["gateway_notify_interval"] = 60
+        merged["_mikasa_progress_defaults"] = 1
+    merged.pop("_mikasa_live_progress", None)
     # cch-<source digest> is Mikasa's namespace; removed sources must not linger
     # in the native picker. Keep unrelated native providers and aliases intact.
     managed = lambda name: isinstance(name, str) and re.fullmatch(r"cch-[0-9a-f]{16}", name)

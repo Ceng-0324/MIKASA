@@ -13,6 +13,29 @@ from tests.support import ROOT
 
 
 class NativeProfileTests(unittest.TestCase):
+    def test_progress_upgrade_is_once_and_keeps_platform_preferences(self):
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        path = home / 'config.yaml'
+        current = json.loads(path.read_text())
+        current.pop('_mikasa_progress_defaults')
+        current['_mikasa_live_progress'] = 1
+        current['display']['tool_progress'] = 'all'
+        current['display']['platforms']['feishu'] = {'tool_progress': 'off'}
+        current['display'].pop('background_process_notifications')
+        current['agent']['gateway_notify_interval'] = 15
+        path.write_text(json.dumps(current))
+        prepare_profile(self.config, self.config.owner)
+        updated = json.loads(path.read_text())
+        self.assertEqual(updated['display']['tool_progress'], 'new')
+        self.assertEqual(updated['display']['background_process_notifications'], 'error')
+        self.assertEqual(updated['display']['platforms'], current['display']['platforms'])
+        self.assertEqual(updated['agent']['gateway_notify_interval'], 60)
+        updated['display']['tool_progress'] = 'all'
+        updated['agent']['gateway_notify_interval'] = 15
+        path.write_text(json.dumps(updated))
+        prepare_profile(self.config, self.config.owner)
+        self.assertEqual(json.loads(path.read_text()), updated)
+
     def test_release_skill_roots_replace_managed_paths_preserving_user_skills(self):
         from workers.hermes.profile_config import merge
         home, *_ = prepare_profile(self.config, self.config.owner)
@@ -64,7 +87,7 @@ class NativeProfileTests(unittest.TestCase):
         config = json.loads((home/'config.yaml').read_text())
         self.assertEqual(config['skills']['auto_load'], ['mikasa-persona'])
         self.assertNotIn('platform_toolsets', config)
-        self.assertEqual(config['agent'], {'gateway_notify_interval': 15})
+        self.assertEqual(config['agent'], {'gateway_notify_interval': 60})
         self.assertEqual((home/'SOUL.md').read_bytes(), (ROOT/'identity.md').read_bytes())
 
     def test_existing_display_gets_missing_defaults_without_resetting_choices(self):
@@ -393,9 +416,9 @@ class NativeProfileTests(unittest.TestCase):
         prepare_profile(self.config, self.config.owner)
         migrated = json.loads(path.read_text())
         self.assertEqual(migrated['platform_toolsets'], {'weixin': ['terminal']})
-        self.assertEqual(migrated['agent'], {'reasoning_effort': 'high', 'gateway_notify_interval': 15})
+        self.assertEqual(migrated['agent'], {'reasoning_effort': 'high', 'gateway_notify_interval': 60})
         self.assertEqual(migrated['gateway']['api_server'], {'port': 9000})
-        self.assertEqual(migrated['display']['tool_progress'], 'all')
+        self.assertEqual(migrated['display']['tool_progress'], 'new')
         self.assertEqual((home/'state.db').read_bytes(), b'existing-history')
         migrated['agent']['max_turns'] = 12
         migrated['agent']['gateway_notify_interval'] = 75
