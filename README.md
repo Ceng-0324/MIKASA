@@ -8,13 +8,13 @@
 | --- | --- |
 | Hermes | 原生 CLI 与多平台 Gateway、系统命令、模型调用与工具循环、SessionDB、MEMORY/USER、skills、Kanban、Cron、运行事件及 SQLite 快照 |
 | CCH | 模型供应、协议对应的供应商路由、模型重写和分组 |
-| Mikasa | 身份与工程 skills、配置和账号绑定、工程隔离与最终验收、必要的 API/平台/备份适配 |
+| Mikasa | 身份与工程 skills、配置和账号绑定、共享记忆与必要的 API/平台/备份适配 |
 
 优先复用 Hermes，不另建 Agent harness 或审批引擎。审查分工等协作约定由身份、skills、会话和原生记忆承载，实际权限由平台配置决定。Mikasa 默认不自动合并。
 
 ## 运行
 
-需要 Python 3.12+、Git 和[固定 Hermes 环境](workers/hermes/README.md)。按[配置说明](config/README.md)准备本机 JSON 与模型来源；以下沿用接入手册的 `config/local/hermes-cch.json`，其他机器替换为自己的路径。纯聊天无需配置仓库；工程任务另需授权仓库、Docker 及预装镜像。
+需要 Python 3.12+、Git 和[固定 Hermes 环境](workers/hermes/README.md)。按[配置说明](config/README.md)准备本机 JSON 与模型来源；以下沿用接入手册的 `config/local/hermes-cch.json`，其他机器替换为自己的路径。工程使用完整 Hermes 原生工具和实际仓库目录，依赖与权限按运行环境准备。
 
 ```sh
 python3.12 -m mikasa --config config/local/hermes-cch.json doctor
@@ -26,8 +26,8 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor
 | --- | --- | --- |
 | 飞书与微信聊天 | `gateway --platform feishu --platform weixin` | 一个 Hermes Gateway；先配置飞书应用并完成微信扫码，可只选一个平台 |
 | 终端聊天 | `chat` | 直接进入 Hermes CLI |
-| HTTP 接口 | `serve` | 鉴权聊天与任务 API，聊天按账号启动原生 Gateway |
-| 工程任务执行 | `run` | 消费任务队列；提交任务见[操作手册](docs/runbooks/OPERATIONS.md) |
+| HTTP 接口 | `serve` | 保留的鉴权聊天 API；旧任务端点返回 410 |
+| 原生工程 | `engineer --cwd /absolute/repo -- chat` | 完整 Hermes CLI；工具、会话、worktree、Kanban/Cron 按原生方式使用 |
 
 **同一账号 profile 的终端、HTTP 聊天和消息 Gateway 互斥**，切换入口前需停止占用它的进程。飞书和微信应在同一条 Gateway 命令中启动。
 
@@ -37,11 +37,11 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor
 
 ## 当前进度
 
-原生交互、工程续话与共享记忆、工具内修复、Kanban、Cron、运行事件和完整受管状态备份已接入。当前仍保留 HTTP 兼容、单任务 runner、结构化交付及工程快照验收。
+工程执行已直接复用完整 Hermes CLI，使用持久 Git 工作区和原生工具/扩展。旧 worker、快照、串行 runner 与发布业务引擎已退休；旧状态保留在备份中。工程会话独立，长期记忆与同账号聊天共享。
 
 飞书、微信共用 Hermes Gateway；微信用于主人私聊，团队群协作用飞书。普通群及话题共享上下文，同一 profile 共享长期记忆和历史。人格常驻，完整工程规则按需读取。GitHub 已确认 `Mikasa-0910` 账号身份，仓库操作待验收。
 
-当前推进 **OrbStack VM 部署与消息验收 → 工程部署条件 → 聊天工程任务与 FluxCore 联合验收**。详细状态与限制只维护在[验证边界](docs/VALIDATION.md)，下一步见[推进计划](MIKASA_FUNCTION_PLAN.md)，平台配置见[接入手册](docs/runbooks/CONNECTIONS.md)。
+原生工程迁移已部署 VM，并通过 GPT/Claude 合成任务验证。接下来推进 **VM 稳定性 → 聊天工程任务与 FluxCore 联合验收**。详细状态与限制只维护在[验证边界](docs/VALIDATION.md)，下一步见[推进计划](MIKASA_FUNCTION_PLAN.md)，平台配置见[接入手册](docs/runbooks/CONNECTIONS.md)。
 
 ## 开发
 

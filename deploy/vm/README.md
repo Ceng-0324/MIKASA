@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | [API](mikasa-api.service) | `serve` | 已有模板；HTTP 聊天的每账号 Hermes Gateway 由 API 管理 |
 | 原生工程 | `engineer --cwd DIR -- chat` | 按需启动；工程 profile 独立于消息服务，不需要 Mikasa runner |
-| [飞书 / 微信](mikasa-gateway.service) | `gateway --platform feishu --platform weixin` | 统一消息服务模板；本阶段首先部署 |
+| [飞书 / 微信](mikasa-gateway.service) | `gateway --platform feishu --platform weixin` | 统一消息服务，已在 OrbStack 启用 |
 
 本机已部署到 OrbStack `mylinux`（Ubuntu 26.04 arm64），使用独立 Python 3.12.14 与专用 `mikasa` 用户，消息服务已启用。它依赖 Mac 保持运行，不能等同于独立云主机的持续在线。部署结果和验收限制统一记录在[验证边界](../../docs/VALIDATION.md)。
 
@@ -49,6 +49,8 @@ Mac 上通过 `orb -m mylinux -u root -w / systemctl status mikasa-gateway.servi
 切换失败时先停止 VM 消息服务，再恢复 Mac 原 Gateway。若 VM 已接收新消息，先保存新状态并核对会话/记忆差异；直接启动旧副本会丢失迁移后的连续性。回退不删除任一侧数据库或重新执行工程副作用。
 
 ## 工程进程
+
+本机已完成原生工程部署与 GPT/Claude 合成任务验收，安装 gh、Node 22/npm 和 ripgrep。专用 mikasa 账号的 gh 登录与 Git credential helper 已配置，Hermes terminal 只读身份检查通过；凭据为 gh 自行维护的 0600 文件，不在代码包或普通状态备份中。升级恢复点为 `/var/backups/mikasa/native-engineering-20260922`，代码/配置恢复点为 `/var/backups/mikasa-service/native-engineering-20260922`。
 
 工程入口以 mikasa 用户运行，读取同一私密 EnvironmentFile。持久 workspace 默认在 /var/lib/mikasa/engineer/<账号摘要>/workspace，也可指定该用户可写的完整仓库。不要让工程 CLI 共用消息 profile；Mikasa 启动器自动选择工程 profile，并将 Hermes venv 放在 PATH 首位。Git/gh、项目语言与浏览器等依赖按原生能力准备；无强制 Docker 或禁网要求。
 

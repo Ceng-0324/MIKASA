@@ -1,49 +1,48 @@
 # 验证边界
 
-固定 Hermes 0.21.3，revision `f9524d3f119c672e4a4444f56d582e7475716ba3`。已验证 macOS arm64 / Python 3.12.13，以及 OrbStack Ubuntu 26.04 arm64 / Python 3.12.14；未执行远端 Python 3.13 CI 或 Hermes 上游完整测试套件。
+固定 Hermes 0.21.3，revision `f9524d3f119c672e4a4444f56d582e7475716ba3`。本轮在 macOS arm64/Python 3.12.13 与 OrbStack Ubuntu 26.04 arm64/Python 3.12.14 验证，不修改上游源码。
 
-## 本地验证
+## 当前迁移结果
 
-原生工程迁移：已通过新工程入口的配置/工具一致性、人格与工程规则加载、共享记忆、实际 Git/二进制/.github 操作和后台进程测试。规则文件的原生审批以测试批准回调验证，不移除 Hermes 的原生确认。Kanban 一次调度认领两个任务、Cron 本地脚本执行及持久状态通过固定 SDK 检查；不等同于真实模型驱动的无人值守调度验收。旧 runner、快照和 worker 协议已删除，对应旧测试退休；保留聊天、路由、状态与失败路径回归。
+工程入口直接启动完整 Hermes CLI。旧 worker JSON、快照容器、固定工具/skills 白名单、宿主预算、串行 runner、最终检查/提交与发布业务引擎已删除。身份、工程规则、方法 skills、CCH 路由和账号长期记忆保留；工程会话、工具、插件、MCP、Kanban/Cron 由原生配置管理。
 
-新备份清单 v3、旧 v2 读取、共享链接、Git 工作区、WAL 和运行路径恢复已验证。原生 Gateway/SSE 探针完成幂等、取消、停服备份及新目录恢复。当前真实 CCH 工程入口与 VM 工程部署仍在验证；下文旧快照工程结果仅是历史证据，不能代表新入口已验收。
+两端 94 项 unittest 通过。退休功能对应旧测试已删除，当前测试覆盖聊天、路由、鉴权、配置、原生状态、备份与工程行为；测试数量变化不表示覆盖能力退化。固定 SDK 验证：
 
-迁移前全量 200 项 unittest 在 macOS 和目标 Linux VM 通过，Linux 耗时 244.450 秒。固定 Hermes 组件检查覆盖多会话准入、同群 FIFO 与发送者保留、中文模型切换作用范围及默认值保存失败反馈。16 项离线检查在两端通过，包含历史检索的工具发现链路、按需工程规则、原生记忆更新与重启；原生 CLI 探针 13 项通过。`/sethome` 的保存、profile 刷新、进程重启及不携带 `.env` 的恢复继续覆盖，原生投递目标的线程和身份信息通过配置备份保留。
+- 插件加载前后完整工程工具集合一致，用户工具、预算、backend、插件和工程 .env 配置在刷新后保留。
+- 实际原生终端、文件工具操作 Git、二进制和 .github；后台进程启动、查询、终止。
+- 外部仓库规则文件按 Hermes 原生审批后可写；没有 Mikasa 文件禁改门槛。
+- 同一 Kanban 调度周期认领两个任务；Cron 创建、保存并执行本地脚本。调度测试使用生成的子进程回执，不是两个真实模型任务的无人值守验收。
+- v3 备份、v2 兼容、WAL、Git 字节、内部记忆链接、工程会话/看板工作目录重定位。
+- 原生 Gateway/SSE 探针通过幂等、取消、停止、备份和新目录恢复后的历史、记忆与回执。
 
-固定 SDK 与本地夹具已验证 CLI 命令、GPT/Claude 跨协议选择、SessionDB、MEMORY/USER、身份/skills、SSE、取消、幂等、Kanban、Cron 和状态恢复。Docker 夹具另验证工程续话、压缩、共享记忆、工具修复、隔离与最终验收。脚本及依赖见[验收脚本](../scripts/README.md)。这些结果不能替代真实模型或平台验收。
+## 真实模型与平台
 
-## 真实服务
-
-| 范围 | 已验证 | 剩余边界 |
+| 范围 | 当前证据 | 未覆盖边界 |
 | --- | --- | --- |
-| CCH | 合成工程任务、GPT Responses / Claude Messages 会话切换、真实聊天请求 | `default` 分组缺管理端同次路由证据；响应模型名不能证明底层模型身份 |
-| GitHub | 真实 token 调用 `/user`，确认 `Mikasa-0910` | 仓库读写、正式 Review、webhook 未验收 |
-| 飞书 | 官方应用探针、WebSocket、负责人 `/help` 和普通消息往返；开放群聊策略通过固定 SDK 检查 | 发言人以实际发送者元数据识别；同一 profile 共享长期记忆 |
-| 微信 | 原生扫码、统一 Gateway、真实入站与 CCH 回复；VM 迁移后主人确认 `/help`、普通消息、切换 Claude 并切回 GPT 正常 | 记忆提示修复后使用隔离原生 API 自动复验，未重复手机端测试；普通微信群不在当前 iLink 接入能力内 |
-| 身份与 skills | 真实请求中 identity、policy、persona_skill、skills_index 均为 true；工程讨论实际调用 skill_view 读取生成的工程规则与方法 skill | policy 现在表示精简聊天提示，不表示完整工程规章常驻；加载证据不保证每次模型回答均遵循规则 |
-| 微信主人关联 | 真实发送者 ID 与本机绑定一致，关联 `Ceng-0324`；新 SOUL 与插件已加载，双平台恢复 connected | 新身份提示的称呼尚未通过后续模型回答单独验收 |
-| OrbStack VM | `mylinux` Ubuntu 26.04，Python 3.12.14，固定 Hermes 及依赖检查、systemd 校验；GPT/Claude 真实探针、飞书认证、GitHub `/user` 通过；飞书/微信均 connected，主人确认双渠道 `/help` 与普通消息正常 | 未部署独立云主机、Docker 工程执行或公网 API |
+| 原生工程 + CCH | 本机 GPT、VM GPT Responses 与 Claude Messages 均完成 17 项合成验收：观察失败、修复、测试、二进制、.github、原生后台进程、委派、memory、skill_view、本地 Git 提交、退出后恢复原生会话并读回记忆；主会话身份/人格/索引加载通过 | 只证明这些模型和任务样本；未跑所有外部工具、浏览器、MCP 或语言生态 |
+| GitHub | VM 专用账号以 gh 原生认证保存身份，Hermes 实际 terminal → gh → GitHub /user 确认 Mikasa-0910；Git credential helper 已设置 | 本轮没有远端仓库写入、推送、PR、Review 或外部消息；后续按指定任务验收 |
+| 飞书 / 微信 | 正式服务更新后两个渠道均 connected；此前主人确认 /help、普通消息与 GPT/Claude 切换正常 | 本轮未要求重复手机验收；微信 iLink 普通群聊仍不可用 |
+| 记忆与身份 | 工程 profile 链接同账号 memories；本轮真实工程保存及续话读回通过。正式两份 MEMORY/USER 文件与升级前一致，21 个会话、103 条消息保留 | 同一实例的记忆快照不承诺外部改动即时刷新；同 profile 共享记忆不等于每个发言人独立隔离 |
+| VM | mylinux 专用 mikasa 用户，Git/gh、Node 22/npm、ripgrep 和固定 Hermes；原生工程入口已部署，消息 Gateway 仍统一运行 | OrbStack 依赖 Mac；未部署独立云主机或公网 API，未做 VM 重启/故障注入演练 |
+| CCH default 分组 | 模型连接与双协议路由通过 | 仍缺网关管理端同次 providerGroup/供应商日志，响应模型名不能证明分组或底层身份 |
 
-2026-09-22 已将消息服务切换到 VM `/var/lib/mikasa`，专用用户 `mikasa`、单元 `mikasa-gateway.service` 已 enable，Mac 原 Gateway 已退出。迁移 534 个条目，保留 20 个会话、92 条消息、3 条原生会话路由；两份 MEMORY/USER 文件 SHA-256 与源一致（MEMORY 当前为空，不能据此声称已有跨会话记忆验收）。VM 实际停服、备份、恢复到新目录、重启后再次验证数据和双平台连接；尚未演练 Mac 重启或进程异常后的自动拉起。恢复点和运维命令见 [VM 手册](../deploy/vm/README.md)。
+真实工程使用临时 profile 和合成仓库，未访问 FluxCore、未触碰正式记忆或向平台发送消息。完整工程执行不再受 Mikasa 的 worker.timeout 限制，模型服务延迟及 Hermes 原生预算仍有效。
 
-迁移后手机验收由主人确认全部所列步骤正常；VM 新增飞书、微信各一轮用户/助手消息，消息总数从 92 增至 96。原生 delivered 计数从飞书 8 / 微信 4 增至 9 / 6；新增请求的人格、工程规则、persona skill 与 skills 索引加载证据均为 true。手机确认的模型切换与独立 GPT/Claude 探针分别记录，不将加载布尔值当作每轮人格表达质量的保证。
+## 部署与恢复
 
-日常交互修复后，在 VM 隔离 profile 中通过真实 CCH 验证自然语言明确要求记忆会调用原生 memory 并写入磁盘；关闭 Gateway 进程、保留合法投递 `.env`、启动新进程并创建空会话后，能正确读回随机标记。身份、工程规则、人格 skill 与 skills 索引加载证据均通过。测试未修改正式记忆或向消息平台发信，隔离状态已清理；正式消息服务更新后双渠道重新 connected。
+正式代码在 /opt/mikasa，状态在 /var/lib/mikasa；消息 Gateway 与工程 profile 独立运行。工程默认 workspace 持久，memories 链接正式账号。无工程 platform_toolsets 或 agent 预算覆写，CCH 来源与原生偏好继续保存。
 
-本轮交互调整在 VM 隔离 profile 通过真实 CCH 验证：GPT Responses 与 Claude Messages 两个独立 run 同时处于 running，随后均完成；普通问候未加载工程 skill，也未输出 JSON。旧聊天仅保留随机地点名、未写 memory，新空会话主动通过原生工具发现和 session_search 正确找回。工程任务拆解讨论实际读取 mikasa-engineering 和方法 skill，使用自然语言回答且未执行仓库操作。模型行为只代表这些样本，未重复手机端验收。正式服务已更新，飞书、微信均 connected；恢复点为 `/var/backups/mikasa/interaction-history-20260922`。
+2026-09-22 升级前确认无活跃 Agent 后停服，保存 536 项状态到 `/var/backups/mikasa/native-engineering-20260922`；旧代码和配置保存在 `/var/backups/mikasa-service/native-engineering-20260922`。新代码成功将该真实 v2 备份恢复到临时新目录，核验会话、消息与记忆后删除演练副本。正式历史和微信绑定未清空，重启后飞书、微信均连接。旧任务数据库和工作区继续作为档案，未自动重跑。
 
-## 运行限制
+GitHub 登录使用 VM 独立用户的原生 gh 认证，文件 0600，不复制个人 Codex/Claude/GitHub 认证文件。gh 凭据位于用户 .config/gh，属于普通受管状态备份之外的独立认证；轮换或恢复使用原生登录流程。
 
-- 私聊按平台和聊天区分，群聊及话题共享各自上下文；旧成员会话保留，不自动合并。当前 profile 共享长期记忆、可检索历史与系统命令能力，不是每人的独立沙箱；区分发言人和不转述私人内容依靠交互约定。
-- 原生不同会话并发，同会话 FIFO 排队；修复前由 Mikasa 写死的全局上限 1 已移除。max_concurrent_sessions 若重新配置为有限值，满额仍会拒绝新会话，不是全局排队器。真实并发在隔离 API 中验证，消息准入与队列使用固定 Hermes 组件验证；VM 资源和 CCH 限流仍可能影响响应。
-- 微信启动曾出现一次 iLink 连接失败，随后恢复并成功投递；`connected` 本身不能证明持续收发正常。
-- macOS profile 路径过长曾触发可选 liveness UNIX socket 警告；VM 已改用 `/var/lib/mikasa` 短路径，连接证据以当前进程写入的原生状态为准。
-- `/sethome` 的 profile `.env` 冲突已修复并部署到 VM：允许飞书/微信原生投递字段，启动从 `config.yaml` 读回完整目标；外部凭据仍显式注入。历史 `native-home-channel.env.saved` 保留，原飞书目标已在 canonical 配置中，无需覆盖或重新设置。
-- 原生 CLI 的自定义 CCH provider 下 `/new` 不可靠地恢复默认模型；CLI 同进程 `/model --global` 不刷新启动快照。显式 `/model ID` 可切换，保存默认值在重启后生效。消息 Gateway 的原生反馈已验证会话、单轮、默认值及写入失败语义；工程默认值与 CCH 分组不跟随聊天选择。
-- OrbStack 依赖 Mac 在线；独立公网 VM、TLS、聊天工程入口及 FluxCore 联合验收尚未完成。消息服务主动出站，不以公网 API 为前提。推进顺序见[计划](../MIKASA_FUNCTION_PLAN.md)。
+## 保留的原生边界
 
-## 证据维护
+- 聊天尚未接入仓库执行，仍使用 memory、skills 与当前 profile 历史检索；聊天工程与 FluxCore 最后联合验收。
+- 工程工具的确认、凭据清理、规则文件保护、工具依赖、操作系统和平台权限与相同配置的 Hermes 一致。例如默认文件工具修改仓库 AGENTS.md 需交互批准，--yolo 不取消这项原生保护；GH_TOKEN 不直接继承给 terminal，VM 已通过 gh 自身认证解决。
+- 不同聊天会话并发，同会话 FIFO；有限准入上限满额时仍按原生行为拒绝，不是全局队列。群上下文共享，区分发言人与不转述私人内容依靠身份约定。
+- 固定版本原生 CLI 的自定义 CCH provider 下 /new 不可靠地重置默认模型，同进程 --global 不刷新启动快照；显式 /model ID 可切换，保存值重启生效。
+- 外部 cwd、原生 Git worktree 的外部链接、自定义工具存储、Cron 脚本内绝对路径需独立备份和核对。GitHub token scope 与仓库权限没有被本地工具恢复自动扩大。
+- 未运行 Python 3.13 远端 CI、Hermes 全部上游测试或所有原生工具的外部服务验收；不能把“完整复用原生入口”写成“每个外部能力均已验收”。
 
-本文件只维护当前结论和限制，逐轮记录保留在 Git 历史。清理前详细记录可用 `git show 18563e6:docs/VALIDATION.md` 查看；更早报告见 `git show 3b436b1:docs/VALIDATION.md`。旧验证不证明后续代码；功能变更更新对应验收结论，纯文档整理的检查结果记录在提交说明中。
-
-运行状态、会话、记忆、凭据和请求回执留在本机。过期二维码、已关闭的调试日志和可再生成字节码可以清理；固定 Hermes 源码及 Python 环境虽位于 `runtime/cache`，仍是运行依赖。
+旧轮次和已退休快照执行器的验证保留在 Git 历史，不作为当前入口的完成证据。当前推进顺序见 [计划](../MIKASA_FUNCTION_PLAN.md)，原生使用方式见 [运维](runbooks/OPERATIONS.md)。

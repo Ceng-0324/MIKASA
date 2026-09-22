@@ -24,7 +24,7 @@ def launch(config, arguments=(), *, cwd=None):
     workspace = Path(cwd or settings.get('cwd') or home / 'workspace').expanduser().resolve()
     if not workspace.is_dir():
         raise MikasaError('工程工作目录不存在；先准备仓库或工作目录')
-    env = {k: os.environ[k] for k in ('PATH', 'LANG', 'LC_ALL', 'TMPDIR', 'TERM', 'COLORTERM', 'SSL_CERT_FILE')
+    env = {k: os.environ[k] for k in ('HOME', 'USER', 'LOGNAME', 'PATH', 'LANG', 'LC_ALL', 'TMPDIR', 'TERM', 'COLORTERM', 'SSL_CERT_FILE')
            if k in os.environ}
     env.update({k: os.environ[k] for k in settings.get('env_allowlist', []) if k in os.environ})
     env['PATH'] = str(python.parent) + os.pathsep + env.get('PATH', os.defpath)
