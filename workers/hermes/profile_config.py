@@ -27,7 +27,7 @@ def merge(current, generated):
     merged = {**generated, **current}
     # One-time migration from Mikasa's single-session, silent message defaults.
     # Afterwards /busy and native display/session preferences remain Hermes-owned.
-    if current.get("_mikasa_interaction_defaults") != 1:
+    if "max_concurrent_sessions" in generated and current.get("_mikasa_interaction_defaults") != 1:
         for name in ("max_concurrent_sessions", "group_sessions_per_user", "thread_sessions_per_user", "streaming"):
             merged[name] = generated[name]
         display = {**current.get("display", {}), **generated["display"]}
@@ -49,7 +49,8 @@ def merge(current, generated):
            if not (isinstance(v, dict) and managed(v.get("provider")))},
         **generated["model_aliases"],
     }
-    merged["platform_toolsets"] = {**current.get("platform_toolsets", {}), **generated["platform_toolsets"]}
+    if "platform_toolsets" in generated:
+        merged["platform_toolsets"] = {**current.get("platform_toolsets", {}), **generated["platform_toolsets"]}
     for name, fields in (("skills", ("external_dirs", "auto_load")), ("plugins", ("enabled",))):
         merged[name] = {**generated[name], **current.get(name, {})}
         for field in fields:
@@ -59,7 +60,8 @@ def merge(current, generated):
 
 def main():
     path = Path(sys.argv[1])
-    validate_home_env(path.parent / ".env")
+    if "--engineering" not in sys.argv:
+        validate_home_env(path.parent / ".env")
     if path.is_symlink():
         raise ValueError("profile config cannot be a symlink")
     current = {}

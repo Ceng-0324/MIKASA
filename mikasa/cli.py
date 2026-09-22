@@ -20,6 +20,9 @@ def parser():
     diagnostic.add_argument("--probe-model", action="store_true", help="经当前 worker 发起一次真实模型调用；会消耗模型额度")
     diagnostic.add_argument("--model", help="诊断指定模型的路由；不改变默认模型或聊天")
     commands.add_parser("serve")
+    engineer = commands.add_parser("engineer", help="完整 Hermes 工程入口；-- 后的参数直接交给原生 CLI")
+    engineer.add_argument("--cwd", help="实际仓库或工作目录，不导出文本快照")
+    engineer.add_argument("arguments", nargs=argparse.REMAINDER)
     connections = commands.add_parser("connections", help="检查平台配置；--probe 只读联网，不发消息或发布")
     connections.add_argument("platform", choices=("github", "feishu", "weixin"))
     connections.add_argument("--probe", action="store_true")
@@ -103,6 +106,9 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         config = Config.load(args.config)
+        if args.command == 'engineer':
+            from .engineering_cli import launch
+            return launch(config, args.arguments, cwd=args.cwd)
         if args.command == "weixin-login":
             from .connections import login_weixin
             return login_weixin(config)

@@ -42,9 +42,9 @@ def provider_id(source):
     return "cch-" + hashlib.sha256(json.dumps(source, sort_keys=True).encode()).hexdigest()[:16]
 
 
-def profile_home(config, actor):
+def profile_home(config, actor, *, engineering=False):
     config.authorize(actor)
-    return config.runtime / "native" / hashlib.sha256(actor.encode()).hexdigest()[:24]
+    return config.runtime / ("engineer" if engineering else "native") / hashlib.sha256(actor.encode()).hexdigest()[:24]
 
 
 def verify_source(source):
@@ -78,13 +78,13 @@ def native_installation(config):
 
 
 @runtime_operation
-def prepare_profile(config, actor):
+def prepare_profile(config, actor, *, engineering=False):
     """Regenerate immutable inputs only. Never overwrite native memories or sessions."""
-    home = profile_home(config, actor)
+    home = profile_home(config, actor, engineering=engineering)
     home.mkdir(parents=True, exist_ok=True, mode=0o700)
     settings = config.data.get("worker", {})
     source, python = native_installation(config)
-    actor_identity = {"actor": actor}
+    actor_identity = {"actor": actor, "engineering": engineering}
     binding_path = config.runtime / "credentials/weixin.json"
     if binding_path.exists() or binding_path.is_symlink():
         from .connections import weixin_binding
@@ -128,8 +128,28 @@ def prepare_profile(config, actor):
                     "platforms": {"weixin": {"streaming": False, "long_running_notifications": True}}},
         "fallback_providers": [],
     }
+    if engineering:
+        # Native CLI/Gateway toolsets, budgets, backends and extensions stay native.
+        for name in ("platform_toolsets", "agent", "gateway", "max_concurrent_sessions",
+                     "group_sessions_per_user", "thread_sessions_per_user", "streaming", "fallback_providers"):
+            native_config.pop(name, None)
+        native_config["terminal"] = {"backend": "local"}
+        native_config["display"] = {"language": "zh"}
+        native_config["skills"]["auto_load"].append("mikasa-engineering")
+        account = profile_home(config, actor)
+        target = account / "memories"
+        for path in (account, target, home / "memories"):
+            if path.is_symlink() and (path != home / "memories" or path.resolve() != target.resolve()):
+                raise MikasaError("工程记忆绑定与账号不匹配；原数据保留")
+        target.mkdir(parents=True, exist_ok=True, mode=0o700)
+        memory = home / "memories"
+        if not memory.is_symlink():
+            if memory.exists():
+                raise MikasaError("工程记忆目录已存在且未绑定；原数据保留")
+            memory.symlink_to(target, target_is_directory=True)
     (home / "workspace").mkdir(exist_ok=True, mode=0o700)
-    refreshed = subprocess.run([str(python), str(config.root / "workers/hermes/profile_config.py"), str(home / "config.yaml")],
+    refreshed = subprocess.run([str(python), str(config.root / "workers/hermes/profile_config.py"), str(home / "config.yaml"),
+                                *( ["--engineering"] if engineering else [])],
                                input=json.dumps(native_config), capture_output=True, text=True, timeout=30,
                                env={k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL", "TMPDIR") if k in os.environ})
     if refreshed.returncode:

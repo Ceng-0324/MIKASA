@@ -24,7 +24,7 @@ class Config:
             root = (path.parent / data.get("project_root", "../..")).resolve()
             if data.get("version") != 1:
                 raise MikasaError("配置 version 必须为 1")
-            allowed = {"version", "project_root", "runtime", "owner", "bot", "members", "repositories", "worker", "server", "github", "feishu", "schedules"}
+            allowed = {"version", "project_root", "runtime", "owner", "bot", "members", "repositories", "worker", "server", "github", "feishu", "schedules", "engineering"}
             if set(data) - allowed:
                 raise MikasaError("配置包含未知字段")
             if data.get("owner") != "Ceng-0324" or data.get("bot") != "Mikasa-0910":
@@ -80,6 +80,15 @@ class Config:
                 if type(value) is not int or not 1 <= value <= upper:
                     raise MikasaError(f"worker.{key} 超出范围")
             members = data.get("members", [])
+            engineering = data.get('engineering', {})
+            if not isinstance(engineering, dict) or set(engineering) - {'cwd', 'env_allowlist'}:
+                raise MikasaError('engineering 只接受默认 cwd 和显式环境变量名称')
+            if 'cwd' in engineering and (not isinstance(engineering['cwd'], str) or not Path(engineering['cwd']).is_absolute()):
+                raise MikasaError('engineering.cwd 必须为绝对目录')
+            if not isinstance(engineering.get('env_allowlist', []), list) or any(
+                    not isinstance(n, str) or not re.fullmatch(r'[A-Z_][A-Z0-9_]*', n)
+                    for n in engineering.get('env_allowlist', [])):
+                raise MikasaError('engineering.env_allowlist 必须为环境变量名称数组')
             if not isinstance(members, list) or not all(isinstance(m, str) and m for m in members):
                 raise MikasaError("members 必须为账号数组")
             interval = data.get("schedules", {}).get("audit_interval_seconds", 0)
