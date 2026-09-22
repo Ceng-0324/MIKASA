@@ -18,11 +18,8 @@ RestartSec=10
 TimeoutStopSec=40
 KillMode=control-group
 UMask=0077
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/mikasa
+# Dedicated machine: the mikasa account administers Linux through sudo.
+# Keep host isolation at the VM boundary, not in the agent's process namespace.
 StandardOutput=journal
 StandardError=journal
 

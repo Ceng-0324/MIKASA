@@ -15,11 +15,7 @@ RestartSec=5
 TimeoutStopSec=40
 KillMode=control-group
 UMask=0077
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/mikasa
+# Dedicated machine: preserve the same administrator environment as the CLI.
 
 [Install]
 WantedBy=multi-user.target

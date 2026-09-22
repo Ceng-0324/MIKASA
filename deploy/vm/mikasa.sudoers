@@ -1,0 +1,2 @@
+# Install only inside Mikasa's dedicated machine, as root:root with mode 0440.
+mikasa ALL=(ALL:ALL) NOPASSWD: ALL
