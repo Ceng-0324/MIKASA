@@ -31,6 +31,14 @@ def merge(current, generated):
     # Add newly introduced display defaults to existing profiles, preserving
     # explicit choices (including False) and platform-specific preferences.
     merged["display"] = {**generated["display"], **current.get("display", {})}
+    if "max_concurrent_sessions" in generated:
+        merged["agent"] = {**generated["agent"], **current.get("agent", {})}
+        # Upgrade the former Mikasa progress default once, retaining custom
+        # platform overrides and subsequent user changes.
+        if current.get("_mikasa_live_progress") != 1:
+            if merged["display"].get("tool_progress") == "new":
+                merged["display"]["tool_progress"] = "all"
+            merged["_mikasa_live_progress"] = 1
     # One-time migration from Mikasa's single-session, silent message defaults.
     # Afterwards /busy and native display/session preferences remain Hermes-owned.
     if "max_concurrent_sessions" in generated and current.get("_mikasa_interaction_defaults") != 1:

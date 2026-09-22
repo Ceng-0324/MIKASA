@@ -4,6 +4,30 @@ import json
 import threading
 
 
+def refresh_identity_prompts(home, sections):
+    """Let Hermes rebuild stale Mikasa prompts without resetting conversations."""
+    if not (home / "state.db").exists():
+        return 0
+    from hermes_state import SessionDB
+    soul = (home / "SOUL.md").read_text().strip()
+    db = SessionDB(db_path=home / "state.db")
+    refreshed = 0
+    try:
+        rows = db.list_sessions_rich(limit=-1, include_children=True, include_archived=True,
+                                     include_hidden=True, project_compression_tips=False)
+        for row in rows:
+            prompt = row.get("system_prompt") or ""
+            if "mikasa.policy." in prompt and (soul not in prompt or any(s not in prompt for s in sections)):
+                db.update_system_prompt(row["id"], None)
+                refreshed += 1
+    finally:
+        db.close()
+    if refreshed:
+        from agent.prompt_builder import clear_skills_system_prompt_cache
+        clear_skills_system_prompt_cache(clear_snapshot=True)
+    return refreshed
+
+
 def register(ctx):
     from hermes_constants import get_hermes_home
     home = get_hermes_home()
@@ -19,6 +43,8 @@ def register(ctx):
                "人格依据 SOUL.md；实质工程讨论先用 skill_view 加载 mikasa-engineering，再按需读取 plan、implement 或 review skill。"
                "日常聊天不加载工程流程，不背诵内部账号校验、工具边界或规则；仅在影响当前请求时说明。"
                "工程任务开始时简短说明动作；长任务在关键进展、阻塞或方向变化时反馈，结果说明实际修改、验证和剩余事项。"
+               "执行终端命令前说明要做什么；命令可能长时间运行时使用原生后台进程与 process_manage 获取进展，"
+               "在当前会话及时说明已观察到的输出或仍在等待，不把全部过程攒到最终回答。不要用反复重跑代替查看同一进程。"
                "进度和结果由当前会话原生投递，不自行向其他人或渠道发送消息。"
                "没有明确授权时不推送、不对外发消息或发布，不自动合并。未执行的操作不得声称完成。"
                "模型与会话操作使用 Hermes 原生 /model、/new、/busy、/stop；不能仅靠文字声称切换成功。"
@@ -36,8 +62,10 @@ def register(ctx):
                    "不是 Mikasa 的 iLink 机器人账号。仅在微信发送者 ID 匹配时适用，不凭昵称或自称识别。")
     if len(policy) > 7900:
         raise RuntimeError("canonical policy exceeds native injection budget")
-    for offset in range(0, len(policy), 3500):
-        ctx.register_system_prompt_section(f"mikasa.policy.{offset // 3500}", policy[offset:offset + 3500], max_chars=3500)
+    sections = [policy[offset:offset + 3500] for offset in range(0, len(policy), 3500)]
+    for index, section in enumerate(sections):
+        ctx.register_system_prompt_section(f"mikasa.policy.{index}", section, max_chars=3500)
+    refreshed = refresh_identity_prompts(home, sections)
 
     lock = threading.Lock()
     evidence_dir = home / "request-evidence"
@@ -81,5 +109,5 @@ def register(ctx):
     (home / "policy-loaded.json").write_text(json.dumps({
         "policy_sha256": hashlib.sha256(policy.encode()).hexdigest(),
         "soul_sha256": hashlib.sha256((home / "SOUL.md").read_bytes()).hexdigest(),
-        "policy_chars": len(policy), "native_memory": True,
+        "policy_chars": len(policy), "native_memory": True, "prompts_refreshed": refreshed,
     }))

@@ -39,6 +39,10 @@ Codex/Claude 来源仅显式只读本机配置；VM 使用环境引用，不复�
 
 聊天 Gateway 同样直接使用原生完整工具集，可在原会话执行工程任务并反馈进度与结果。各入口共用系统账号、依赖和原生 gh 认证，保留各自会话与工具偏好。没有受限快照、无网容器、文件黑名单、固定任务工具集合、worker JSON 或宿主最终验收/提交。默认 local backend 的工程能力等于同账号原生 Hermes；外部能力仍需依赖和平台权限。
 
+聊天默认逐次显示工具进度，长任务每 15 秒通过原生 Gateway 提醒仍在执行；可在 profile 的 `display.tool_progress`、`agent.gateway_notify_interval` 和平台覆盖中调整。飞书支持消息编辑，微信使用独立等待提醒。提醒不等于终端 stdout 逐行直播；长命令使用 Hermes 原生后台进程和 `process_manage` 查看输出，模型在工具调用间反馈已观察到的进展。
+
+更新身份或协作提示并重启入口时，插件通过原生 SessionDB 清除过期的 Mikasa 系统提示缓存，下次请求重新组装；消息历史、会话 ID 和持久记忆保留，无需 `/new`。文件同步和模型实际加载分别由 `policy-loaded.json` 摘要与 `native-evidence.jsonl` 请求证据检查。
+
 ## 保留的集成文件
 
 | 文件 | 职责 |

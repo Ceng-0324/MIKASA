@@ -413,11 +413,44 @@ for platform in ('feishu','weixin'):
     enabled=sorted(_get_platform_tools(cfg,platform))
     tools={t['function']['name'] for t in get_tool_definitions(enabled_toolsets=enabled,quiet_mode=True,skip_tool_search_assembly=True)}
     assert {'terminal','read_file','write_file','process_manage','delegate_task','skill_manage'} <= tools, tools
-    assert resolve_display_setting(cfg,platform,'tool_progress') == 'new'
+    assert resolve_display_setting(cfg,platform,'tool_progress') == 'all'
     assert resolve_display_setting(cfg,platform,'interim_assistant_messages')
     assert resolve_display_setting(cfg,platform,'long_running_notifications')
+assert cfg['agent']['gateway_notify_interval'] == 15
 for name in ('terminal','write_file','delegate_task','skill_manage','web_search'):
     assert get_pre_tool_call_directive(name, {})[0] is None
+# Exercise the actual pinned SessionDB, including deduplicated prompt storage,
+# hidden/archived rows and more than the native default page of 20 sessions.
+import importlib.util
+from hermes_state import SessionDB
+spec=importlib.util.spec_from_file_location('mikasa_plugin_test',home/'plugins/mikasa/__init__.py')
+plugin=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(plugin)
+policy=[s.content for s in render_system_prompt_sections({})]
+soul=(home/'SOUL.md').read_text().strip()
+fresh='mikasa.policy.0 '+soul+' '+''.join(policy)
+db=SessionDB(home/'state.db')
+for i in range(23):
+    db.create_session('stale-'+str(i),source='feishu',system_prompt='mikasa.policy.0 old identity')
+db.set_session_hidden('stale-0',True)
+db.set_session_archived('stale-1',True)
+db.create_session('current',source='weixin',system_prompt=fresh)
+db.create_session('foreign',source='cli',system_prompt='unrelated prompt')
+db.create_session('policy-old',source='feishu',system_prompt='mikasa.policy.0 '+soul)
+db.append_message('stale-0','user','history must survive')
+history=db.get_messages('stale-0')
+db.close()
+assert plugin.refresh_identity_prompts(home,policy) == 24
+db=SessionDB(home/'state.db')
+assert db.get_session('stale-0')['system_prompt'] is None
+assert db.get_session('stale-22')['system_prompt'] is None
+assert db.get_session('current')['system_prompt'] == fresh
+assert db.get_session('foreign')['system_prompt'] == 'unrelated prompt'
+assert db.get_messages('stale-0') == history
+assert db.get_session('stale-0')['hidden']
+assert db.get_session('stale-1')['archived']
+db.close()
+assert plugin.refresh_identity_prompts(home,policy) == 0
 '''
         for name in ('engineering-contract.md', 'engineering-workflow.md'):
             self.assertIn((ROOT / name).read_text(), generated)

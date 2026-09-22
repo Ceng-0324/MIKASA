@@ -46,7 +46,7 @@ class NativeProfileTests(unittest.TestCase):
         config = json.loads((home/'config.yaml').read_text())
         self.assertEqual(config['skills']['auto_load'], ['mikasa-persona'])
         self.assertNotIn('platform_toolsets', config)
-        self.assertNotIn('agent', config)
+        self.assertEqual(config['agent'], {'gateway_notify_interval': 15})
         self.assertEqual((home/'SOUL.md').read_bytes(), (ROOT/'identity.md').read_bytes())
 
     def test_existing_display_gets_missing_defaults_without_resetting_choices(self):
@@ -365,6 +365,7 @@ class NativeProfileTests(unittest.TestCase):
         path = home / 'config.yaml'
         current = json.loads(path.read_text())
         current.pop('_mikasa_native_tools', None)
+        current.pop('_mikasa_live_progress', None)
         current.update(platform_toolsets={'feishu': ['memory', 'skills', 'session_search'], 'weixin': ['terminal']},
                        agent={'max_turns': 12, 'reasoning_effort': 'high'},
                        gateway={'api_server': {'max_concurrent_runs': 1, 'port': 9000}})
@@ -374,11 +375,12 @@ class NativeProfileTests(unittest.TestCase):
         prepare_profile(self.config, self.config.owner)
         migrated = json.loads(path.read_text())
         self.assertEqual(migrated['platform_toolsets'], {'weixin': ['terminal']})
-        self.assertEqual(migrated['agent'], {'reasoning_effort': 'high'})
+        self.assertEqual(migrated['agent'], {'reasoning_effort': 'high', 'gateway_notify_interval': 15})
         self.assertEqual(migrated['gateway']['api_server'], {'port': 9000})
-        self.assertEqual(migrated['display']['tool_progress'], 'new')
+        self.assertEqual(migrated['display']['tool_progress'], 'all')
         self.assertEqual((home/'state.db').read_bytes(), b'existing-history')
         migrated['agent']['max_turns'] = 12
+        migrated['agent']['gateway_notify_interval'] = 75
         migrated['display']['tool_progress'] = 'off'
         path.write_text(json.dumps(migrated))
         prepare_profile(self.config, self.config.owner)
