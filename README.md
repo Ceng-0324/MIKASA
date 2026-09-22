@@ -31,7 +31,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor
 
 **同一账号 profile 的终端、HTTP 聊天和消息 Gateway 互斥**，切换入口前需停止占用它的进程。飞书和微信应在同一条 Gateway 命令中启动。
 
-原生聊天使用 `/model 完整模型ID`、`/new`、`/help` 等系统命令；GPT/Claude 需配置相应 CCH provider 和协议。聊天可保存记忆、检索历史、按需读取 skills；仓库工程任务仍走独立入口。不同会话并发，同一会话忙碌时原生排队；命令与历史范围见[聊天手册](docs/runbooks/CHAT.md)。
+原生聊天使用 `/model 完整模型ID`、`/new`、`/help` 等系统命令；GPT/Claude 需配置相应 CCH provider 和协议。可以在飞书、微信中直接交付工程任务，由 Hermes 使用工作机上的仓库和原生工具执行，并在原会话反馈进度与结果。不同会话并发，同一会话忙碌时原生排队；使用方式见[聊天手册](docs/runbooks/CHAT.md)。
 
 默认示例未配置模型、仓库或外部发布，`doctor` 只检查本地条件。平台凭据与扫码见[接入手册](docs/runbooks/CONNECTIONS.md)，模型配置见 [CCH 手册](docs/runbooks/CCH.md)。
 
@@ -41,7 +41,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json doctor
 
 飞书、微信共用 Hermes Gateway；微信用于主人私聊，团队群协作用飞书。普通群及话题共享上下文，同一 profile 共享长期记忆和历史。人格常驻，完整工程规则按需读取。GitHub 已确认 `Mikasa-0910` 账号身份，仓库操作待验收。
 
-已迁入专用 OrbStack `mikasa` 工作机：机内可免密 sudo 管理系统、依赖和容器，宿主共享与机器间网络关闭。消息服务、会话和记忆已迁移，进程异常和机器重启恢复通过。接下来推进 **聊天工程任务与 FluxCore 联合验收**。详细状态与限制只维护在[验证边界](docs/VALIDATION.md)，下一步见[推进计划](MIKASA_FUNCTION_PLAN.md)，机器使用见[工作机手册](deploy/vm/README.md)。
+已迁入专用 OrbStack `mikasa` 工作机：机内可免密 sudo 管理系统、依赖和容器，宿主共享与机器间网络关闭。聊天与终端均使用原生工程工具，身份和记忆保留。外部工具仍需相应依赖、账号和服务权限；后续以 **FluxCore 验收真实仓库协作**。下一步见[推进计划](MIKASA_FUNCTION_PLAN.md)，机器使用见[工作机手册](deploy/vm/README.md)。
 
 ## 开发
 

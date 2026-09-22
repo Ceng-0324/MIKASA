@@ -90,11 +90,11 @@ print(json.dumps({'plugin_loaded':p['enabled'] and not p['error'],
  'native_engineering_skills':all(engineering),
  'canonical_rules_on_demand':on_demand and '工程契约' in rule_text and '工程工作流' in rule_text,
  'native_history_search': 'reply-50' in json.dumps(history),
- 'native_history_discovery_bridge':'session_search' in described.get('tools',{}) and name=='session_search' and blocked is None and get_pre_tool_call_directive(name,args)[0]=='block',
+ 'native_history_discovery_bridge':'session_search' in described.get('tools',{}) and name=='session_search' and blocked is None and get_pre_tool_call_directive(name,args)[0] is None,
  'native_memory_convention_update':all(r.get('success') and not r.get('staged') for r in (added,replaced,user)),
- 'tool_policy_blocks_side_effects':all(get_pre_tool_call_directive(n,{})[0]=='block' for n in ['terminal','write_file','skill_manage','send_message']),
+ 'native_engineering_tools_unrestricted':all(get_pre_tool_call_directive(n,{})[0] is None for n in ['terminal','write_file','skill_manage','delegate_task']),
  'native_memory_skills_history_allowed':all(get_pre_tool_call_directive(n,{})[0] is None for n in ['memory','skill_view','skills_list','session_search','tool_search','tool_describe','tool_call']),
- 'other_profile_history_blocked':all(get_pre_tool_call_directive('session_search',a)[0]=='block' for a in [{'profile':'other'},{'session_id':'other/session'}])}))'''])
+ 'native_history_policy':all(get_pre_tool_call_directive('session_search',a)[0] is None for a in [{'profile':'other'},{'session_id':'other/session'}])}))'''])
         checks.update(json.loads(output))
         # A fresh SDK process loads updated native memory; no Mikasa shadow store.
         output = execute([str(python), '-c', '''import os,sys,json

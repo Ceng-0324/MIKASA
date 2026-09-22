@@ -34,6 +34,8 @@ python3.12 -m mikasa --config config/local/hermes-cch.json restore /secure/backu
 
 v3 清单覆盖 runtime 下 native、engineer、mikasa.sqlite3 及旧 engineering/kanban/scheduler/workspaces。使用 Hermes WAL 安全快照，文件记录 SHA-256，保留内部记忆链接和 Git 对象，支持读取旧 v2 备份。恢复到源目录外的新目标，不覆盖、不启动服务、不自动执行旧任务。
 
+聊天和独立工程的受管 workspace 均按项目文件备份，其中名为 cache、logs 的源码目录不作为运行缓存删除。原生 profile 的缓存、日志和 Gateway 控制 socket/路径指针排除；这些连接端点由 Hermes 启动时重建。
+
 外部工程 cwd、外部符号链接、认证文件及未受管数据不包含；外部链接会拒绝备份。配置密钥字段被排除，key_env 引用保留。备份包含私密会话和本机 .api-key，不能公开。恢复后重新注入外部凭据并核对工作区、原生配置与自定义路径；Git worktree 的外部或绝对链接按 Git 原生 repair 流程处理。自定义 Cron 脚本的绝对路径和外部仓库需另行核对。
 
 备份不会把工程限制为受管 workspace；选择外部 cwd 时同时承担独立备份责任。目录权限 0700，文件 0600/可执行文件 0700。VM 启动、恢复点与部署步骤见 [VM 手册](../../deploy/vm/README.md)。

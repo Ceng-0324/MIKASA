@@ -77,6 +77,20 @@ def native_installation(config):
     return source, python
 
 
+def runtime_environment(config, home, source, python, credentials):
+    """Use the Linux account and explicitly supplied tool credentials in every entry."""
+    env = {k: os.environ[k] for k in ("HOME", "USER", "LOGNAME", "PATH", "LANG", "LC_ALL", "TMPDIR",
+                                     "TERM", "COLORTERM", "SSL_CERT_FILE") if k in os.environ}
+    for section in ("worker", "engineering"):
+        env.update({k: os.environ[k] for k in config.data.get(section, {}).get("env_allowlist", []) if k in os.environ})
+    env["PATH"] = str(python.parent) + os.pathsep + env.get("PATH", os.defpath)
+    token = os.environ.get(config.data.get("github", {}).get("token_env", "MIKASA_GITHUB_TOKEN"))
+    if token:
+        env["GH_TOKEN"] = token
+    env.update(credentials, HERMES_HOME=str(home), MIKASA_HERMES_SOURCE=str(source), PYTHONUNBUFFERED="1")
+    return env
+
+
 @runtime_operation
 def prepare_profile(config, actor, *, engineering=False):
     """Regenerate immutable inputs only. Never overwrite native memories or sessions."""
@@ -112,21 +126,18 @@ def prepare_profile(config, actor, *, engineering=False):
         "model": {"default": model, "provider": provider_id(select_source(settings, model))},
         "providers": providers,
         "model_aliases": {m: {"model": m, "provider": provider_id(select_source(settings, m))} for m in choices},
-        "platform_toolsets": {name: ["memory", "skills", "session_search"] for name in ("api_server", "cli", "feishu", "weixin")},
         "memory": {"memory_enabled": True, "user_profile_enabled": True},
         "skills": {"external_dirs": [str(config.root / "skills")], "auto_load": ["mikasa-persona"]},
         "plugins": {"enabled": ["mikasa"]},
-        "agent": {"max_turns": 12},
-        "terminal": {"cwd": str(home / "workspace")},
-        "gateway": {"api_server": {"max_concurrent_runs": 1}},
+        "terminal": {"backend": "local", "cwd": str(home / "workspace")},
         "max_concurrent_sessions": None,
         "group_sessions_per_user": False,
         "thread_sessions_per_user": False,
         "streaming": {"enabled": True},
         "display": {"language": "zh", "busy_input_mode": "queue", "busy_ack_detail": False,
-                    "tool_progress": "off", "show_reasoning": False,
+                    "tool_progress": "new", "interim_assistant_messages": True,
+                    "long_running_notifications": True, "show_reasoning": False,
                     "platforms": {"weixin": {"streaming": False, "long_running_notifications": True}}},
-        "fallback_providers": [],
     }
     if engineering:
         # Native CLI/Gateway toolsets, budgets, backends and extensions stay native.
@@ -153,7 +164,7 @@ def prepare_profile(config, actor, *, engineering=False):
                                input=json.dumps(native_config), capture_output=True, text=True, timeout=30,
                                env={k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL", "TMPDIR") if k in os.environ})
     if refreshed.returncode:
-        raise MikasaError("原生配置更新失败；原有配置保留，请检查配置结构、所选 CCH provider 及 .env 是否仅包含原生投递偏好")
+        raise MikasaError("原生配置更新失败；原有配置保留，请检查配置结构与所选 CCH provider")
     private_write(home / "SOUL.md", (config.root / "identity.md").read_text())
     # Snapshots are generated from the canonical files, never maintained separately.
     for name in ("engineering-contract.md", "engineering-workflow.md"):
@@ -196,11 +207,8 @@ def interactive(config, session=None, *, platforms=()):
         except BlockingIOError:
             raise Conflict("该账号的原生 profile 正在使用；先关闭对应 CLI 或 Gateway") from None
         home, source, python, credentials = prepare_profile(config, actor)
-        env = {k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL", "TMPDIR", "TERM", "COLORTERM", "SSL_CERT_FILE") if k in os.environ}
-        env.update(credentials)
+        env = runtime_environment(config, home, source, python, credentials)
         env.update(platform_env)
-        env.update(HERMES_HOME=str(home), MIKASA_HERMES_SOURCE=str(source),
-                   HERMES_ENABLE_PROJECT_PLUGINS="0", PYTHONUNBUFFERED="1")
         # Import only existing legacy state; starting native CLI needs no Mikasa database.
         database = config.runtime / "mikasa.sqlite3"
         if database.exists():
@@ -261,11 +269,8 @@ class NativeGateway:
                 port = listener.getsockname()[1]
             self.url = f"http://127.0.0.1:{port}"
             self.http = build_opener(ProxyHandler({}))
-            env = {k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL", "TMPDIR", "SSL_CERT_FILE") if k in os.environ}
-            env.update(credentials)
-            env.update(HERMES_HOME=str(home), MIKASA_HERMES_SOURCE=str(source),
-                       API_SERVER_KEY=self.key, API_SERVER_HOST="127.0.0.1", API_SERVER_PORT=str(port),
-                       HERMES_ENABLE_PROJECT_PLUGINS="0", PYTHONUNBUFFERED="1")
+            env = runtime_environment(config, home, source, python, credentials)
+            env.update(API_SERVER_KEY=self.key, API_SERVER_HOST="127.0.0.1", API_SERVER_PORT=str(port))
             with open(home / "gateway.log", "a", opener=lambda p, f: os.open(p, f, 0o600)) as log:
                 imported = subprocess.run([str(python), str(config.root / "workers/hermes/import_legacy.py"),
                                            str(config.runtime / "mikasa.sqlite3"), actor],

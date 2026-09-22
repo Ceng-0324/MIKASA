@@ -358,39 +358,6 @@ assert 'fixture-model-secret' in os.environ.values()
         (home / '.env').unlink()  # Backups keep canonical config.yaml, never credential files.
         check('restored')
 
-    def test_profile_home_env_validation_uses_dotenv_without_loading_credentials(self):
-        python = self.native_python('dotenv')
-        code = '''
-import os, sys
-from pathlib import Path
-sys.path.insert(0, sys.argv[1])
-from workers.hermes.profile_config import validate_home_env
-path = Path('profile.env')
-path.write_text("# Native compatibility hints\\nexport FEISHU_HOME_CHANNEL='chat-id'\\nWEIXIN_HOME_CHANNEL_THREAD_ID=\\n")
-validate_home_env(path)
-assert 'FEISHU_HOME_CHANNEL' not in os.environ
-for content in ("OPENAI_API_KEY=private", "FEISHU_HOME_CHANNEL='unterminated", "WEIXIN_HOME_CHANNEL",
-                "FEISHU_HOME_CHANNEL=${OPENAI_API_KEY}", "FEISHU_HOME_CHANNEL=ok\\nMIKASA_CCH_TEST=private"):
-    path.write_text(content)
-    try:
-        validate_home_env(path)
-    except ValueError:
-        pass
-    else:
-        raise AssertionError('unexpected env accepted')
-path.unlink()
-path.symlink_to('missing')
-try:
-    validate_home_env(path)
-except ValueError:
-    pass
-else:
-    raise AssertionError('symlink accepted')
-'''
-        result = subprocess.run([str(python), '-c', code, str(ROOT)], cwd=self.path,
-                                env={'PATH': os.environ.get('PATH', '')}, capture_output=True, text=True, timeout=15)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
     def test_pinned_gateway_entry_loads_identity_policy_and_persona_without_connecting(self):
         from mikasa.native import prepare_profile
         self.native_python("openai", "anthropic", "aiohttp")
@@ -434,10 +401,23 @@ described=json.loads(handle_function_call('tool_describe', {'names':['session_se
 assert 'session_search' in described.get('tools',{})
 name,args,blocked=_unwrap_tool_search_call(SimpleNamespace(enabled_toolsets=toolsets), 'tool_call', {'name':'session_search','arguments':{'profile':'other','query':'private'}})
 assert name == 'session_search' and blocked is None
-assert get_pre_tool_call_directive(name, args)[0] == 'block'
+assert get_pre_tool_call_directive(name, args)[0] is None
 for args in ({'profile':'other'}, {'session_id':'other/id'}):
-    assert get_pre_tool_call_directive('session_search', args)[0] == 'block'
-assert get_pre_tool_call_directive('terminal', {})[0] == 'block'
+    assert get_pre_tool_call_directive('session_search', args)[0] is None
+from hermes_cli.config import load_config
+from hermes_cli.tools_config import _get_platform_tools
+from model_tools import get_tool_definitions
+from gateway.display_config import resolve_display_setting
+cfg=load_config()
+for platform in ('feishu','weixin'):
+    enabled=sorted(_get_platform_tools(cfg,platform))
+    tools={t['function']['name'] for t in get_tool_definitions(enabled_toolsets=enabled,quiet_mode=True,skip_tool_search_assembly=True)}
+    assert {'terminal','read_file','write_file','process_manage','delegate_task','skill_manage'} <= tools, tools
+    assert resolve_display_setting(cfg,platform,'tool_progress') == 'new'
+    assert resolve_display_setting(cfg,platform,'interim_assistant_messages')
+    assert resolve_display_setting(cfg,platform,'long_running_notifications')
+for name in ('terminal','write_file','delegate_task','skill_manage','web_search'):
+    assert get_pre_tool_call_directive(name, {})[0] is None
 '''
         for name in ('engineering-contract.md', 'engineering-workflow.md'):
             self.assertIn((ROOT / name).read_text(), generated)

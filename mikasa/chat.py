@@ -25,7 +25,7 @@ SWITCH = re.compile(
 STATUS = {"当前模型", "现在用的什么模型", "现在用的什么模型？", "你现在用什么模型", "你现在用什么模型？"}
 MODELS = {"可用模型", "有哪些模型", "有哪些模型？", "/models"}
 RESET = {"恢复默认模型", "切换为默认模型"}
-HELP = "输入 /model 完整模型ID 或说“切换为 完整模型ID”即可切换 GPT、Claude 等已接入模型；/model 查看当前模型和配置候选，/model default 恢复默认。/new（或 /reset）新建聊天并保留当前模型，旧记录可恢复；/version 查看 Hermes 版本，/help 查看帮助。切换仅影响当前聊天；工程任务仍使用运行配置。"
+HELP = "输入 /model 完整模型ID 或说“切换为 完整模型ID”即可切换 GPT、Claude 等已接入模型；/model 查看当前模型和配置候选，/model default 恢复默认。/new（或 /reset）新建聊天并保留当前模型，旧记录可恢复；/version 查看 Hermes 版本，/help 查看帮助。切换影响当前聊天及其中执行的任务；独立工程 CLI 使用自己的模型配置。"
 
 
 def command(message, resolve):

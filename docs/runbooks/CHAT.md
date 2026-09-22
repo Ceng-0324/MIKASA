@@ -28,7 +28,7 @@ GPT/Claude 跨协议切换需要配置 [模型来源路由](CCH.md)。启动时�
 
 原生 `/model` 校验参数、提供商与模型目录，不额外发送推理探针。参数或路由解析失败保留旧选择；切换后的真实请求仍可能因服务状态失败，不能承诺推理失败自动回滚。此前 CCH 目录入口出现过 WAF 拒绝，本轮使用本地目录验证 SDK 路由，未重复请求该入口。真实调用诊断使用 `doctor --model MODEL_ID --probe-model`。
 
-`/new` 使用 Hermes 自带确认流程，清空会话上下文，保留长期记忆和旧会话。固定版本尝试恢复启动时加载的默认模型，但对自定义 CCH provider 缺少配置传递，已复现保留当前模型的行为；需要确定模型时再执行 `/model ID`。`--global` 写入磁盘的选择在重启后正常加载。`/resume`、`/sessions`、`/memory`、`/help` 等直接沿用原生实现。本地系统命令由受信任的操作系统用户操作，可执行管理和工作区动作；模型工具白名单不等于这些命令的沙箱。初始工作目录为专用 profile 的 workspace，尚未接入工程仓库。
+`/new` 使用 Hermes 自带确认流程，清空会话上下文，保留长期记忆和旧会话。固定版本尝试恢复启动时加载的默认模型，但对自定义 CCH provider 缺少配置传递，可能保留当前模型；需要确定模型时再执行 `/model ID`。`--global` 写入磁盘的选择在重启后加载。`/resume`、`/sessions`、`/memory`、`/help` 等直接沿用原生实现。初始工作目录为 profile 的持久 workspace，可直接使用机器上的其他仓库。
 
 使用原生会话 ID 跨进程恢复：
 
@@ -52,6 +52,14 @@ python3.12 -m mikasa --config config/local/hermes-cch.json chat --session NATIVE
 | `/new` | 新建当前会话，历史与长期记忆保留；不是重启服务 |
 
 模型切换由原生反馈说明作用范围；保存失败只报告会话选择，不声称已更改默认值。默认使用中文界面，部分上游提示仍为英文。工程入口的模型配置和 CCH 后台分组独立于聊天选择；共享 profile 的默认设置会影响共用该 profile 的参与者。
+
+## 在聊天中做工程
+
+直接说明仓库路径、目标和验收条件，例如：“在 `/home/mikasa/work/demo` 修复登录测试，运行相关检查并创建本地提交，不推送。”Hermes 在当前会话直接调用原生工具，使用当前聊天模型，不经过 Mikasa 任务转发器。仓库与产出保留在工作机，独立工程 CLI 也可以访问。
+
+原生工具状态、阶段说明、长任务通知和最终结果回到原聊天。飞书可流式更新及编辑工具进度；微信不支持编辑，Hermes 原生省略逐工具气泡，发送模型的阶段说明、长任务通知及完整结果。阶段说明需要模型实际生成，不能保证每轮固定发送几条。`/stop` 停止当前执行，已经发生的文件写入不会回滚。同一会话忙碌时消息排队，其他会话可并发；多人同时操作同一仓库时使用原生 worktree 或独立工作目录。
+
+聊天与独立 CLI 使用相同 Hermes 工具机制、系统账号和依赖，原生工具、插件、MCP 与预算在各自 profile 配置。专用 VM 上普通命令审批关闭，规则文件仍遵循 Hermes 原生确认。飞书的开放参与者同样可以调用工程工具；身份约定不构成额外程序门禁。
 
 ## HTTP
 
@@ -87,7 +95,7 @@ CLI 启动原生 CLI 子进程，HTTP 启动原生 Gateway 子进程；同一账
 
 初始化更新身份/规则、必需 skills/plugin 和生成的 CCH 配置，保留 Hermes 自己保存的默认模型、推理和显示偏好。`config.yaml` 的 YAML/JSON 都可读取，刷新写为 JSON（合法 YAML），不保留 YAML 注释；格式错误时保留原文件并阻止启动。长期记忆和原生数据库不由配置初始化覆盖。
 
-飞书、微信中的 `/sethome` 直接使用 Hermes 原生命令，将当前聊天设为该平台默认投递目标。重启读取原生 `config.yaml` 中的完整目标；同时允许 Hermes 写入 `.env` 的 `FEISHU_HOME_CHANNEL`、`WEIXIN_HOME_CHANNEL` 及各自 `_THREAD_ID` 字段。其他环境变量、插值和无效格式会阻止启动，模型和平台凭据仍由显式运行配置提供。备份排除 `.env`，通过 `config.yaml` 保留投递目标及发送者/线程信息，恢复不依赖环境文件。
+飞书、微信中的 `/sethome` 直接使用 Hermes 原生命令，将当前聊天设为该平台默认投递目标。重启读取原生 `config.yaml` 中的完整目标，也保留 Hermes 写入的 `.env` 偏好。原生 `.env` 可以配置专用工具凭据；备份排除该文件，通过 `config.yaml` 保留投递目标，外部凭据须单独恢复。
 
 明确要求跨会话记住非敏感事实时，Mikasa 应调用原生 memory 工具，成功后再确认。`/new` 会切换会话，不删除 MEMORY/USER；重启同样保留原生记忆。口头说“记住了”不等于已持久化，验收须同时核对工具结果、新会话回答与磁盘记录。
 
@@ -95,11 +103,11 @@ CLI 启动原生 CLI 子进程，HTTP 启动原生 Gateway 子进程；同一账
 
 首次打开账号 profile，会用 Hermes SessionDB 的原生接口导入旧聊天的全部普通消息；命令回执不进入模型历史。原 SQLite 保留，导入标记防止重复；冲突会阻止启动，不覆盖数据。新请求只保存摘要与 native run 引用，不复制正文。已接受但中断的请求先检查原生状态，重试使用同一幂等键，不重新推理。
 
-不同账号 profile 的 SessionDB、MEMORY、USER 和 home 独立；消息 Gateway 的所有参与者共用主人 profile。身份由 canonical 生成 SOUL，人格 skill 原生 auto_load；聊天常驻精简交互提示，完整工程规章生成 mikasa-engineering skill 按需读取。通用工程 skills 用自然语言交流，只有独立工程入口提供 JSON 输出契约。
+不同账号 profile 的 SessionDB、MEMORY、USER 和 home 独立；消息 Gateway 的所有参与者共用主人 profile。身份由 canonical 生成 SOUL，人格 skill 原生 auto_load；聊天常驻精简交互提示，完整工程规章生成 mikasa-engineering skill 按需读取。工程任务使用方法 skills，自然语言反馈实际结果，没有强制 JSON 输出契约。
 
-聊天可使用 memory、skills_list、skill_view、session_search。问“上次聊到哪里”时，使用 Hermes 原生检索当前 profile 的历史；/new 保留旧历史，换渠道也可通过检索续上。跨 profile 检索被拒绝；同 profile 的私聊和群聊并非数据隔离，记录与回答应区分发言人、渠道和项目，不自行转述私聊内容到群聊。CLI 系统命令与模型工具调用是不同通道；HTTP 的 `/init` 仍暂缓。
+问“上次聊到哪里”时，使用 Hermes 原生历史检索；`/new` 保留旧历史，换渠道也可通过检索续上。历史访问由原生配置和文件权限决定；同 profile 的私聊和群聊并非数据隔离，回答应区分发言人、渠道和项目，不自行转述私聊内容到群聊。HTTP 的 `/init` 仍暂缓。
 
-工程任务与提交账号共用原生 MEMORY/USER，聊天中经确认并写入长期记忆的约定会在新的工程 Agent 实例加载；工程写入的长期约定也可由新聊天实例读取。同一实例的系统提示记忆快照不立即重建，不承诺热刷新。普通聊天正文不会自动成为工程上下文，临时安排须随任务提供；工程工具历史由独立工程 profile 的原生会话保存。旧工程记忆留在任务 profile 的 `memories.legacy`，不自动并入账号记忆；详见 [当前架构](../architecture/README.md)。这不代表聊天已经开放仓库执行工具。
+聊天和独立工程 CLI 共用原生 MEMORY/USER，新实例会读取已保存约定，同一实例不承诺外部记忆热刷新。聊天中的工程任务直接使用当前聊天上下文与 SessionDB；独立 CLI 的会话历史仍分开保存，切换入口时使用原生会话与历史检索能力续接。详见 [当前架构](../architecture/README.md)。
 
 `backup DIRECTORY` 备份完整受管状态，包括原生会话、记忆与运行回执；`restore BACKUP NEW_RUNTIME` 校验后恢复到新目录。先停服，按 [备份说明](OPERATIONS.md) 重新提供外部配置与凭据；备份不上传 Git 或公开存储。
 

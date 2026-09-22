@@ -1,30 +1,36 @@
 """Merge generated integration inputs without resetting Hermes-owned preferences."""
 import json
+import copy
 import os
 import re
 import sys
 from pathlib import Path
 
 
-def validate_home_env(path):
-    if path.is_symlink():
-        raise ValueError("profile env cannot be a symlink")
-    if not path.exists():
-        return
-    # /sethome writes legacy delivery hints here; credentials still come from the launcher.
-    from dotenv.parser import parse_stream
-    allowed = {platform + "_HOME_CHANNEL" + suffix
-               for platform in ("FEISHU", "WEIXIN") for suffix in ("", "_THREAD_ID")}
-    with path.open() as stream:
-        for binding in parse_stream(stream):
-            if binding.error or (binding.key is not None and
-                    (binding.key not in allowed or binding.value is None or "${" in binding.value)):
-                raise ValueError("profile env may contain only literal native home preferences")
-
-
 def merge(current, generated):
+    current = copy.deepcopy(current)
+    if "max_concurrent_sessions" in generated and current.get("_mikasa_native_tools") != 1:
+        # Remove only the exact defaults installed by the former chat-only adapter.
+        # User-selected limits, toolsets and subsequent native changes survive refresh.
+        toolsets = current.get("platform_toolsets", {})
+        for platform in ("cli", "api_server", "feishu", "weixin"):
+            if toolsets.get(platform) == ["memory", "skills", "session_search"]:
+                del toolsets[platform]
+        agent = current.get("agent", {})
+        if agent.get("max_turns") == 12:
+            del agent["max_turns"]
+        api = current.get("gateway", {}).get("api_server", {})
+        if api.get("max_concurrent_runs") == 1:
+            del api["max_concurrent_runs"]
+        display = current.get("display", {})
+        if display.get("tool_progress") == "off":
+            display["tool_progress"] = "new"
+        current["_mikasa_native_tools"] = 1
     # Hermes owns user preferences, including /model --global and reasoning.
     merged = {**generated, **current}
+    # Add newly introduced display defaults to existing profiles, preserving
+    # explicit choices (including False) and platform-specific preferences.
+    merged["display"] = {**generated["display"], **current.get("display", {})}
     # One-time migration from Mikasa's single-session, silent message defaults.
     # Afterwards /busy and native display/session preferences remain Hermes-owned.
     if "max_concurrent_sessions" in generated and current.get("_mikasa_interaction_defaults") != 1:
@@ -60,8 +66,6 @@ def merge(current, generated):
 
 def main():
     path = Path(sys.argv[1])
-    if "--engineering" not in sys.argv:
-        validate_home_env(path.parent / ".env")
     if path.is_symlink():
         raise ValueError("profile config cannot be a symlink")
     current = {}

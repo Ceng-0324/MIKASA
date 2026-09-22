@@ -58,7 +58,7 @@ Mikasa 配置匹配优先级：完整 models 匹配 → 最长 prefixes 匹配 �
 
 固定 CCH 源码按协议筛选供应商：Responses → codex，Messages → claude/claude-auth，Chat Completions → openai-compatible。Hermes 已原生支持这些 transport，因此切换 Claude 时采用 Messages，GPT 按 Codex 配置采用 Responses；不自研协议转换代理，不把所有名字塞进同一个 Responses 端点。
 
-Hermes 的交互命令不会由嵌入式 AIAgent.run_conversation 或现有 `/v1/runs` 自动分派。因此终端直接调用官方 `cli.main()`，不再维护 Mikasa 输入循环。HTTP 的命令适配暂留，等待原生渠道完整接管其鉴权、回执与取消契约。终端系统命令可操作受信任用户的本地工作区；聊天模型工具当前仍限于记忆和只读 skills。
+Hermes 的交互命令不会由嵌入式 AIAgent.run_conversation 或现有 `/v1/runs` 自动分派。因此终端直接调用官方 `cli.main()`，不再维护 Mikasa 输入循环。HTTP 的命令适配暂留，等待原生渠道完整接管其鉴权、回执与取消契约。聊天直接使用原生工程工具，工程任务使用当前会话的模型选择。
 
 ## default 分组
 

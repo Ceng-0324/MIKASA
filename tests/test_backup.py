@@ -1,6 +1,8 @@
 import fcntl
 import json
+import socket
 import sqlite3
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +15,37 @@ from tests.support import BaseTest
 
 
 class BackupTests(BaseTest):
+    def test_chat_workspace_sources_survive_without_native_control_socket(self):
+        home = self.config.runtime / 'native/account'
+        workspace = home / 'workspace'
+        workspace.mkdir(parents=True)
+        sources = {'cache/source.py': b'CACHE_IMPLEMENTATION = True\n',
+                   'logs/example.log': b'project fixture\n',
+                   'fixture.db': b'non-SQLite application fixture',
+                   'gateway.sock': b'project source, not a runtime socket',
+                   'config.yaml': b'api_key: example-value\n'}
+        for name, content in sources.items():
+            path = workspace / name
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(content)
+        # macOS temp roots can exceed the UDS path limit; move a closed endpoint.
+        with tempfile.TemporaryDirectory(dir='/tmp', prefix='mkuds-') as short:
+            endpoint = Path(short) / 'gateway.sock'
+            with socket.socket(socket.AF_UNIX) as control:
+                control.bind(str(endpoint))
+            endpoint.rename(home / 'gateway.sock')
+        (home / 'gateway.sock.path').write_text('/tmp/obsolete-native-endpoint')
+        backup = self.snapshot()
+        restored = self.path / 'chat-restored'
+        restore_state(self.config, backup, restored)
+        for root in (backup, restored):
+            copied = root / 'native/account'
+            self.assertFalse((copied / 'gateway.sock').exists())
+            self.assertFalse((copied / 'gateway.sock.path').exists())
+            for name, content in sources.items():
+                self.assertEqual((copied / 'workspace' / name).read_bytes(), content)
+        self.assertTrue((home / 'gateway.sock').is_socket())
+
     def test_native_engineering_state_and_v2_archive_restore(self):
         runtime = self.config.runtime
         account = runtime / 'native/account/memories'

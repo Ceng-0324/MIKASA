@@ -44,8 +44,8 @@ GitHub 登录使用 VM 独立用户的原生 gh 认证，文件 0600，不复制
 
 ## 保留的原生边界
 
-- 聊天尚未接入仓库执行，仍使用 memory、skills 与当前 profile 历史检索；聊天工程与 FluxCore 最后联合验收。
-- 专用机工程 profile 使用 Hermes 原生 approvals.mode=off，普通命令不逐次等待确认；默认规则文件保护及原生不可绕过的检查保留。例如 AGENTS.md 文件工具修改仍需交互批准。GH_TOKEN 不直接继承给 terminal，新机已通过 gh 自身认证解决。
+- 聊天已开放原生工程工具和进度/结果反馈；本页早期迁移数据不代表消息平台工程交互或所有外部工具均已验收。FluxCore 真实仓库协作仍需指定任务。
+- 专用机聊天和工程 profile 使用 Hermes 原生 approvals.mode=off，普通命令不逐次等待确认；默认规则文件保护及原生不可绕过的检查保留。例如 AGENTS.md 文件工具修改仍需交互批准。GH_TOKEN 不直接继承给 terminal，新机已通过 gh 自身认证解决。
 - 不同聊天会话并发，同会话 FIFO；有限准入上限满额时仍按原生行为拒绝，不是全局队列。群上下文共享，区分发言人与不转述私人内容依靠身份约定。
 - 固定版本原生 CLI 的自定义 CCH provider 下 /new 不可靠地重置默认模型，同进程 --global 不刷新启动快照；显式 /model ID 可切换，保存值重启生效。
 - 外部 cwd、原生 Git worktree 的外部链接、自定义工具存储、Cron 脚本内绝对路径需独立备份和核对。GitHub token scope 与仓库权限没有被本地工具恢复自动扩大。

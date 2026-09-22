@@ -69,7 +69,7 @@ def doctor(config, *, probe_model=False, selected_model=None):
             'rules': 'loaded', 'skills': skill_inventory(config.root), 'native': native, 'model': model,
             'github_token_present': bool(os.environ.get(config.data.get('github', {}).get('token_env', 'MIKASA_GITHUB_TOKEN'))),
             'deprecated_settings': deprecated,
-            'note': '旧 worker/runner 配置不再执行。工程工具、预算、调度由 engineer 的原生配置管理；外部能力需独立验证。'}
+            'note': '旧 worker/runner 配置不再执行。聊天与工程 CLI 的工具、预算、调度均由 Hermes 原生配置管理；外部能力需独立验证。'}
 
 
 def main(argv=None):

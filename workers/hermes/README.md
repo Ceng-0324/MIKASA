@@ -16,6 +16,8 @@ uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/b
 
 依赖快照已用于 macOS arm64 与 Ubuntu arm64/Python 3.12，其他平台需复验。未执行上游全局安装器。原生工具还可能需要 gh、Node、浏览器、Docker 或远端服务凭据；实际可用性用原生 tools 检查。
 
+专用 VM 的搜索、语音和 MCP 可选依赖见 [requirements-tools.txt](requirements-tools.txt)，在核心快照之后安装。浏览器、FFmpeg 和原生搜索后端的准备见[工作机手册](../../deploy/vm/README.md)。工具注册或依赖检查通过不代表对应外部服务已经连通。
+
 ## 配置
 
 本地 JSON 的 worker 区块保留名称作为部署配置兼容，只管理 Hermes 路径、CCH 来源及 HTTP 等待超时：
@@ -35,7 +37,7 @@ Codex/Claude 来源仅显式只读本机配置；VM 使用环境引用，不复�
 
 `mikasa engineer --cwd DIR -- chat` 直接进入官方总入口，-- 后透传所有原生参数。工具、终端 backend、skills、插件、MCP、委派、后台进程、会话、Kanban、Cron 和预算由 Hermes 管理。独立工程 profile 不继承聊天工具子集，memories 链接同账号聊天，配置刷新保留原生偏好。
 
-没有受限快照、无网容器、文件黑名单、固定任务工具集合、worker JSON 或宿主最终验收/提交。默认 local backend 的工程能力等于同账号原生 Hermes；是否安装依赖、获得网络和平台权限仍按环境判断。旧执行器和协议已退休，档案处理见 [运维](../../docs/runbooks/OPERATIONS.md)。
+聊天 Gateway 同样直接使用原生完整工具集，可在原会话执行工程任务并反馈进度与结果。各入口共用系统账号、依赖和原生 gh 认证，保留各自会话与工具偏好。没有受限快照、无网容器、文件黑名单、固定任务工具集合、worker JSON 或宿主最终验收/提交。默认 local backend 的工程能力等于同账号原生 Hermes；外部能力仍需依赖和平台权限。
 
 ## 保留的集成文件
 
@@ -43,7 +45,7 @@ Codex/Claude 来源仅显式只读本机配置；VM 使用环境引用，不复�
 | --- | --- |
 | native_engineer.py | 官方 hermes_cli.main.main 工程总入口 |
 | native_cli.py / native_gateway.py | 聊天 CLI/Gateway 生命周期与加载检查 |
-| plugin/ | 身份/协作提示及加载证据；仅聊天注册工具范围 hook |
+| plugin/ | 身份/协作提示及加载证据；不注册工具拦截器 |
 | profile_config.py | 保留原生偏好、刷新受管 provider 与身份 skill |
 | command_adapter.py | 保留的 HTTP 命令子集，独立于模型执行 |
 | import_legacy.py | 旧聊天导入 SessionDB，保留原档案 |

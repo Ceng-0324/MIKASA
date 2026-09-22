@@ -1,13 +1,12 @@
 """Bootstrap Mikasa's engineering identity, then hand control to the native Hermes CLI."""
 import fcntl
-import os
 import signal
 import subprocess
 from pathlib import Path
 
 from .errors import MikasaError
 from .maintenance import runtime_operation
-from .native import prepare_profile, profile_home
+from .native import prepare_profile, profile_home, runtime_environment
 
 
 @runtime_operation
@@ -24,15 +23,7 @@ def launch(config, arguments=(), *, cwd=None):
     workspace = Path(cwd or settings.get('cwd') or home / 'workspace').expanduser().resolve()
     if not workspace.is_dir():
         raise MikasaError('工程工作目录不存在；先准备仓库或工作目录')
-    env = {k: os.environ[k] for k in ('HOME', 'USER', 'LOGNAME', 'PATH', 'LANG', 'LC_ALL', 'TMPDIR', 'TERM', 'COLORTERM', 'SSL_CERT_FILE')
-           if k in os.environ}
-    env.update({k: os.environ[k] for k in settings.get('env_allowlist', []) if k in os.environ})
-    env['PATH'] = str(python.parent) + os.pathsep + env.get('PATH', os.defpath)
-    # Native credential resolution receives the account token; terminal scrubbing remains upstream-owned.
-    token = os.environ.get(config.data.get('github', {}).get('token_env', 'MIKASA_GITHUB_TOKEN'))
-    if token:
-        env['GH_TOKEN'] = token
-    env.update(credentials, HERMES_HOME=str(home), MIKASA_HERMES_SOURCE=str(source), PYTHONUNBUFFERED='1')
+    env = runtime_environment(config, home, source, python, credentials)
     argv = list(arguments)
     if argv[:1] == ['--']:
         argv.pop(0)

@@ -83,7 +83,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu --
 
 飞书现采用 Hermes 原生开放准入：所有用户、群聊与其他机器人均可进入，群聊不要求 @。通过 `FEISHU_ALLOW_ALL_USERS=true`、`FEISHU_GROUP_POLICY=open`、`FEISHU_ALLOW_BOTS=all`、`FEISHU_REQUIRE_MENTION=false` 实现，无成员或群白名单；Hermes 自身消息回环过滤、消息去重与机器人循环保护保留。只对飞书开放，微信仍使用扫码负责人的单聊绑定。
 
-私聊按平台和聊天区分；普通群及话题内共享上下文，发送者仍使用 Hermes 元数据识别。同一 Gateway 共用负责人 profile 的 MEMORY/USER、历史、身份与 skills，并非每人的私有记忆空间。开放用户可调用原生系统命令，部分命令影响 profile；模型工具白名单不是命令沙箱。聊天可用 memory、只读 skills 与原生 session_search。不同会话并发，同会话忙碌时排队；详细语义见[聊天手册](CHAT.md)。工程任务入口仍按原计划最后接入。
+私聊按平台和聊天区分；普通群及话题内共享上下文，发送者仍使用 Hermes 元数据识别。同一 Gateway 共用负责人 profile 的 MEMORY/USER、历史、身份与 skills，并非每人的私有记忆空间。开放用户可调用原生系统命令与工程工具，部分操作影响共享 profile 和工作机。不同会话并发，同会话忙碌时排队；工程进度与结果直接回复原会话，详细语义见[聊天手册](CHAT.md)。
 
 CLI、HTTP Gateway 与消息 Gateway 使用同一负责人 profile，进程互斥。Ctrl-C 停止前台；启动失败需处理错误后重启，不覆盖会话或记忆。
 

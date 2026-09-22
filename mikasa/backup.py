@@ -30,11 +30,15 @@ def sensitive(path):
 
 
 def workspace_path(path):
-    return path.parts[0] == 'workspaces' or (len(path.parts) > 2 and path.parts[0] == 'engineer' and
+    return path.parts[0] == 'workspaces' or (len(path.parts) > 2 and path.parts[0] in {'native', 'engineer'} and
            (path.parts[2] == 'workspace' or ('kanban' in path.parts[2:] and 'workspaces' in path.parts[3:])))
 
 
 def excluded(path):
+    # Native IPC endpoints/pointers are recreated at startup, never restored.
+    if (len(path.parts) == 3 and path.parts[0] in {'native', 'engineering', 'engineer'} and
+            path.name in {'gateway.sock', 'gateway.sock.path'}):
+        return True
     # Git objects and reflogs are part of the recovery state, not disposable logs.
     return (sensitive(path.as_posix()) or bool(set(path.parts) & CREDENTIALS) or
             (not workspace_path(path) and '.git' not in path.parts and (bool(set(path.parts) & TRANSIENT) or

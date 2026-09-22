@@ -38,9 +38,35 @@ orb create --isolated --isolate-network --user mikasa --cpus 4 --memory 6G --dis
 5. 安装服务模板，执行 `systemd-analyze verify`、`systemctl daemon-reload`。服务以 mikasa 运行，保留 0077 umask、进程组清理和异常重启；不设置阻断 sudo/全盘管理的 `NoNewPrivileges`、`ProtectSystem` 或 `ReadWritePaths`。此模板只适用于专用机器。
 6. 将 [journald.conf](journald.conf) 安装到 `/etc/systemd/journald.conf.d/mikasa.conf`：持久 journal 最多 256 MiB、14 天。Hermes 文件日志继续按原生机制管理；不限制工程产出和数据库空间。
 
-工程 profile 为 `/var/lib/mikasa/engineer/<账号摘要>`。本机采用原生 `approvals.mode: off` 处理普通命令，避免无人值守任务等待逐条批准；Hermes 的规则文件保护及其他不可绕过的原生检查仍保留。此项是专用机配置，不强制覆盖其他部署的选择，不修改上游源码。
+聊天 profile 为 `/var/lib/mikasa/native/<账号摘要>`，独立工程 profile 为 `/var/lib/mikasa/engineer/<账号摘要>`。本机两者均采用原生 `approvals.mode: off` 处理普通命令；Hermes 的规则文件保护及其他不可绕过的原生检查仍保留。此项是专用机配置，不强制覆盖其他部署的选择，不修改上游源码。
 
 GitHub 使用 mikasa 自己的 `gh auth login --with-token` 和 `gh auth setup-git`。专用 token 经标准输入登录，不出现在命令行；`~/.config/gh/hosts.yml` 为 0600。固定 Hermes 会清除 terminal 子进程的 GH_TOKEN，只注入主进程不足以支持 gh。认证与普通状态备份分别管理。
+
+## 原生外部工具
+
+可选 Python 依赖按固定快照安装，保留核心包版本：
+
+```sh
+/opt/hermes-venv/bin/python -m pip install -r /opt/mikasa/workers/hermes/requirements-tools.txt
+/opt/hermes-venv/bin/python -m pip check
+sudo apt-get install -y ffmpeg
+sudo npm install -g agent-browser@0.26.0
+npx --yes playwright@1.58.2 install chromium --with-deps
+```
+
+浏览器安装以 `mikasa` 用户执行，系统依赖由 sudo 安装。Linux arm64 不使用 `agent-browser install` 的 Chrome for Testing 下载，使用 Playwright Chromium。当前固定版本的可执行文件为 `/home/mikasa/.cache/ms-playwright/chromium-1208/chrome-linux/chrome`，将其链接为 `/usr/local/bin/chromium`；确保 `agent-browser` 也在服务 PATH 中。Hermes 使用原生 local browser backend，无自研浏览器驱动。
+
+两个 profile 的原生 `config.yaml` 使用以下搜索配置；避免安装 ddgs 后自动选择当前网络无法访问的搜索后端：
+
+```yaml
+web:
+  search_backend: exa
+  extract_backend: exa
+```
+
+Exa 免费入口和 Edge TTS 仍依赖外网服务可用性。图像理解使用现有 CCH；当前 GPT Codex Responses 路由不接受原生 `video_url`。视频理解、图像/视频生成及其他外部服务按 Hermes 原生 provider、凭据和权限配置，不将依赖已安装解释为全部工具可用。MCP 在原生 `mcp_servers` 配置所需服务；无需部署一个重复本地文件工具的常驻 MCP。
+
+固定 Hermes 的飞书文档/评论工具依赖原生评论事件提供的客户端上下文，仅配置聊天机器人凭据不足以在普通聊天直接调用这些工具。该入口、文档授权及其他未配置平台保留原生接入方式，不以工具出现在列表中认定已经接通。
 
 ## 迁移与回退
 
@@ -69,6 +95,6 @@ sudo journalctl -u mikasa-gateway.service -n 80 --no-pager
 sudo systemd-run --pty --wait --collect --property=User=mikasa --property=Group=mikasa --property=EnvironmentFile=/etc/mikasa/runtime.env --working-directory=/opt/mikasa /opt/mikasa/.venv/bin/python -m mikasa --config /etc/mikasa/config.json engineer --cwd /home/mikasa/work/REPO -- chat
 ```
 
-替换 REPO 为已有仓库，或省略 `--cwd ...` 使用默认持久 workspace。原生参数、后台进程和工具照常使用。Kanban/Cron 常驻调度按需使用工程入口的 `gateway run`，不恢复 Mikasa runner；聊天触发工程仍留到 FluxCore 联合验收。
+替换 REPO 为已有仓库，或省略 `--cwd ...` 使用默认持久 workspace。也可以在飞书、微信直接说明仓库绝对路径和任务；Hermes 在当前会话执行并反馈。消息 Gateway 自带原生 Cron/Kanban 调度，独立工程 profile 需要常驻调度时使用工程入口的 `gateway run`，不恢复 Mikasa runner。
 
 Mac 管理命令明确指定 `orb -m mikasa -u root -w / ...`。启动和重启机器分别用 `orb start mikasa`、`orb restart mikasa`；由 Mac 发起，不让机内程序控制 OrbStack 其他机器。`connected` 只证明当前连接状态，不能代替持续收发和用户交互验收。
