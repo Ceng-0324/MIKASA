@@ -47,6 +47,17 @@ def merge(current, generated):
     merged["display"] = {**generated["display"], **current.get("display", {})}
     if "max_concurrent_sessions" in generated:
         merged["agent"] = {**generated["agent"], **current.get("agent", {})}
+        merged["platforms"] = dict(current.get("platforms") or {})
+        gateway = current.get("gateway") or {}
+        for name, defaults in generated["platforms"].items():
+            preferences = dict(merged["platforms"].get(name) or {})
+            # Do not shadow native preferences written in another supported form.
+            variants = [current.get(name) or {}, gateway.get(name) or {},
+                        (gateway.get("platforms") or {}).get(name) or {}, preferences]
+            for field, value in defaults.items():
+                if not any(field in block or field in (block.get("extra") or {}) for block in variants):
+                    preferences[field] = value
+            merged["platforms"][name] = preferences
     # One-time migration from Mikasa's single-session, silent message defaults.
     # Afterwards /busy and native display/session preferences remain Hermes-owned.
     if "max_concurrent_sessions" in generated and current.get("_mikasa_interaction_defaults") != 1:
@@ -70,6 +81,11 @@ def merge(current, generated):
                 merged["agent"]["gateway_notify_interval"] = 15
         merged["_mikasa_progress_defaults"] = 2
     merged.pop("_mikasa_live_progress", None)
+    # Bootstrap defaults must not reappear above an operator's nested Gateway choice.
+    for name in ("max_concurrent_sessions", "group_sessions_per_user", "thread_sessions_per_user",
+                 "streaming", "unauthorized_dm_behavior"):
+        if name not in current and name in (current.get("gateway") or {}):
+            merged.pop(name, None)
     # cch-<source digest> is Mikasa's namespace; removed sources must not linger
     # in the native picker. Keep unrelated native providers and aliases intact.
     managed = lambda name: isinstance(name, str) and re.fullmatch(r"cch-[0-9a-f]{16}", name)

@@ -204,12 +204,10 @@ entry = platform_registry.get('feishu')
 assert entry.check_fn(), 'full dependency snapshot must satisfy registry before SDK import'
 config = GatewayConfig.from_dict(json.load(sys.stdin))
 assert list(config.platforms) == [Platform.FEISHU]
-assert config.unauthorized_dm_behavior == 'ignore'
 adapter = platform_registry.create_adapter('feishu', config.platforms[Platform.FEISHU])
 assert adapter is not None, 'native registry must accept dependency and config contracts'
 assert sys.modules[type(adapter).__module__]._load_lark_oapi()
 assert adapter._connection_mode == 'websocket'
-assert not config.platforms[Platform.FEISHU].gateway_restart_notification
 assert adapter._build_event_handler() is not None
 owner = N(sender_type='user', sender_id=N(open_id='ou_owner', user_id=None, union_id='on_owner'))
 stranger = N(sender_type='user', sender_id=N(open_id='ou_stranger', user_id=None, union_id=None))
@@ -260,6 +258,73 @@ print('pinned Feishu SDK admission and Gateway configuration: passed')
                                input=json.dumps(settings), capture_output=True, text=True, timeout=30)
         self.assertEqual(reply.returncode, 0, reply.stderr)
 
+    def test_native_gateway_loader_preserves_nested_settings_and_platform_preferences(self):
+        from mikasa.native import prepare_profile
+        self.native_python('dotenv', 'openai', 'anthropic', 'aiohttp')
+        model_env = {'MIKASA_MODEL': 'fixture-model', 'MIKASA_MODEL_BASE_URL': 'https://cch.invalid/v1',
+                     'MIKASA_MODEL_API_KEY': 'fixture-secret'}
+        with patch.dict(os.environ, model_env):
+            home, source, python, _ = prepare_profile(self.config, self.config.owner)
+        path = home / 'config.yaml'
+        saved = json.loads(path.read_text())
+        saved.pop('max_concurrent_sessions')
+        saved['gateway'] = {
+            'quick_commands': {'ping': {'type': 'exec', 'command': 'echo pong'}},
+            'profile_routes': [{'name': 'work', 'platform': 'feishu', 'profile': 'work', 'chat_id': 'room'}],
+            'multiplex_profiles': True, 'max_concurrent_sessions': 7, 'loop_watchdog': False,
+            'stt': {'enabled': True, 'echo_transcripts': False},
+            'platforms': {'weixin': {'gateway_restart_notification': True}},
+        }
+        saved['platforms']['weixin'].pop('gateway_restart_notification')
+        saved['platforms']['feishu'].update(
+            reply_to_mode='all', typing_indicator=False, gateway_restart_notification=True,
+            channel_overrides={'room': {'model': 'fixture-alt', 'system_prompt': 'room-specific'}},
+            extra={'custom_setting': 'keep', 'require_mention': True})
+        saved['platforms']['discord'] = {'enabled': True, 'token': 'unselected-fixture-token'}
+        path.write_text(json.dumps(saved))
+        with patch.dict(os.environ, model_env):
+            prepare_profile(self.config, self.config.owner)
+        refreshed = json.loads(path.read_text())
+        self.assertNotIn('max_concurrent_sessions', refreshed)
+        self.assertNotIn('gateway_restart_notification', refreshed['platforms']['weixin'])
+        with patch.dict(os.environ, {'MIKASA_FEISHU_APP_ID': 'cli_fixture',
+                                    'MIKASA_FEISHU_APP_SECRET': 'fixture-secret'}):
+            env, requested = messaging_gateway(self.config, ('feishu',))
+        self.assertNotIn('GATEWAY_MULTIPLEX_PROFILES', env)
+        self.assertNotIn('stt_enabled', requested)
+        explicit = home / 'gateway-messaging.json'
+        explicit.write_text(json.dumps(requested))
+        env.update(PATH=os.environ.get('PATH', ''), HERMES_HOME=str(home),
+                   MIKASA_HERMES_SOURCE=str(source), HERMES_ENABLE_PROJECT_PLUGINS='0')
+        code = '''
+import os, sys
+from pathlib import Path
+sys.path.insert(0, os.environ['MIKASA_HERMES_SOURCE'])
+sys.path.insert(0, sys.argv[1])
+from workers.hermes.native_gateway import messaging_config
+from gateway.config import Platform
+cfg = messaging_config(Path(os.environ['HERMES_HOME']) / 'gateway-messaging.json')
+assert set(cfg.platforms) == {Platform.FEISHU}, 'unselected adapters must not start'
+assert cfg.quick_commands['ping']['command'] == 'echo pong'
+assert cfg.profile_routes[0].profile == 'work'
+assert cfg.multiplex_profiles is True and cfg.max_concurrent_sessions == 7
+assert cfg.loop_watchdog is False and cfg.stt_enabled and not cfg.stt_echo_transcripts
+assert cfg.unauthorized_dm_behavior == 'ignore'
+p = cfg.platforms[Platform.FEISHU]
+assert p.enabled and p.reply_to_mode == 'all' and not p.typing_indicator
+assert p.gateway_restart_notification is True
+assert p.channel_overrides['room'].model == 'fixture-alt'
+assert p.channel_overrides['room'].system_prompt == 'room-specific'
+assert p.extra['custom_setting'] == 'keep' and p.extra['require_mention'] is False
+assert p.extra['app_id'] == 'cli_fixture'
+'''
+        before = path.read_bytes()
+        result = subprocess.run([str(python), '-B', '-c', code, str(ROOT)],
+                                cwd=home / 'workspace', env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertNotIn('fixture-secret', explicit.read_text())
+
     def test_native_sethome_survives_profile_refresh_restart_and_env_free_restore(self):
         from mikasa.native import prepare_profile
         self.native_python("dotenv", "openai", "anthropic", "aiohttp")
@@ -269,7 +334,7 @@ print('pinned Feishu SDK admission and Gateway configuration: passed')
             home, source, python, credentials = prepare_profile(self.config, self.config.owner)
         explicit = home / 'gateway-messaging.json'
         explicit.write_text(json.dumps({'platforms': {
-            name: {'enabled': True, 'gateway_restart_notification': False, 'extra': {'fixture': True}}
+            name: {'enabled': True, 'extra': {'fixture': True}}
             for name in ('feishu', 'weixin')}}))
         env = {"PATH": os.environ.get("PATH", ""), "HERMES_HOME": str(home),
                "MIKASA_HERMES_SOURCE": str(source), "HERMES_ENABLE_PROJECT_PLUGINS": "0", **credentials}
@@ -341,7 +406,7 @@ for name in ('feishu', 'weixin'):
     assert settings.home_channel.chat_id == name+'-chat'
     assert settings.home_channel.user_id == name+'-user'
     assert settings.home_channel.scope_id == name+'-scope'
-    assert settings.extra == {'fixture': True}
+    assert settings.extra['fixture'] is True
     assert not settings.gateway_restart_notification
 assert 'fixture-model-secret' in os.environ.values()
 '''

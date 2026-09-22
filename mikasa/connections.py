@@ -86,7 +86,6 @@ def feishu_environment(config):
         "FEISHU_ALLOW_BOTS": "all", "FEISHU_REQUIRE_MENTION": "false",
         # The platform opt-in opens Feishu without opening other Gateway adapters.
         "GATEWAY_ALLOW_ALL_USERS": "false",
-        "GATEWAY_MULTIPLEX_PROFILES": "false",
     }
 
 
@@ -94,9 +93,8 @@ def messaging_gateway(config, platforms):
     """Supply credentials and native configuration; Hermes owns all message routing."""
     if not platforms or set(platforms) - {"feishu", "weixin"}:
         raise MikasaError("请选择 feishu 或 weixin 消息平台")
-    env = {"GATEWAY_ALLOW_ALL_USERS": "false", "GATEWAY_MULTIPLEX_PROFILES": "false"}
-    settings = {"platforms": {}, "unauthorized_dm_behavior": "ignore", "multiplex_profiles": False,
-                "stt_enabled": False}
+    env = {"GATEWAY_ALLOW_ALL_USERS": "false"}
+    settings = {"platforms": {}}
     for platform in dict.fromkeys(platforms):
         if platform == "feishu":
             env.update(feishu_environment(config))
@@ -109,8 +107,7 @@ def messaging_gateway(config, platforms):
             extra = {"account_id": binding["account_id"], "base_url": binding["base_url"],
                      "dm_policy": "allowlist", "allow_from": [binding["user_id"]],
                      "group_policy": "disabled", "group_allow_from": []}
-        settings["platforms"][platform] = {"enabled": True, "gateway_restart_notification": False,
-                                           "typing_indicator": True, "extra": extra}
+        settings["platforms"][platform] = {"enabled": True, "extra": extra}
     return env, settings
 
 

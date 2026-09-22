@@ -37,7 +37,7 @@ flowchart LR
 
 上述互斥来自 Mikasa 启动器持有的整个进程生命周期锁，并非 Hermes 要求 CLI 与 Gateway 一律互斥。聊天入口只提供会话恢复参数和固定初始 workspace；完整原生 CLI 参数由独立 `engineer` 入口透传。工程与聊天的 profile 分离、仅链接长期记忆，也是本项目的布局选择。
 
-消息启动器仍有未收窄的适配边界：只接受飞书和微信，强制关闭 `multiplex_profiles` 与入站语音转文字；原生配置只向 `GatewayConfig` 复制并发、群/话题会话划分、流式设置和 home channel。自定义 `quick_commands`、`profile_routes`、平台 `channel_overrides` 等未透传，不能把此入口描述为原生 Gateway 全配置开放。底层 Agent 和工程工具复用不等于这些入口限制已经消除。
+消息快捷入口接受飞书和微信，直接使用 Hermes 的 `load_gateway_config()` 处理原生 YAML、嵌套配置、环境变量和平台偏好，再绑定本次选中的平台账号。`quick_commands`、`profile_routes`、渠道覆盖、语音和多 profile 设置交由原生配置管理，不再用字段白名单或强制关闭覆盖。飞书开放参与、微信主人绑定继续作为接入配置；其他平台可通过完整工程 CLI 的原生 Gateway 配置使用，需自行准备对应账号与依赖。
 
 各入口继承真实系统账号的 HOME、PATH 和显式工具环境变量，使用同一 gh 认证与系统依赖。原生 config.yaml、.env、插件和 MCP 由 Hermes 管理；初始化只清除旧聊天适配写入的工具子集和默认预算一次，保留用户后续偏好。飞书开放成员可调用工程工具，权限按现有整机和平台配置执行，没有新增负责人专用工具门禁。
 

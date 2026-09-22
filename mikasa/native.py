@@ -121,6 +121,8 @@ def prepare_profile(config, actor, *, engineering=False):
         "max_concurrent_sessions": None,
         "group_sessions_per_user": False,
         "thread_sessions_per_user": False,
+        "unauthorized_dm_behavior": "ignore",
+        "platforms": {name: {"gateway_restart_notification": False} for name in ("feishu", "weixin")},
         "streaming": {"enabled": True},
         "display": {"language": "zh", "busy_input_mode": "queue", "busy_ack_detail": False,
                     "tool_progress": "all",
@@ -131,7 +133,8 @@ def prepare_profile(config, actor, *, engineering=False):
     if engineering:
         # Native CLI/Gateway toolsets, budgets, backends and extensions stay native.
         for name in ("platform_toolsets", "agent", "gateway", "max_concurrent_sessions",
-                     "group_sessions_per_user", "thread_sessions_per_user", "streaming", "fallback_providers"):
+                     "group_sessions_per_user", "thread_sessions_per_user", "streaming", "fallback_providers",
+                     "platforms", "unauthorized_dm_behavior"):
             native_config.pop(name, None)
         native_config["terminal"] = {"backend": "local"}
         native_config["display"] = {"language": "zh"}
