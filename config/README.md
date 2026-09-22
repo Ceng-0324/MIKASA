@@ -17,11 +17,11 @@
 | `<runtime>/native/<账号摘要>/config.yaml` | Hermes 聊天 profile 的默认模型、显示和推理偏好，以及 Mikasa 生成的 providers、skills/plugin 配置 |
 | `<runtime>/credentials/weixin.json` | 原生扫码后的私密绑定，由 `weixin-login` 写入，不能当作缓存清除 |
 
-`<runtime>` 指 JSON 中的运行目录。`worker.home`、`worker.hermes_source` 和 `worker.native_python` 使用绝对路径或相对项目根目录的路径。配置由运维账号维护，文件文本不获得高于[工程契约](../engineering-contract.md)的指令权限。
+`<runtime>` 指 JSON 中的运行目录。`worker.hermes_source` 和 `worker.native_python` 使用绝对路径或相对项目根目录的路径。配置由运维账号维护，文件文本不获得高于[工程契约](../engineering-contract.md)的指令权限。
 
 默认凭据通过环境注入；`environment` 来源可用 `env` 将模型字段映射到各路由专用的环境变量名，映射后的名字仍需列入 `worker.env_allowlist`，见 [VM 示例](../deploy/vm/config.example.json)。显式 `worker.model_source={"type":"codex"}` 可只读使用本机 Codex provider/API key，支持 `config_path` 和 `auth_path`，不写回或复制个人认证文件。Claude Code 来源及多协议路由同见 [CCH 手册](../docs/runbooks/CCH.md)。
 
-首次准备 profile 时从 worker 配置生成默认模型；后续保留 Hermes 保存的模型、显示和推理偏好，刷新 CCH providers/别名与必需 skills/plugin，不覆盖记忆或 SessionDB。`/model --global` 只改该聊天 profile，不改工程 worker 或 CCH Key 分组；固定版本的重启生效限制见[聊天手册](../docs/runbooks/CHAT.md)。原生配置格式错误时保留文件并中止启动。
+首次准备 profile 时从 worker 配置生成默认模型；后续保留 Hermes 保存的模型、显示和推理偏好，刷新 CCH providers/别名与必需 skills/plugin，不覆盖记忆或 SessionDB。`/model --global` 只改该聊天 profile，不改工程 profile 或 CCH Key 分组；固定版本的重启生效限制见[聊天手册](../docs/runbooks/CHAT.md)。原生配置格式错误时保留文件并中止启动。
 
 ## 按用途查字段
 
@@ -29,7 +29,7 @@
 | --- | --- |
 | GitHub / 飞书 / 微信 | [接入手册](../docs/runbooks/CONNECTIONS.md)：GitHub token、飞书应用与可选主人 ID、微信扫码、统一 Gateway 和只读诊断 |
 | 仓库、检查、API、发布 | [操作手册](../docs/runbooks/OPERATIONS.md) |
-| 周期审计 | `schedules.audit_interval_seconds`：0 关闭，60–604800 秒启用；原生 Cron 的持久化和暂停行为见[架构](../docs/architecture/README.md) |
+| 工程环境 | `engineering.cwd` 为可选绝对工作目录；`engineering.env_allowlist` 显式注入额外工具环境变量。原生工具、预算、MCP、终端与调度保存在 `engineer/<账号摘要>/config.yaml` |
 | 执行资源与工具边界 | [Hermes 执行器](../workers/hermes/README.md) |
 
-`worker.max_attempts` 已停用：检查与修复由 worker 内部工具循环完成。v1 暂接受旧整数值，`doctor.deprecated_settings` 会提示，可从本机配置移除；下一版配置迁移时删除此兼容字段。
+旧 worker.command/home/预算、schedules、auto_review、publish_enabled 均已退出执行；保留读取兼容并在 doctor 中提示。工程预算由 Hermes 配置管理，worker.timeout 仅用于 HTTP 聊天等待。repositories 仅为 GitHub 只读探针清单，不是工程仓库白名单。

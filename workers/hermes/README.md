@@ -1,10 +1,10 @@
-# Hermes 执行器
+# Hermes 集成
 
-固定源码：NousResearch/hermes-agent `f9524d3f119c672e4a4444f56d582e7475716ba3`，包版本 0.21.3。真实 CCH Responses、人格/工程 skill 和完整任务链已通过合成任务联调，证据与限制见 [验证边界](../../docs/VALIDATION.md)。
+固定 NousResearch/hermes-agent `f9524d3f119c672e4a4444f56d582e7475716ba3`，版本 0.21.3。Mikasa 不修改上游、不重写工具循环。
 
-## 独立安装
+## 安装
 
-在项目根目录准备独立环境；目标目录须尚不存在。正常安装方式如下，本机安装来源校验细节见联调记录。
+在项目根目录准备独立环境，目录须尚不存在：
 
 ```sh
 git clone https://github.com/NousResearch/hermes-agent.git runtime/cache/hermes-source
@@ -14,79 +14,40 @@ uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/b
 uv --cache-dir runtime/cache/uv pip install --python runtime/cache/hermes-venv/bin/python --no-deps --editable runtime/cache/hermes-source
 ```
 
-[requirements-tested.txt](requirements-tested.txt) 是 macOS arm64/Python 3.12 的依赖版本快照；已在 OrbStack Ubuntu 26.04 arm64/Python 3.12.14 重新安装，依赖检查、GPT/Claude 探针与飞书/微信连接通过。它不是所有平台通用锁文件，换平台仍需复验。没有运行上游全局安装器。
+依赖快照已用于 macOS arm64 与 Ubuntu arm64/Python 3.12，其他平台需复验。未执行上游全局安装器。原生工具还可能需要 gh、Node、浏览器、Docker 或远端服务凭据；实际可用性用原生 tools 检查。
 
-## 配置与认证
+## 配置
 
-复制项目配置示例到 `config/local/hermes-cch.json` 后，将 worker 配置为下面内容，并把 `/absolute/mikasa` 替换为项目实际绝对路径。其余配置保持仓库为空、发布关闭。
+本地 JSON 的 worker 区块保留名称作为部署配置兼容，只管理 Hermes 路径、CCH 来源及 HTTP 等待超时：
 
 ```json
 {
-  "command": ["/absolute/mikasa/runtime/cache/hermes-venv/bin/python", "/absolute/mikasa/workers/hermes/bridge.py"],
   "hermes_source": "runtime/cache/hermes-source",
-  "home": "runtime/state/hermes-cch/home",
+  "native_python": "runtime/cache/hermes-venv/bin/python",
   "model_source": {"type": "codex"},
-  "timeout": 240,
   "env_allowlist": []
 }
 ```
 
-同时设置顶层 `runtime` 为 `runtime/state/hermes-cch`。本地配置权限设为 0600。显式选择 `codex` 才只读 `~/.codex/config.toml` 中选定 provider、model、base_url、wire_api；API key 从对应 env_key、配置 bearer token 或 `auth.json` 的 OPENAI_API_KEY 读取到内存。可用 `config_path`/`auth_path` 指定来源，不复制文件，不迁移 OAuth，不输出 key。Responses 映射为 Hermes 的 `codex_responses`。
+Codex/Claude 来源仅显式只读本机配置；VM 使用环境引用，不复制认证文件。GPT Responses 与 Claude Messages 由 Hermes 官方 transport 处理；Key 只经环境注入。完整配置见 [CCH](../../docs/runbooks/CCH.md)。
 
-默认 `model_source.type=environment` 不读取个人工具配置。生产通过专用环境注入 `MIKASA_MODEL`、`MIKASA_MODEL_BASE_URL`、`MIKASA_MODEL_API_KEY`、`MIKASA_MODEL_API_MODE`，并在 `worker.env_allowlist` 中列出；API 模式支持 `chat_completions`（默认）、`codex_responses` 和 `anthropic_messages`。home/source 也可用 `HERMES_HOME`/`MIKASA_HERMES_SOURCE` 白名单环境变量设置。专用 home 不可等于个人 home 或 `~/.hermes`。
+## 原生工程
 
-跨 GPT/Claude 的配置来源由 `worker.model_routes` 选择，示例见 [CCH 手册](../../docs/runbooks/CCH.md)。工程和旧 API 按完整 ID 或前缀匹配；原生 CLI 将默认模型及显式 models 生成精确别名，由 Hermes 选择对应 provider，不复刻前缀解析。`model_source.type=claude` 显式只读 `~/.claude/settings.json` 或指定 `config_path` 的 env.ANTHROPIC_BASE_URL、env.ANTHROPIC_AUTH_TOKEN（优先）/env.ANTHROPIC_API_KEY，使用 Hermes 原生 `anthropic_messages`。不执行 apiKeyHelper，不读取 OAuth/keychain，不合并其他 Claude 设置文件或继承未经允许的全局认证变量。`opus[1m]` 等客户端别名不作为模型 ID；切换命令传入完整网关模型名。默认请求模型首次来自 worker.model_source；原生 CLI 可以用 `--global` 保存自己的默认选择，models 不是可用性承诺。
+`mikasa engineer --cwd DIR -- chat` 直接进入官方总入口，-- 后透传所有原生参数。工具、终端 backend、skills、插件、MCP、委派、后台进程、会话、Kanban、Cron 和预算由 Hermes 管理。独立工程 profile 不继承聊天工具子集，memories 链接同账号聊天，配置刷新保留原生偏好。
 
-Anthropic 协议依赖 Hermes 官方声明的 `anthropic==0.87.0`，已纳入安装快照；缺失时返回 missing_dependency。请求保持 provider=custom，避免触发原生 Anthropic OAuth 或个人凭据回退，SDK 请求、工具和响应转换由 Hermes 官方 transport 完成。
+没有受限快照、无网容器、文件黑名单、固定任务工具集合、worker JSON 或宿主最终验收/提交。默认 local backend 的工程能力等于同账号原生 Hermes；是否安装依赖、获得网络和平台权限仍按环境判断。旧执行器和协议已退休，档案处理见 [运维](../../docs/runbooks/OPERATIONS.md)。
 
-三种模型来源使用同一配置校验：完整模型 ID、有效 HTTP(S) 端点、无空白 API key 和受支持的协议；端点不得嵌入认证、查询参数或片段。`doctor` 输出配置状态、端点 origin（不含路径）、请求模型和协议，不输出认证值或认证文件路径。显式 `doctor --probe-model` 才通过当前 worker 发起一次无工具聊天验证，不创建聊天记录或工程任务；探针失败返回非零退出码。详细步骤见 [CCH 诊断](../../docs/runbooks/CCH.md)。
-
-## 执行协议与限制
-
-bridge 是单次进程：stdin 接收 version=1、rules、instruction、skills、task、context、output_contract；stdout 返回 `{"version":1,"result":{...},"runtime":{...}}`。result 是任务对应严格 JSON；runtime 包含 SDK 版本、请求模型、通过公开 post_api_request hook 观察到的响应模型标识 reported_model、API 模式、规则/system/skill SHA-256、来源和工具数。宿主验证规则、skill 指纹及工具数并保存到任务 execution，不能用模型自述代替加载证据。
-
-模型原始回复允许整个 JSON 文档包在一个完整 JSON 代码围栏内；bridge 仅剥除这层外壳，不从说明文字中搜索 JSON，不修复畸形内容，不接受多段代码块。字段和实际工具副作用继续由宿主校验。响应 API 模式还必须与宿主选定路由一致。
-
-失败时 bridge 以非零码退出，stdout 只返回 `{"version":1,"error":{"code":"固定错误码"}}`。使用官方 `api_request_error` hook 的结构化 reason/status 分类；不复制 error.message、request 或原始 SDK 异常。宿主再次按固定词表校验，并将可识别的 `error_code` 写入失败进度。恢复成功后的 API 错误不会继续当作最终失败；未知原因仍为泛化错误，不猜测网关故障来源。
-
-工程工作区使用 Hermes 原生 `read_file/search_files/write_file/patch/terminal`、MEMORY/USER、SOUL 和 skills.auto_load。bridge 只适配结构化任务交付、模型来源、工具授权与宿主证据；推理和工具循环由官方 AIAgent harness 执行，上游源码不修改。聊天另由原生 Gateway 持久化会话，工程调用不重建聊天上下文。
-
-Mikasa 将当前暂存树（实现/修复）或固定 PR head（计划/审查）的普通 UTF-8 文件导出到隔离快照；不导出凭据、链接、二进制、`.git`、`.hermes` 等执行配置。单文件最多 1 MB，总计最多 5000 文件/50 MB。省略项明确保留为未覆盖范围。原生终端使用 Docker，无网络、只读根目录、资源限制，挂载快照、受信任 skills 及 Hermes 原生的任务附件/缓存目录；不挂载账号记忆、SessionDB 或 profile 配置，模型认证保留在宿主 SDK。只读任务的快照挂载为 ro，不授权 write_file/patch。
-
-默认工程镜像固定为 Python 3.12 slim 的 digest，见 [snapshot 配置](../../mikasa/sandbox.py)。需预先启动 Docker 并拉取镜像；其他语言可在仓库配置 `agent_image`，镜像应预装依赖。它与 `check_image` 分开：前者用于原生探索，后者执行独立验收。离线容器内不能临时联网安装包。
-
-仅 `mikasa_run_checks` 是自研业务工具，不能指定命令。执行时宿主暂停本任务容器，验收并导入快照差异，再运行既定检查；随后恢复容器供模型修复。最终先清理本任务容器，再导入最后差异、独立复验并创建本地提交。规则、认证、执行配置、符号/硬链接、特殊文件、超大产物或权限变更均不能进入真实工作区。检查修改 Git 索引、HEAD 或暂存内容会拒绝交付。超时或取消也清理任务容器；不清理他人的 Docker 资源。
-
-原生 `post_tool_call` hook 经专用 FD 将实际工具结果交给宿主。宿主把 read_file 的带行号内容逐行对照固定快照，累积相同 PR head 的完整覆盖证据；仅读尾页、搜索命中或模型宣称读过不能消除审查限制。SQLite 持久化元数据，不保存读取正文、shell 命令或认证值。真实输出协议的失败诊断只记录异常类型和栈位置，不复制 SDK 错误正文。
-
-工程 profile 位于 `runtime/engineering/<task-id>`，SessionDB 按任务隔离；每轮从稳定根会话恢复原生工具历史及压缩后续。memories 目录直接链接提交账号的原生 MEMORY/USER，由 Hermes 负责锁、原子写入与加载；不复制聊天正文。任务 profile 绑定可信 actor、task-id 和 repo，同任务进程互斥。旧任务记忆留在 `memories.legacy`，旧随机会话仍保留在原 SessionDB，均不自动合并。SOUL 和任务对应 skills 由 canonical 与受信任 manifest 生成，pre_api_request 验证实际请求内的完整身份、规则与 skill 正文。只准加载本任务的可信 skills，不开放 skill_manage、委派、浏览器、外部消息或发布工具。每次至多 24 次原生迭代、128 个工具证据事件；时间仍由 worker.timeout 限制。
-
-持久根会话为 `mikasa-task-<task-id>`；每轮随机 `run_id` 单独传给原生工具作为 task_id，容器按该 ID 标记、验收及清理。Python 启动路径保留虚拟环境符号链接，避免切换到缺少 SDK 的基础解释器。续话、记忆、真实 Docker 与固定 SDK 验证见 [当前架构](../../docs/architecture/README.md)。
-
-工程返回严格 JSON，原生实现必须通过工具修改快照并返回 `changes: []`。宿主暂保留任务、固定 revision、检查和发布适配；审查分工由 Agent 依据规则与记忆判断，不再由宿主归属分类或指定审批人引擎执行。没有工作区的诊断调用仍为无工具结构化请求，不代表工程执行。
-
-每次任务认领只调用一次 worker；Hermes 在原生工具循环中自行读取失败、修改并重跑 `mikasa_run_checks`。宿主结束后独立验收一次，失败返回 blocked、保留结果与工作区，不启动新的 Agent 修复轮。显式 retry 恢复同任务原生历史，并传递上次最终验收结果；新工作区不自动复制旧失败改动。旧 `worker.max_attempts` 仅供 v1 配置读取兼容，doctor 明确报告已停用。详见 [当前架构](../../docs/architecture/README.md)。
-
-可配置的第三方 worker 暂保留 version=1 的宿主 RPC 协议（旧 mikasa_list/read/search/apply）；它是已公开进程协议的兼容对象，内置 Hermes 工程路径不使用它。待第三方协议升级、调用方与协议测试一起迁移后删除该兼容实现，不提供 Hermes 新旧后端切换开关。
-
-原生容器、工程循环与分页的实测范围见 [验证边界](../../docs/VALIDATION.md)，旧版本结果不能替代当前验收。
-
-## 集成入口
+## 保留的集成文件
 
 | 文件 | 职责 |
 | --- | --- |
-| `native_cli.py` / `native_gateway.py` | 官方 CLI/Gateway 生命周期与必要加载检查 |
-| `feishu_probe.py` | 复用官方机器人认证探针，隔离 home，不发送消息、不回显 SDK 诊断 |
-| `weixin_login.py` | 复用原生 iLink 扫码登录，临时 home，完整绑定才写入本机私密凭据文件 |
-| `profile_config.py` | 保留原生偏好，刷新受管 providers/aliases/skills/plugin |
-| `plugin/` | 精简聊天提示、按需工程 skill 指引、身份加载证据与已开放工具范围 |
-| `task_session.py` | 工程原生续话与压缩后续 |
-| `import_legacy.py` | 旧聊天导入原生 SessionDB，保留原档案 |
-| `command_adapter.py` | 既有 HTTP/单条消息命令契约；终端不用此适配 |
-| `kanban_adapter.py` | 原生任务、租约、dispatcher、事件与旧 ID 迁移 |
-| `cron_adapter.py` / `cron_enqueue.py` | 原生 Cron tick 与 occurrence 幂等入板 |
-| `backup_adapter.py` | 原生 SQLite 快照、配置密钥字段排除及恢复路径迁移 |
+| native_engineer.py | 官方 hermes_cli.main.main 工程总入口 |
+| native_cli.py / native_gateway.py | 聊天 CLI/Gateway 生命周期与加载检查 |
+| plugin/ | 身份/协作提示及加载证据；仅聊天注册工具范围 hook |
+| profile_config.py | 保留原生偏好、刷新受管 provider 与身份 skill |
+| command_adapter.py | 保留的 HTTP 命令子集，独立于模型执行 |
+| import_legacy.py | 旧聊天导入 SessionDB，保留原档案 |
+| backup_adapter.py | Hermes SQLite 快照及恢复路径处理 |
+| feishu_probe.py / weixin_login.py | 官方平台探针与扫码，凭据留本机 |
 
-`worker.native_python` 指定 Hermes 解释器，默认 `runtime/cache/hermes-venv/bin/python`，保留 venv 路径而不解析为基础 Python。`requirements-kanban.txt` 供 CI/控制面测试，完整 agent 使用安装快照；Gateway 的 aiohttp、lark-oapi、qrcode 已包含在快照中。飞书平台注册会检查 qrcode，即使不用扫码安装也不可省略。显式 Gateway 平台配置需提供非密钥 App ID，App Secret 仍仅经环境传入；入口预检查依赖与平台注册条件，避免无消息平台的 Cron-only 进程伪装为启动成功。
-
-命令、状态、迁移及兼容退出条件统一见 [当前架构](../../docs/architecture/README.md)。可重复的 SDK、Docker 与真实模型验收见 [脚本](../../scripts/README.md)；平台接通与历史验证的界限见 [验证边界](../../docs/VALIDATION.md)。
+同一聊天 profile 的入口互斥，工程 profile 可独立工作。方法 skills 不包含 worker 输出协议。固定源码、身份、记忆、工具和真实模型验收范围见 [验证边界](../../docs/VALIDATION.md)。

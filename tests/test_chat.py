@@ -9,15 +9,14 @@ from unittest.mock import patch
 from mikasa.chat import Chat, command
 from mikasa.errors import Conflict, NotFound
 from mikasa.server import make_server
-from mikasa.worker import Worker
-from tests.support import BaseTest, command_reply
+from tests.support import BaseTest, command_reply, resolved_command
 from tests.native_support import Gateways
 
 
 class ChatTests(BaseTest):
     def setUp(self):
         super().setUp()
-        for context in (patch.object(Worker, "command", side_effect=command_reply),
+        for context in (patch("mikasa.chat.resolve", side_effect=resolved_command),
                         patch.dict(os.environ, {"MIKASA_MODEL": "model-a"})):
             context.start()
             self.addCleanup(context.stop)
@@ -55,10 +54,10 @@ class ChatTests(BaseTest):
     def test_new_pause_and_lock(self):
         with self.chat.locked(self.session["id"]), self.assertRaises(Conflict):
             self.send("/new")
-        def pause(text, cancelled):
+        def pause(config, text, cancelled):
             self.chat.store.pause(True, self.config.owner)
             return command_reply(text)
-        with patch.object(Worker, "command", side_effect=pause), self.assertRaises(Conflict):
+        with patch("mikasa.chat.resolve", side_effect=pause), self.assertRaises(Conflict):
             self.send("/new")
         with self.chat.store.connect() as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM chat_links").fetchone()[0], 1)
@@ -78,7 +77,7 @@ class ChatTests(BaseTest):
     def test_interactive_cli_uses_native_launcher_without_business_service(self):
         from mikasa.cli import main
         with patch("mikasa.native.interactive", return_value=0) as launch, \
-                patch("mikasa.cli.Service", side_effect=AssertionError("interactive CLI must not open business state")):
+                patch("mikasa.chat.Chat", side_effect=AssertionError("interactive CLI must not open business state")):
             code = main(["--config", str(self.config_path), "chat", "--session", self.session["id"]])
         self.assertEqual(code, 0)
         self.assertEqual(launch.call_args.args[1], self.session["id"])
@@ -173,7 +172,7 @@ class ChatTests(BaseTest):
 
     def test_http_chat_auth_native_history_and_shutdown(self):
         with patch.dict(os.environ, {"MIKASA_OWNER_API_TOKEN": "o" * 32}), patch('mikasa.chat.NativeGateways', return_value=self.gateways):
-            server = make_server(self.service, "127.0.0.1", 0)
+            server = make_server(self.config, "127.0.0.1", 0)
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:

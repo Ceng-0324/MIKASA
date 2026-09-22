@@ -64,24 +64,3 @@ def git(args, cwd, *, strip=True, **kwargs):
     if result["code"]:
         raise MikasaError("Git 操作失败：" + args[0] + "；检查仓库、ref 和访问权限")
     return result["stdout"].strip() if strip else result["stdout"]
-
-
-def check_command(command, spec, workspace, timeout, cancelled):
-    image = spec.get("check_image")
-    if image:
-        import uuid
-        name = "mikasa-check-" + uuid.uuid4().hex
-        argv = ["docker", "run", "--rm", "--pull=never", "--name", name,
-                "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
-                "--pids-limit=128", "--memory=1g", "--cpus=2", "--user", f"{os.getuid()}:{os.getgid()}",
-                "--tmpfs", "/tmp:rw,nosuid,size=256m", "--mount", f"type=bind,source={workspace},target=/workspace",
-                "--mount", f"type=bind,source={workspace}/.git,target=/workspace/.git,readonly",
-                "--workdir=/workspace", "--env", "PYTHONDONTWRITEBYTECODE=1", image, *command]
-        try:
-            return run(argv, cwd=workspace, timeout=timeout, cancelled=cancelled)
-        finally:
-            # A terminated docker client alone does not stop the container.
-            run(["docker", "rm", "-f", name], cwd=workspace, timeout=30)
-    if spec.get("allow_local_checks") is not True:
-        raise MikasaError("需要配置 check_image；仅受信任测试夹具可显式允许本机执行 checks")
-    return run(command, cwd=workspace, timeout=timeout, cancelled=cancelled)

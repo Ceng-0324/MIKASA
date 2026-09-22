@@ -6,9 +6,7 @@ from unittest.mock import patch
 
 from mikasa.cli import doctor, main
 from mikasa.errors import MikasaError
-from mikasa.model_errors import ModelFailure, classify_failure
-from mikasa.model_settings import model_diagnostics, model_environment, validate_source
-from mikasa.worker import Worker
+from mikasa.model_settings import model_diagnostics, model_environment, validate_source, validate_environment
 from tests.support import BaseTest
 
 
@@ -39,9 +37,9 @@ class ModelSettingsTests(BaseTest):
         for field, cases in values.items():
             for value in cases:
                 with self.subTest(field=field, value=value), patch.dict(os.environ, {**self.env, field: value}, clear=True), \
-                        patch("mikasa.worker.run") as run:
+                        patch("mikasa.native.prepare_profile") as run:
                     with self.assertRaises(MikasaError) as caught:
-                        Worker(self.config).execute({"payload": {"kind": "chat"}}, {}, lambda: False)
+                        validate_environment(model_environment(self.config.data["worker"]), required=True)
                     run.assert_not_called()
                     self.assertNotIn("private", str(caught.exception))
 
@@ -84,45 +82,27 @@ class ModelSettingsTests(BaseTest):
 
     def test_doctor_probe_is_explicit_and_does_not_create_chats(self):
         self.config.data["worker"].update(self.settings)
-        with patch.dict(os.environ, self.env), patch.object(Worker, "execute") as call:
+        with patch.dict(os.environ, self.env), patch("mikasa.cli.run_model_probe") as call:
             report = doctor(self.config)
             call.assert_not_called()
             self.assertEqual(report["model"]["connection"], "not_checked")
         # The actual fixture worker speaks our protocol but provides no model identity.
-        with patch.dict(os.environ, self.env):
+        with patch.dict(os.environ, self.env), patch("mikasa.cli.run_model_probe", return_value={}):
             report = doctor(self.config, probe_model=True)
         self.assertEqual(report["model"]["connection"], "passed")
         self.assertEqual(report["model"]["model_match"], "unreported")
         self.assertEqual(report["model"]["provider_group"], "unverified")
-        with self.service.store.connect() as db:
+        with self.store.connect() as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM chats").fetchone()[0], 0)
 
     def test_probe_failure_exit_and_missing_config(self):
         self.data["worker"].update(self.settings)
         self.write_config()
-        with patch.dict(os.environ, self.env), patch.object(Worker, "execute", side_effect=ModelFailure("upstream_blocked")), \
+        with patch.dict(os.environ, self.env), patch("mikasa.cli.run_model_probe", side_effect=MikasaError("原生运行失败")), \
                 redirect_stdout(io.StringIO()) as output:
             self.assertEqual(main(["--config", str(self.config_path), "doctor", "--probe-model"]), 1)
-        self.assertEqual(json.loads(output.getvalue())["model"]["error_code"], "upstream_blocked")
-        with patch.dict(os.environ, {}, clear=True), patch.object(Worker, "execute") as call:
+        self.assertEqual(json.loads(output.getvalue())["model"]["connection"], "failed")
+        with patch.dict(os.environ, {}, clear=True), patch("mikasa.cli.run_model_probe") as call:
             report = doctor(self.config, probe_model=True)
         call.assert_not_called()
         self.assertEqual(report["model"]["configuration"], "invalid")
-
-    def test_failure_envelope_whitelist_and_progress(self):
-        for error, expected in [({"code": "rate_limit", "message": "private-secret"}, "rate_limit"),
-                                ({"code": "private-secret"}, "execution_failed"),
-                                ({"code": ["private-secret"]}, "execution_failed")]:
-            events = []
-            output = {"code": 1, "stdout": json.dumps({"version": 1, "error": error}), "stderr": "private-secret"}
-            with patch("mikasa.worker.run", return_value=output):
-                with self.assertRaises(ModelFailure) as caught:
-                    Worker(self.config).execute({"payload": {"kind": "chat"}}, {}, lambda: False, progress=events.append)
-            self.assertEqual(caught.exception.code, expected)
-            self.assertEqual(events[-1]["error_code"], expected)
-            self.assertNotIn("private", str(caught.exception) + json.dumps(events))
-
-    def test_403_does_not_imply_bad_credentials(self):
-        self.assertEqual(classify_failure({"status_code": 403, "reason": "auth"}), "access_denied")
-        self.assertEqual(classify_failure({"status_code": 403, "reason": "upstream_blocked"}), "upstream_blocked")
-        self.assertEqual(classify_failure({"reason": "timeout"}), "timeout")

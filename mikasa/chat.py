@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from .errors import Conflict, MikasaError, NotFound
 from .model_settings import default_model, model_choices
 from .store import Store
-from .worker import Worker
+from .commands import resolve
 from .native import NativeAPIError, NativeGateways
 from .maintenance import runtime_operation
 
@@ -183,7 +183,7 @@ class Chat:
                 return json.loads(legacy["response"])
             if self.store.paused():
                 raise Conflict("运行已暂停")
-            parsed = command(message, lambda text: Worker(self.config).command(text, self.store.paused))
+            parsed = command(message, lambda text: resolve(self.config, text, self.store.paused))
             if self.store.paused():
                 raise Conflict("运行已暂停")
             current = self.current(session, actor)

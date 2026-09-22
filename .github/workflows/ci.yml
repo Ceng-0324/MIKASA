@@ -20,7 +20,8 @@ jobs:
           path: runtime/cache/hermes-source
           persist-credentials: false
       - run: python -m venv runtime/cache/hermes-venv
-      - run: runtime/cache/hermes-venv/bin/python -m pip install -r workers/hermes/requirements-kanban.txt
+      - run: runtime/cache/hermes-venv/bin/python -m pip install -r workers/hermes/requirements-tested.txt
+      - run: runtime/cache/hermes-venv/bin/python -m pip install --no-deps --editable runtime/cache/hermes-source
       - run: python -m unittest discover -v
       - run: python scripts/check_docs.py
       - run: python -m mikasa doctor

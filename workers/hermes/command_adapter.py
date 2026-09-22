@@ -1,4 +1,8 @@
 """Hermes command APIs with Mikasa's explicitly enabled chat surface."""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from mikasa.errors import MikasaError
 from mikasa.model_settings import validate_model
 
@@ -39,3 +43,14 @@ def dispatch(text):
     elif name == "init":
         result.update(kind="deferred_command", reply="/init 会生成或修改仓库 AGENTS.md，尚未接入聊天工程任务与仓库授权；本次未执行文件操作。")
     return result
+
+
+if __name__ == '__main__':
+    import json
+    import os
+    sys.path.insert(0, os.environ['MIKASA_HERMES_SOURCE'])
+    try:
+        result = dispatch(json.load(sys.stdin)['text'])
+        print(json.dumps({'version': 1, 'result': result}, ensure_ascii=False))
+    except Exception:
+        raise SystemExit('Native command failed') from None

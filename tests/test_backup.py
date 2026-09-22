@@ -9,19 +9,65 @@ from mikasa.errors import Conflict, MikasaError
 from mikasa.maintenance import runtime_lock
 from mikasa.native import NativeGateway
 from mikasa.process import git
-from mikasa.service import Service
 from tests.support import BaseTest
 
 
 class BackupTests(BaseTest):
+    def test_native_engineering_state_and_v2_archive_restore(self):
+        runtime = self.config.runtime
+        account = runtime / 'native/account/memories'
+        account.mkdir(parents=True)
+        (account / 'MEMORY.md').write_text('shared convention')
+        home = runtime / 'engineer/account'
+        home.mkdir(parents=True)
+        (home / 'memories').symlink_to(account)
+        board = home / 'kanban'
+        board.mkdir()
+        workspace = home / 'workspace'
+        workspace.mkdir()
+        with sqlite3.connect(board / 'kanban.db') as db:
+            db.execute('CREATE TABLE tasks(id TEXT, workspace_path TEXT)')
+            db.execute('INSERT INTO tasks VALUES(?,?)', ('native', str(workspace)))
+        with sqlite3.connect(home / 'state.db') as db:
+            db.execute('CREATE TABLE sessions(id TEXT, cwd TEXT, git_repo_root TEXT)')
+            db.execute('INSERT INTO sessions VALUES(?,?,?)', ('session', str(workspace), str(workspace)))
+        backup = self.snapshot()
+        restored = self.path / 'native-restored'
+        restore_state(self.config, backup, restored)
+        self.assertEqual((restored / 'engineer/account/memories').resolve(), restored / 'native/account/memories')
+        with sqlite3.connect(restored / 'engineer/account/state.db') as db:
+            self.assertEqual(db.execute('SELECT cwd FROM sessions').fetchone()[0], str(restored / 'engineer/account/workspace'))
+        with sqlite3.connect(restored / 'engineer/account/kanban/kanban.db') as db:
+            self.assertEqual(db.execute('SELECT workspace_path FROM tasks').fetchone()[0], str(restored / 'engineer/account/workspace'))
+        legacy = runtime / 'kanban'
+        legacy.mkdir()
+        with sqlite3.connect(legacy / 'kanban.db') as db:
+            db.execute('CREATE TABLE tasks(id TEXT, workspace_path TEXT, result TEXT)')
+        old_backup = self.path / 'v2-backup'
+        backup_state(self.config, old_backup)
+        marker = old_backup / 'manifest.json'
+        manifest = json.loads(marker.read_text())
+        manifest['version'] = 2
+        marker.write_text(json.dumps(manifest))
+        restore_state(self.config, old_backup, self.path / 'v2-restored')
+        self.assertTrue((self.path / 'v2-restored/kanban/kanban.db').is_file())
+
     def snapshot(self):
         target = self.path / 'backup'
-        backup_state(self.service, target)
+        backup_state(self.config, target)
         return target
 
     def test_round_trip_includes_wal_memory_cron_git_and_relocated_workspaces(self):
-        task = self.submit()
-        result = self.service.run_once()['result']
+        task = {'id': 'legacy-task'}
+        workspace = self.config.runtime / 'engineer/account/workspace'
+        workspace.parent.mkdir(parents=True)
+        git(['clone', str(self.repo), str(workspace)], self.repo)
+        result = {'workspace': str(workspace), 'head': git(['rev-parse', 'HEAD'], workspace)}
+        board = self.config.runtime / 'kanban'
+        board.mkdir()
+        with sqlite3.connect(board / 'kanban.db') as db:
+            db.execute('CREATE TABLE tasks(id TEXT, workspace_path TEXT, result TEXT)')
+            db.execute('INSERT INTO tasks VALUES(?,?,?)', (task['id'], str(workspace), json.dumps({'result':result})))
         runtime = self.config.runtime
         home = runtime / 'native/account'
         memory = home / 'memories'
@@ -89,8 +135,8 @@ class BackupTests(BaseTest):
         self.assertEqual(cfg['terminal']['cwd'], str(restored / 'native/account/workspace'))
         self.data['runtime'] = str(restored)
         self.write_config()
-        service = Service(self.config, github=self.github)
-        copied = service.tasks.get(task['id'])['result']
+        with sqlite3.connect(restored / 'kanban/kanban.db') as db:
+            copied = json.loads(db.execute('SELECT result FROM tasks').fetchone()[0])['result']
         workspace = Path(copied['workspace'])
         self.assertTrue(workspace.is_relative_to(restored))
         self.assertEqual(git(['rev-parse', 'HEAD'], workspace), result['head'])
@@ -110,7 +156,7 @@ class BackupTests(BaseTest):
         self.assertEqual(list((backup / 'native/account').iterdir()), [])
         (home / 'outside').symlink_to(self.repo)
         with self.assertRaisesRegex(MikasaError, '外部符号链接'):
-            backup_state(self.service, self.path / 'invalid')
+            backup_state(self.config, self.path / 'invalid')
         self.assertFalse((self.path / 'invalid').exists())
 
     def test_active_runtime_and_old_profile_refuse_backup(self):
@@ -126,9 +172,7 @@ class BackupTests(BaseTest):
         self.assertFalse((self.path / 'backup').exists())
         with runtime_lock(self.config.runtime, exclusive=True):
             with self.assertRaises(Conflict):
-                self.service.store.pause(True, 'test')
-            with self.assertRaises(Conflict):
-                self.service.tasks.list()
+                self.store.pause(True, 'test')
             with self.assertRaises(Conflict):
                 NativeGateway(self.config, self.config.owner)
 
@@ -166,7 +210,7 @@ class BackupTests(BaseTest):
 
     def test_existing_destination_and_nested_backup_are_rejected(self):
         with self.assertRaises(MikasaError):
-            backup_state(self.service, self.config.runtime / 'backup')
+            backup_state(self.config, self.config.runtime / 'backup')
         backup = self.snapshot()
         with self.assertRaises(MikasaError):
             restore_state(self.config, backup, self.config.runtime)

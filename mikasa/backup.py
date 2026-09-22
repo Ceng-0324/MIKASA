@@ -1,4 +1,5 @@
 """Offline managed-runtime snapshots, using Hermes for SQLite consistency."""
+import fnmatch
 import fcntl
 import hashlib
 import json
@@ -9,21 +10,34 @@ from contextlib import ExitStack
 from pathlib import Path, PurePosixPath
 
 from .errors import Conflict, MikasaError
-from .kanban import Kanban
 from .maintenance import runtime_lock
-from .native import HERMES_REVISION, verify_source
+from .native import HERMES_REVISION, native_installation
 from .process import clean_env, run
-from .workspace import sensitive
 
-ROOTS = {'mikasa.sqlite3', 'kanban', 'scheduler', 'native', 'engineering', 'workspaces'}
+ROOTS = {'mikasa.sqlite3', 'kanban', 'scheduler', 'native', 'engineering', 'engineer', 'workspaces'}
 TRANSIENT = {'__pycache__', '.cache', 'cache', 'logs', 'backups', '.DS_Store'}
 CREDENTIALS = {'vault', 'tokens.json', '.netrc', '.git-credentials'}
+
+
+SECRET_NAMES = {'auth.json', '.env', 'credentials', 'credentials.json', 'id_rsa', 'id_ed25519'}
+SECRET_PATTERNS = ('*.pem', '*.key', '*.p12', '*.secret.*', '*.secrets.*', '*.local.*')
+
+
+def sensitive(path):
+    return any(part in SECRET_NAMES or part.startswith('.env.') or
+               any(fnmatch.fnmatch(part, pattern) for pattern in SECRET_PATTERNS)
+               for part in PurePosixPath(path).parts)
+
+
+def workspace_path(path):
+    return path.parts[0] == 'workspaces' or (len(path.parts) > 2 and path.parts[0] == 'engineer' and
+           (path.parts[2] == 'workspace' or ('kanban' in path.parts[2:] and 'workspaces' in path.parts[3:])))
 
 
 def excluded(path):
     # Git objects and reflogs are part of the recovery state, not disposable logs.
     return (sensitive(path.as_posix()) or bool(set(path.parts) & CREDENTIALS) or
-            (path.parts[0] != 'workspaces' and '.git' not in path.parts and (bool(set(path.parts) & TRANSIENT) or
+            (not workspace_path(path) and '.git' not in path.parts and (bool(set(path.parts) & TRANSIENT) or
              path.name.endswith(('.log', '.lock', '.pid', '.pyc', '-wal', '-shm', '-journal')))))
 
 
@@ -44,32 +58,30 @@ def new_target(destination, outside):
 
 
 def native_copy(config, files, *, relocation=None):
-    sdk = Kanban(config)
-    verify_source(sdk.source)
+    source, python = native_installation(config)
     with tempfile.TemporaryDirectory(prefix='mikasa-backup-sdk-') as home:
-        result = run([str(sdk.python.absolute()), str(config.root / 'workers/hermes/backup_adapter.py')],
-                     cwd=home, env=clean_env({'HERMES_HOME': home, 'MIKASA_HERMES_SOURCE': str(sdk.source)}),
+        result = run([str(python.absolute()), str(config.root / 'workers/hermes/backup_adapter.py')],
+                     cwd=home, env=clean_env({'HERMES_HOME': home, 'MIKASA_HERMES_SOURCE': str(source)}),
                      stdin=json.dumps({'files': files, 'relocation': relocation}),
                      timeout=max(60, len(files) * 12))
     if result['code']:
         raise MikasaError('原生备份或恢复校验失败；源状态未覆盖')
 
 
-def backup_state(service, destination):
+def backup_state(config, destination):
     try:
-        return _backup_state(service, destination)
+        return _backup_state(config, destination)
     except (OSError, ValueError, RuntimeError):
         raise MikasaError('备份失败；检查源文件与目标权限，源状态未覆盖') from None
 
 
-def _backup_state(service, destination):
-    runtime = service.config.runtime
+def _backup_state(config, destination):
+    runtime = config.runtime
     target = new_target(destination, runtime)
-    service.tasks.call('prepare')
     with runtime_lock(runtime, exclusive=True), ExitStack() as locks:
         # Also detect a still-running pre-maintenance-lock version.
         paths = [runtime / 'runner.lock', runtime / 'kanban/adapter.lock', runtime / 'scheduler/adapter.lock']
-        for root in ('native', 'engineering'):
+        for root in ('native', 'engineering', 'engineer'):
             paths.extend((runtime / root).glob('*/mikasa.lock'))
         for path in paths:
             if path.is_symlink():
@@ -105,8 +117,8 @@ def _backup_state(service, destination):
                 elif stat.S_ISREG(mode):
                     entries[name] = {'mode': 0o700 if mode & 0o111 else 0o600}
                     files.append({'source': str(source), 'target': str(output),
-                                  'workspace': relative.parts[0] == 'workspaces',
-                                  'config': source.name == 'config.yaml' and relative.parts[0] != 'workspaces'})
+                                  'workspace': workspace_path(relative),
+                                  'config': source.name == 'config.yaml' and not workspace_path(relative)})
                 else:
                     raise MikasaError('备份中存在不支持的特殊文件')
 
@@ -117,14 +129,14 @@ def _backup_state(service, destination):
             for entry in entries.values():
                 if 'link' in entry and (entry['link'] not in entries or 'link' in entries[entry['link']]):
                     raise MikasaError('符号链接目标未包含在备份中')
-            native_copy(service.config, files)
+            native_copy(config, files)
             for name, entry in entries.items():
                 if 'mode' in entry:
                     output = stage / name
                     output.chmod(entry['mode'])
                     entry.update(size=output.stat().st_size, sha256=digest(output))
-            manifest = {'version': 2, 'scope': 'managed-runtime', 'hermes_revision': HERMES_REVISION,
-                        'source_runtime': str(runtime.resolve()), 'source_root': str(service.config.root),
+            manifest = {'version': 3, 'scope': 'managed-runtime', 'hermes_revision': HERMES_REVISION,
+                        'source_runtime': str(runtime.resolve()), 'source_root': str(config.root),
                         'entries': entries, 'local_api_identity_included': True,
                         'excluded': ['external-credentials', 'credential-files', 'logs', 'caches', 'locks', 'unmanaged-roots']}
             marker = stage / 'manifest.json'
@@ -149,11 +161,11 @@ def restore_state(config, source, destination):
         if backup.is_symlink() or (backup / 'manifest.json').is_symlink():
             raise MikasaError('备份目录与清单不能为符号链接')
         manifest = json.loads((backup / 'manifest.json').read_text())
-        if (manifest['version'] != 2 or manifest['scope'] != 'managed-runtime' or
+        if (manifest['version'] not in (2, 3) or manifest['scope'] != 'managed-runtime' or
                 manifest['hermes_revision'] != HERMES_REVISION):
             raise MikasaError('备份版本或 Hermes 版本不匹配')
         entries = manifest['entries']
-        if not isinstance(entries, dict) or not {'mikasa.sqlite3', 'kanban/kanban.db'} <= entries.keys():
+        if not isinstance(entries, dict) or (manifest['version'] == 2 and not {'mikasa.sqlite3', 'kanban/kanban.db'} <= entries.keys()):
             raise MikasaError('备份缺少配对的任务与回执数据库')
         for name, entry in entries.items():
             path = safe_name(name)
@@ -189,8 +201,8 @@ def restore_state(config, source, destination):
                     output.mkdir(mode=0o700)
                 elif 'mode' in entry:
                     files.append({'source': str(backup / name), 'target': str(output),
-                                  'workspace': PurePosixPath(name).parts[0] == 'workspaces',
-                                  'config': Path(name).name == 'config.yaml' and PurePosixPath(name).parts[0] != 'workspaces'})
+                                  'workspace': workspace_path(PurePosixPath(name)),
+                                  'config': Path(name).name == 'config.yaml' and not workspace_path(PurePosixPath(name))})
             native_copy(config, files, relocation={
                 'old_runtime': manifest['source_runtime'], 'runtime': str(target),
                 'old_root': manifest['source_root'], 'root': str(config.root), 'stage': str(stage)})

@@ -8,7 +8,6 @@ from .errors import MikasaError
 from .model_settings import validate_routes, validate_source
 
 REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
-KINDS = {"audit", "plan", "implement", "review", "followup"}
 
 
 @dataclass(frozen=True)
@@ -73,12 +72,10 @@ class Config:
                     raise MikasaError(f"worker.{field} 必须为路径")
             if "native_gateway" in worker:
                 raise MikasaError("聊天已统一使用原生 Gateway；删除旧 native_gateway 开关")
-            # v1 max_attempts remains readable for deployed configs but has no
-            # execution effect; doctor reports its deprecation. No host retry loop.
-            for key, default, upper in (("timeout", 600, 7200), ("max_output_bytes", 2000000, 10000000), ("max_context_bytes", 200000, 1000000), ("max_attempts", 3, 5)):
-                value = worker.get(key, default)
-                if type(value) is not int or not 1 <= value <= upper:
-                    raise MikasaError(f"worker.{key} 超出范围")
+            # Legacy worker limits remain readable but do not constrain engineering.
+            timeout = worker.get('timeout', 600)
+            if type(timeout) is not int or timeout < 1:
+                raise MikasaError('worker.timeout 必须为正整数，仅用于 HTTP 聊天等待')
             members = data.get("members", [])
             engineering = data.get('engineering', {})
             if not isinstance(engineering, dict) or set(engineering) - {'cwd', 'env_allowlist'}:
@@ -136,11 +133,6 @@ class Config:
     def bot(self):
         return self.data["bot"]
 
-    def repo(self, name):
-        try:
-            return self.data["repositories"][name]
-        except KeyError as exc:
-            raise MikasaError("仓库不在配置允许范围内") from exc
 
     def authorize(self, actor, owner=False):
         from .errors import Forbidden

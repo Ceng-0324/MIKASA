@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mikasa.config import Config
 from mikasa.model_settings import default_model, validate_model
 from mikasa.server import make_server
-from mikasa.service import Service
 
 
 def main():
@@ -40,7 +39,7 @@ def main():
     data = json.loads(json.dumps(config.data))
     data['server']['tokens'] = {config.owner: token_variable}
     probe_config = Config(config.root, data)
-    server = make_server(Service(probe_config), '127.0.0.1', 0)
+    server = make_server(probe_config, '127.0.0.1', 0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     report = {'created': time.time(), 'target': args.target, 'steps': [], 'checks': {}}

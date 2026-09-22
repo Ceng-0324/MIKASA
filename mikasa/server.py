@@ -1,4 +1,3 @@
-import hashlib
 import hmac
 import json
 import os
@@ -22,42 +21,13 @@ def authenticate(config, header):
     raise Forbidden("身份验证失败")
 
 
-def webhook(service, headers, raw):
-    secret = service.config.secret("server", "webhook_secret_env", "MIKASA_GITHUB_WEBHOOK_SECRET")
-    expected = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
-    signature = headers.get("X-Hub-Signature-256", "")
-    if not hmac.compare_digest(signature.encode(), expected.encode()):
-        raise Forbidden("webhook 签名无效")
-    delivery = headers.get("X-GitHub-Delivery", "")
-    if not re.fullmatch(r"[A-Za-z0-9-]{1,100}", delivery):
-        raise MikasaError("缺少合法 delivery ID")
-    payload = json.loads(raw)
-    if not isinstance(payload, dict):
-        raise MikasaError("webhook body 必须为对象")
-    event = headers.get("X-GitHub-Event", "")
-    if event == "ping":
-        return {"pong": True}
-    repo = payload.get("repository", {}).get("full_name")
-    service.config.repo(repo)
-    # Keep only metadata; external text cannot change policy or dispatch implementation.
-    summary = {"event": event, "action": payload.get("action"), "repo": repo, "number": payload.get("number"),
-               "sender": payload.get("sender", {}).get("login"),
-               "head": payload.get("pull_request", {}).get("head", {}).get("sha")}
-    if (service.config.data.get("server", {}).get("auto_review") is True and event == "pull_request"
-            and payload.get("action") in {"opened", "reopened", "synchronize", "ready_for_review"}):
-        service.submit({"kind": "review", "repo": repo, "pr": payload["number"],
-                        "title": f"审查 PR #{payload['number']}", "acceptance": "依据当前版本形成审查草稿、验证证据和限制"},
-                       service.config.owner, f"github:{delivery}")
-    return {"accepted": True, "duplicate": not service.store.delivery(delivery, summary)}
-
-
-def make_server(service, host=None, port=None):
-    config = service.config.data.get("server", {})
+def make_server(settings, host=None, port=None):
+    config = settings.data.get("server", {})
     tokens = [os.environ.get(v, "") for v in config.get("tokens", {}).values()]
     if not tokens or any(len(t) < 32 for t in tokens) or len(set(tokens)) != len(tokens):
         raise MikasaError("启动 API 前必须为每个账号配置不同的至少 32 字符 token")
     from .chat import Chat
-    chat = Chat(service.config)
+    chat = Chat(settings)
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "Mikasa"
@@ -82,7 +52,7 @@ def make_server(service, host=None, port=None):
             try:
                 path = self.path
                 if method == "GET" and path == "/health":
-                    return self.respond(200, {"status": "ok", "paused": service.store.paused()})
+                    return self.respond(200, {"status": "ok", "paused": chat.store.paused()})
                 raw = b""
                 if method == "POST":
                     if self.headers.get("Transfer-Encoding"):
@@ -93,9 +63,9 @@ def make_server(service, host=None, port=None):
                     raw = self.rfile.read(length)
                     if len(raw) != length:
                         raise MikasaError("请求体不完整")
-                if method == "POST" and path == "/webhooks/github":
-                    return self.respond(200, webhook(service, self.headers, raw))
-                actor = authenticate(service.config, self.headers.get("Authorization", ""))
+                if path == '/webhooks/github':
+                    return self.respond(410, {'error': '工程 webhook 已退休；使用 engineer 原生入口。旧数据保留。'})
+                actor = authenticate(settings, self.headers.get("Authorization", ""))
                 data = json.loads(raw) if raw else {}
                 if not isinstance(data, dict):
                     raise MikasaError("body 必须为对象")
@@ -116,31 +86,14 @@ def make_server(service, host=None, port=None):
                         if set(data) != {"message"}:
                             raise MikasaError("聊天请求只接受 message")
                         return self.respond(200, chat.send(chat_id, actor, data["message"], self.headers.get("Idempotency-Key", "")))
-                if path == "/tasks" and method == "GET":
-                    return self.respond(200, service.tasks.list())
-                if path == "/tasks" and method == "POST":
-                    return self.respond(201, service.submit(data, actor, self.headers.get("Idempotency-Key", "")))
+                if path == '/tasks' or path.startswith('/tasks/'):
+                    return self.respond(410, {'error': '旧任务 API 已退休；使用 engineer -- kanban。旧看板为只读档案，不自动重跑。'})
                 if path == "/control" and method == "POST":
-                    service.config.authorize(actor, owner=True)
+                    settings.authorize(actor, owner=True)
                     if type(data.get("paused")) is not bool:
                         raise MikasaError("paused 必须为布尔值")
-                    service.store.pause(data["paused"], actor)
+                    chat.store.pause(data["paused"], actor)
                     return self.respond(200, {"paused": data["paused"]})
-                match = re.fullmatch(r"/tasks/([0-9a-f]{32}|t_[0-9a-f]{8,64})(?:/(events|cancel|retry|assign|complete|expand|publish))?", path)
-                if match:
-                    task, action = match.groups()
-                    if method == "GET" and action in {None, "events"}:
-                        return self.respond(200, service.tasks.events(task) if action else service.tasks.get(task))
-                    if method == "POST" and action:
-                        if action == "expand":
-                            value = service.expand(task, actor)
-                        elif action == "publish":
-                            value = service.publish(task, actor)
-                        elif action in {"cancel", "retry", "assign", "complete"}:
-                            value = service.action(task, action, actor, data)
-                        else:
-                            raise NotFound("路由不存在")
-                        return self.respond(200, value)
                 raise NotFound("路由不存在")
             except Forbidden as exc:
                 self.respond(403, {"error": str(exc)})

@@ -50,6 +50,19 @@ def main():
                             updated = relocate(scope, paths[:1])
                             if updated != scope:
                                 db.execute('UPDATE gateway_routing SET scope=? WHERE scope=?', (updated, scope))
+                    tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                    for table, fields in (('tasks', ('workspace_path',)),
+                                          ('sessions', ('cwd', 'git_repo_root'))):
+                        if table not in tables:
+                            continue
+                        columns = {r[1] for r in db.execute(f'PRAGMA table_info({table})')}
+                        for field in fields:
+                            if field not in columns:
+                                continue
+                            for rowid, value in db.execute(f'SELECT rowid,{field} FROM {table}').fetchall():
+                                updated = relocate(value, paths[:1])
+                                if updated != value:
+                                    db.execute(f'UPDATE {table} SET {field}=? WHERE rowid=?', (updated, rowid))
         elif item.get('config'):
             value = yaml.safe_load(src.read_text())
             if not isinstance(value, dict):
@@ -57,7 +70,7 @@ def main():
             dst.write_text(json.dumps(configuration(value, paths), ensure_ascii=False, indent=2))
         else:
             shutil.copyfile(src, dst)
-    if move:
+    if move and (Path(move['stage']) / 'kanban/kanban.db').is_file():
         # Only live operational pointers move; transcripts/events retain historical paths.
         with sqlite3.connect(Path(move['stage']) / 'kanban/kanban.db') as db:
             for task, workspace, raw in db.execute('SELECT id, workspace_path, result FROM tasks').fetchall():

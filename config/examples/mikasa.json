@@ -7,23 +7,25 @@
   "members": [],
   "repositories": {},
   "worker": {
-    "command": [],
     "timeout": 600,
-    "max_output_bytes": 2000000,
-    "max_context_bytes": 200000,
-    "model_source": {"type": "environment"},
-    "env_allowlist": ["MIKASA_MODEL", "MIKASA_MODEL_BASE_URL", "MIKASA_MODEL_API_KEY", "MIKASA_MODEL_API_MODE", "HERMES_HOME"]
+    "model_source": {
+      "type": "environment"
+    },
+    "env_allowlist": [
+      "MIKASA_MODEL",
+      "MIKASA_MODEL_BASE_URL",
+      "MIKASA_MODEL_API_KEY",
+      "MIKASA_MODEL_API_MODE"
+    ]
   },
   "server": {
     "host": "127.0.0.1",
     "port": 8765,
-    "auto_review": false,
-    "tokens": {"Ceng-0324": "MIKASA_OWNER_API_TOKEN"},
-    "webhook_secret_env": "MIKASA_GITHUB_WEBHOOK_SECRET"
+    "tokens": {
+      "Ceng-0324": "MIKASA_OWNER_API_TOKEN"
+    }
   },
-  "schedules": {"audit_interval_seconds": 0},
   "github": {
-    "token_env": "MIKASA_GITHUB_TOKEN",
-    "publish_enabled": false
+    "token_env": "MIKASA_GITHUB_TOKEN"
   }
 }

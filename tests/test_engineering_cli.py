@@ -80,6 +80,100 @@ print('native engineering parity passed')
         other,*_ = prepare_profile(self.config,'human',engineering=True)
         self.assertFalse((other/'memories/MEMORY.md').exists())
 
+    def test_native_kanban_dispatch_and_cron_persist_without_host_runner(self):
+        home, source, python, credentials = prepare_profile(self.config, self.config.owner, engineering=True)
+        env = {**credentials, 'PATH': str(python.parent) + os.pathsep + os.environ.get('PATH', ''),
+               'HERMES_HOME': str(home), 'MIKASA_HERMES_SOURCE': str(source)}
+        code = '''
+import json,os,sys
+from pathlib import Path
+sys.path.insert(0,os.environ['MIKASA_HERMES_SOURCE'])
+from hermes_cli import kanban_db as kb
+from hermes_cli.kanban_db_connect import connect,init_db
+from hermes_cli.kanban_db_dispatch import dispatch_once
+init_db()
+conn=connect()
+ids=[kb.create_task(conn,title='native fixture '+str(i),assignee='default',workspace_kind='dir',workspace_path=str(Path.cwd()/str(i)),initial_status='blocked') for i in range(2)]
+for task in ids:
+    assert kb.promote_task(conn,task,actor='user')[0]
+seen=[]
+def spawn(task,workspace):
+    seen.append(task.id)
+    return os.getpid()
+dispatch_once(conn,spawn_fn=spawn,max_spawn=2,max_in_progress=2,max_in_progress_per_profile=2,reconcile_orphans=False)
+assert set(seen)==set(ids),seen
+conn.close()
+conn=connect()
+assert conn.execute('SELECT COUNT(*) FROM tasks').fetchone()[0]==2
+conn.close()
+from cron.jobs import create_job,list_jobs
+from cron.scheduler import run_job
+script=Path(os.environ['HERMES_HOME'])/'scripts/scheduled.py'
+script.parent.mkdir(exist_ok=True)
+script.write_text("from pathlib import Path; Path('cron-result.txt').write_text('native cron'); print('done')")
+job=create_job(prompt=None,schedule='every 1h',name='fixture',script=str(script),no_agent=True,deliver='local',workdir=str(Path.cwd()))
+assert any(j['id']==job['id'] for j in list_jobs())
+success,_,_,error=run_job(job)
+assert success,error
+assert (Path.cwd()/'cron-result.txt').read_text()=='native cron'
+print('native scheduling passed')
+'''
+        result = subprocess.run([str(python), '-c', code], cwd=home/'workspace', env=env,
+                                capture_output=True, text=True, timeout=90)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('native scheduling passed', result.stdout)
+
+    def test_native_terminal_git_binary_rules_and_background_process(self):
+        home, source, python, credentials = prepare_profile(self.config, self.config.owner, engineering=True)
+        cfg = json.loads((home / 'config.yaml').read_text())
+        cfg['lsp'] = {'enabled': False}
+        (home / 'config.yaml').write_text(json.dumps(cfg))
+        env = {**credentials, 'PATH': str(python.parent) + os.pathsep + os.environ.get('PATH', ''),
+               'HERMES_HOME': str(home), 'MIKASA_HERMES_SOURCE': str(source)}
+        code = '''
+import json,os,sys,shlex
+from pathlib import Path
+sys.path.insert(0,os.environ['MIKASA_HERMES_SOURCE'])
+from hermes_cli.plugins import discover_plugins
+discover_plugins()
+from model_tools import get_tool_definitions,handle_function_call
+get_tool_definitions(enabled_toolsets=['hermes-cli'],quiet_mode=True,skip_tool_search_assembly=True)
+def call(name,args):
+    result=json.loads(handle_function_call(name,args,task_id='native-engineering-fixture'))
+    assert not result.get('error'),result
+    return result
+workspace=Path.cwd()
+from tools.approval_context import set_current_session_key
+set_current_session_key('native-engineering-fixture')
+command="git init -b main && git config user.name Fixture && git config user.email fixture@example.invalid"
+r=call('terminal',{'command':command,'workdir':str(workspace)})
+assert r.get('exit_code')==0,r
+from unittest.mock import patch
+from tools import file_tools_write_guards
+with patch.object(file_tools_write_guards, '_request_protected_instruction_approval', return_value=None) as approved:
+    call('write_file',{'path':str(workspace/'AGENTS.md'),'content':'Fixture engineering rules.'})
+    assert approved.called
+call('write_file',{'path':str(workspace/'.github/workflows/check.yml'),'content':'name: fixture'})
+program="from pathlib import Path; Path('asset.bin').write_bytes(bytes(range(256)))"
+r=call('terminal',{'command':shlex.quote(sys.executable)+' -c '+shlex.quote(program)+' && git add . && git commit -m fixture','workdir':str(workspace)})
+assert r.get('exit_code')==0,r
+assert (workspace/'asset.bin').read_bytes()==bytes(range(256))
+r=call('terminal',{'command':shlex.quote(sys.executable)+" -u -c 'import time; print(123,flush=True); time.sleep(30)'",'background':True,'workdir':str(workspace)})
+sid=r.get('session_id')
+assert sid,r
+try:
+    call('process_manage',{'action':'poll','session_id':sid})
+finally:
+    call('process_manage',{'action':'kill','session_id':sid})
+print('native execution passed')
+'''
+        workspace = Path(self.temp.name) / 'actual-repo'
+        workspace.mkdir()
+        result = subprocess.run([str(python), '-c', code], cwd=workspace, env=env,
+                                capture_output=True, text=True, timeout=90)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('native execution passed', result.stdout)
+
     def test_launcher_passes_native_arguments_cwd_and_explicit_credentials(self):
         workspace=Path(self.temp.name)/'full-repo'
         workspace.mkdir()

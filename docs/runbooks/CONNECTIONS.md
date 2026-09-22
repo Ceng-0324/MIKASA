@@ -33,7 +33,7 @@ GitHub 使用 `Mikasa-0910` 独立账号，飞书使用企业自建应用机器�
 "github": {"token_env": "MIKASA_GITHUB_TOKEN", "publish_enabled": false}
 ```
 
-**为什么暂用 classic PAT**：GitHub 官方列明，fine-grained PAT 不能用于 outside/repository collaborator 场景；Mikasa 个人账号无法据此选择你个人账号拥有的仓库。classic PAT 的范围覆盖该账号在相应 scope 下可访问的仓库，不能在 token 上精确限定单仓。Mikasa 的仓库配置只约束自身请求，不收窄 token 的 GitHub 权限。独立账号应只加入需要的仓库。GitHub App installation token 适合长期集成，但发布身份会成为 App bot，也不兼容当前 `/user` 账号校验，不能直接替换。
+**为什么暂用 classic PAT**：GitHub 官方列明，fine-grained PAT 不能用于 outside/repository collaborator 场景；Mikasa 个人账号无法据此选择你个人账号拥有的仓库。classic PAT 的范围覆盖该账号在相应 scope 下可访问的仓库，不能在 token 上精确限定单仓。repositories 仅用于连接探针清单，不限制原生工程工具；实际范围由 token 与账号的 GitHub 权限决定。独立账号应只加入需要的仓库。GitHub App installation token 适合长期集成，但发布身份会成为 App bot，也不兼容当前 `/user` 账号校验，不能直接替换。
 
 执行只读检查：
 
@@ -48,7 +48,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections github --
 
 只读连接不需要 webhook。VM/TLS 就绪后，由负责人进入仓库 **Settings → Webhooks → Add webhook**：URL 为部署域名的 `/webhooks/github`，Content type 选 `application/json`，启用 SSL 校验，Secret 与服务的 `MIKASA_GITHUB_WEBHOOK_SECRET` 一致，选择 `Pull requests` 事件。服务另需现有 `server.tokens` API 凭据。先用 ping / Recent Deliveries 核对签名与送达，再做 PR 事件验收。
 
-本阶段 `auto_review=false`、`publish_enabled=false`；收到事件不表示会自动审查或发布。正式 Review 在你指定可写测试 PR 并授权该次发布后验收，不把新建真实 PR 当作连接探针。
+旧自动审查 webhook 与发布业务引擎已退休；原生工程按交互授权操作 gh/Git。正式 Review 在你指定可写测试 PR 并授权该次发布后验收，不把新建真实 PR 当作连接探针。
 
 ## 国内飞书操作步骤
 

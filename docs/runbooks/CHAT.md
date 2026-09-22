@@ -22,7 +22,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json chat
 /exit
 ```
 
-使用 CCH 提供的完整模型 ID。`/model` 打开原生选择器；`--session` 只改变当前会话，`--once` 覆盖下一轮，`--global` 保存 profile 默认值，provider/reasoning 参数按 Hermes 官方语义处理。切换保留当前上下文；原工程任务仍读取 Mikasa worker 配置，不跟随 CLI 的全局偏好。
+使用 CCH 提供的完整模型 ID。`/model` 打开原生选择器；`--session` 只改变当前会话，`--once` 覆盖下一轮，`--global` 保存 profile 默认值，provider/reasoning 参数按 Hermes 官方语义处理。切换保留当前上下文；工程有独立原生 profile，不跟随聊天 profile 的全局偏好。
 
 GPT/Claude 跨协议切换需要配置 [模型来源路由](CCH.md)。启动时将默认模型与 `model_routes.models` 转为 Hermes providers 和精确模型别名，凭据仅进入子进程环境。未列入配置的模型应先加入相应 models，或在原生命令中显式选择对应 provider；CLI 不执行旧适配器的前缀路由。菜单/目录结果不构成真实推理可用性承诺。
 
@@ -99,7 +99,7 @@ CLI 启动原生 CLI 子进程，HTTP 启动原生 Gateway 子进程；同一账
 
 聊天可使用 memory、skills_list、skill_view、session_search。问“上次聊到哪里”时，使用 Hermes 原生检索当前 profile 的历史；/new 保留旧历史，换渠道也可通过检索续上。跨 profile 检索被拒绝；同 profile 的私聊和群聊并非数据隔离，记录与回答应区分发言人、渠道和项目，不自行转述私聊内容到群聊。CLI 系统命令与模型工具调用是不同通道；HTTP 的 `/init` 仍暂缓。
 
-工程任务与提交账号共用原生 MEMORY/USER，聊天中经确认并写入长期记忆的约定会在新的工程 Agent 实例加载；工程写入的长期约定也可由新聊天实例读取。同一实例的系统提示记忆快照不立即重建，不承诺热刷新。普通聊天正文不会自动成为工程上下文，临时安排须随任务提供；工程完整工具历史仍按任务隔离。旧工程记忆留在任务 profile 的 `memories.legacy`，不自动并入账号记忆；详见 [当前架构](../architecture/README.md)。这不代表聊天已经开放仓库执行工具。
+工程任务与提交账号共用原生 MEMORY/USER，聊天中经确认并写入长期记忆的约定会在新的工程 Agent 实例加载；工程写入的长期约定也可由新聊天实例读取。同一实例的系统提示记忆快照不立即重建，不承诺热刷新。普通聊天正文不会自动成为工程上下文，临时安排须随任务提供；工程工具历史由独立工程 profile 的原生会话保存。旧工程记忆留在任务 profile 的 `memories.legacy`，不自动并入账号记忆；详见 [当前架构](../architecture/README.md)。这不代表聊天已经开放仓库执行工具。
 
 `backup DIRECTORY` 备份完整受管状态，包括原生会话、记忆与运行回执；`restore BACKUP NEW_RUNTIME` 校验后恢复到新目录。先停服，按 [备份说明](OPERATIONS.md) 重新提供外部配置与凭据；备份不上传 Git 或公开存储。
 

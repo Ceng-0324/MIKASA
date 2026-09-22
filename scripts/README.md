@@ -9,11 +9,9 @@
 | `probe_native_cli.py` | 固定 SDK/本地模型目录夹具；原生命令、跨协议选择、偏好、恢复与启动退出 |
 | `probe_native_offline.py` | 固定 SDK；旧会话迁移、身份、按需工程 skills、历史检索及工具发现、原生记忆与工具策略 |
 | `probe_native_events.py` | 真实 Gateway/本地模型夹具；SSE、幂等、取消、完整备份及新目录恢复后的会话/记忆/回执 |
-| `probe_engineering_state.py` | 固定 SDK、Docker 和本地模型夹具；工程续话、压缩、共享记忆、工具修复和最终验收 |
-| `probe_native_sandbox.py` | 固定 SDK/Docker；文件与终端隔离、网络、密钥、资源和清理 |
-| `probe_native_engineering_offline.py` | 固定 SDK/Docker；只读工程、读取证据与强制退出清理，无模型请求 |
-| `probe_hermes.py --config CONFIG --report PATH` | **真实 CCH 调用**；合成人格、拆解、审查、实现、任务链、工具循环及分页上下文 |
 | `probe_chat.py --config CONFIG --target MODEL --slash --commands --report PATH` | **真实 CCH 调用**；鉴权 HTTP 聊天、跨协议切换、命令与历史 |
 | `probe_native_state.py` | **真实 CCH 调用**；原生记忆、skills、账号隔离、重启、跨协议和取消 |
 
-有参数的探针先查看 `--help`；无参数脚本直接运行。固定 SDK、模型来源及镜像准备见 [执行器](../workers/hermes/README.md)。探针使用临时 profile/合成仓库，不发布 GitHub 或飞书内容；Docker 探针需要已缓存镜像。真实模型验证与本地夹具的证据分别记录，见 [验证边界](../docs/VALIDATION.md)。
+`probe_engineering.py --config CONFIG --model MODEL --report PATH` 通过完整原生 CLI 使用真实 CCH 完成合成仓库修复、测试、后台进程、委派、本地提交、共享记忆与会话续接。隔离 profile，不访问 GitHub 或消息平台。
+
+有参数的探针先查看 `--help`；无参数脚本直接运行。固定 SDK、模型来源准备见 [执行器](../workers/hermes/README.md)。探针使用临时 profile/合成仓库，不发布 GitHub 或飞书内容。真实模型验证与本地夹具的证据分别记录，见 [验证边界](../docs/VALIDATION.md)。

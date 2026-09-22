@@ -28,7 +28,7 @@ def launch(config, arguments=(), *, cwd=None):
            if k in os.environ}
     env.update({k: os.environ[k] for k in settings.get('env_allowlist', []) if k in os.environ})
     env['PATH'] = str(python.parent) + os.pathsep + env.get('PATH', os.defpath)
-    # A dedicated account token is available to native terminal/gh; never copied to disk.
+    # Native credential resolution receives the account token; terminal scrubbing remains upstream-owned.
     token = os.environ.get(config.data.get('github', {}).get('token_env', 'MIKASA_GITHUB_TOKEN'))
     if token:
         env['GH_TOKEN'] = token

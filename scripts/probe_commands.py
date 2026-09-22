@@ -7,14 +7,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mikasa.config import Config
-from mikasa.worker import Worker
+from mikasa.commands import resolve
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
     args = parser.parse_args()
-    worker = Worker(Config.load(args.config))
+    config = Config.load(args.config)
     cases = [
         ("/model", "status", None),
         ("/MODEL vendor/model:variant —session", "switch", "vendor/model:variant"),
@@ -33,7 +33,7 @@ def main():
     ]
     checks = []
     for text, kind, target in cases:
-        result = worker.command(text, lambda: False)
+        result = resolve(config, text)
         passed = result["kind"] == kind and result["target"] == target
         if kind == "version":
             passed = passed and bool(result["reply"]) and "Hermes" in result["reply"]

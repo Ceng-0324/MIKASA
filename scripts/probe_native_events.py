@@ -18,7 +18,6 @@ from mikasa.native import HERMES_REVISION, NativeGateway
 from mikasa.run_events import RunEvents
 from mikasa.store import Store
 from mikasa.backup import backup_state, restore_state
-from mikasa.service import Service
 
 
 def main():
@@ -139,7 +138,7 @@ def main():
 
                 backup = Path(directory) / 'backup'
                 restored = Path(directory) / 'restored'
-                backup_state(Service(config), backup)
+                backup_state(config, backup)
                 restore_state(config, backup, restored)
                 data['runtime'] = str(restored)
                 config = Config(root, data)
