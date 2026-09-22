@@ -22,15 +22,10 @@ RELEASES = Path('/opt/mikasa-releases')
 STATE = Path('/var/lib/mikasa')
 BACKUP_ENV = Path('/etc/mikasa-backup')
 SERVICE = 'mikasa-gateway.service'
-PYTHON = '/opt/mikasa/.venv/bin/python'
 
 
 def run(*args, **kwargs):
     return subprocess.run(args, check=True, text=True, **kwargs)
-
-
-def output(*args):
-    return run(*args, capture_output=True).stdout.strip()
 
 
 def sha(path):
@@ -44,6 +39,7 @@ def live_state():
         value = json.loads(path.read_text())
         pid = value.get('pid', 0)
         if pid and Path(f'/proc/{pid}').exists():
+            value['_home'] = str(path.parent)
             states.append(value)
     return states
 
@@ -70,32 +66,64 @@ def wait_healthy(timeout=90):
     raise RuntimeError('Gateway、双平台连接或身份加载未通过健康检查')
 
 
+def start_service():
+    run('systemctl', 'reset-failed', SERVICE)
+    run('systemctl', 'start', SERVICE)
+
+
+@contextlib.contextmanager
+def drained(states, timeout=30):
+    """Hermes closes admission before we check that the in-flight set is empty."""
+    homes = [Path(s['_home']) for s in states]
+    marked = []
+    try:
+        for home in homes:
+            if (home / '.drain_request.json').exists():
+                raise RuntimeError('已有原生维护请求；不覆盖其他维护者')
+            run('runuser', '-u', 'mikasa', '--', '/opt/hermes-venv/bin/python', '-B', '-c',
+                'import sys; sys.path.insert(0,"/opt/hermes"); '
+                'from pathlib import Path; from gateway.drain_control import write_drain_request; '
+                'write_drain_request(home=Path(sys.argv[1]), principal="mikasa-maintenance", suppress_notification=True)',
+                str(home), capture_output=True)
+            marked.append(home)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            current = live_state()
+            if {s['_home'] for s in current} == set(map(str, homes)) and all(
+                    s.get('gateway_state') == 'draining' and s.get('active_agents') == 0 for s in current):
+                yield
+                return
+            time.sleep(1)
+        raise RuntimeError('原生排空未完成；取消维护，任务继续运行')
+    finally:
+        for home in marked:
+            (home / '.drain_request.json').unlink(missing_ok=True)
+
+
 @contextlib.contextmanager
 def stopped():
-    """Stop only when idle; systemd SIGTERM lets Hermes drain before files move."""
+    """Drain admission, stop Gateway, then lock all managed entrypoints."""
     active = subprocess.run(['systemctl', 'is-active', '--quiet', SERVICE]).returncode == 0
     states = live_state()
     if active and (not states or any(s.get('active_agents') or s.get('active_work') for s in states)):
         raise RuntimeError('Gateway 未就绪或存在任务；稍后重试维护')
-    if active:
-        # mikasa-gateway.service uses Hermes' native graceful-shutdown path.  The
-        # service TimeoutStopSec bounds the drain; this wrapper never kills a
-        # worker or invents a second task queue.
-        run('systemctl', 'stop', SERVICE)
+    did_stop = False
     try:
-        with (STATE / 'maintenance.lock').open('a') as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            # Profiles from versions predating the maintenance lock also participate.
-            with contextlib.ExitStack() as stack:
-                for root in ('native', 'engineer', 'engineering'):
-                    for path in (STATE / root).glob('*/mikasa.lock'):
-                        profile_lock = stack.enter_context(path.open('a'))
-                        fcntl.flock(profile_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                yield
+        with drained(states) if active else contextlib.nullcontext():
+            if active:
+                did_stop = True
+                run('systemctl', 'stop', SERVICE)
+            with (STATE / 'maintenance.lock').open('a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with contextlib.ExitStack() as stack:
+                    for root in ('native', 'engineer', 'engineering'):
+                        for path in (STATE / root).glob('*/mikasa.lock'):
+                            profile_lock = stack.enter_context(path.open('a'))
+                            fcntl.flock(profile_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    yield
     finally:
-        if active:
-            run('systemctl', 'start', SERVICE)
-
+        if did_stop:
+            start_service()
 
 
 def restic(*args, capture=False):
@@ -125,7 +153,7 @@ def initialize():
                 raise RuntimeError('已有独立解释器目录，请先核对迁移状态')
             (APP / '.venv').rename(stable_venv)
             (APP / '.venv').symlink_to(stable_venv)
-            # Legacy has runtime/cache debris; it remains an untouched fallback, not a release artifact.
+            # Preserve the original tree as a recovery archive.
             APP.rename(legacy)
             APP.symlink_to(legacy)
     for name in ('mikasa-backup.service', 'mikasa-backup.timer'):
@@ -150,6 +178,7 @@ def snapshot():
                     '--exclude', '/home/mikasa/.cache',
                     '--exclude', '/home/mikasa/.npm/_cacache',
                     '--exclude', '/home/mikasa/.local/share/Trash',
+                    '--exclude', '/var/lib/mikasa/**/.drain_request.json',
                     *paths, capture=True)
     summary = next(json.loads(line) for line in result.stdout.splitlines()
                    if json.loads(line).get('message_type') == 'summary')
@@ -161,13 +190,13 @@ def snapshot():
 
 def validate_release(root):
     marker = root / 'release.json'
-    if not marker.exists() and root.name.startswith('legacy-'):
+    if not marker.exists() and re.fullmatch(r'legacy-[0-9]+', root.name):
         # The first managed deployment is an in-place migration.  Its full
         # runtime tree is deliberately retained as a rollback archive rather
         # than rewritten into a clean source release.
         return {'revision': root.name, 'files': None}
     manifest = json.loads(marker.read_text())
-    if set(manifest) != {'revision', 'files'} or not re.fullmatch(r'[a-f0-9]{40}|legacy-[0-9]+', manifest['revision']):
+    if set(manifest) != {'revision', 'files'} or not re.fullmatch(r'[a-f0-9]{40}', manifest['revision']):
         raise RuntimeError('非法发布清单')
     for name, expected in manifest['files'].items():
         path = root / name
@@ -202,13 +231,34 @@ def unpack(archive, destination):
             if not (member.isfile() or member.isdir()):
                 raise RuntimeError('发布包只能包含普通文件和目录')
         source.extractall(destination, filter='data')
-    return validate_release(destination)
+    manifest = validate_release(destination)
+    if manifest['files'] is None:
+        raise RuntimeError('发布包必须有源码清单')
+    return manifest
 
 
 def point_to(target):
     temporary = APP.with_name('mikasa.next')
     temporary.symlink_to(target)
     temporary.replace(APP)
+
+
+def skill_roots(saved=None):
+    # Only this integration field needs rollback for pre-release-aware versions.
+    # Parse using the existing Hermes YAML library and never print whole profiles.
+    result = run('/opt/hermes-venv/bin/python', '-B', '-c',
+        'import sys,json,pathlib,yaml\n'
+        'saved=json.load(sys.stdin)\n'
+        'if saved is None:\n'
+        ' print(json.dumps({str(p): yaml.safe_load(p.read_text()).get("skills",{}).get("external_dirs",[]) '
+        'for p in pathlib.Path("/var/lib/mikasa").glob("*/*/config.yaml")}))\n'
+        'else:\n'
+        ' for name,roots in saved.items():\n'
+        '  p=pathlib.Path(name); d=yaml.safe_load(p.read_text()); '
+        'd.setdefault("skills",{})["external_dirs"]=roots; '
+        'p.write_text(json.dumps(d,ensure_ascii=False,indent=2))\n',
+        input=json.dumps(saved), capture_output=True)
+    return json.loads(result.stdout) if saved is None else None
 
 
 def switch(target):
@@ -219,17 +269,29 @@ def switch(target):
     if previous == target:
         raise RuntimeError('目标已经是当前版本')
     switched = False
+    saved_roots = {}
     try:
         with stopped():
             snapshot()
-            point_to(target)
-            switched = True
+            saved_roots = skill_roots()
+            try:
+                # Explicit rollback may target code predating root tracking.
+                skill_roots({p: [str(target / 'skills')] + [r for r in roots if
+                    r != '/opt/mikasa/skills' and not re.fullmatch(
+                        r'/opt/mikasa-releases/(?:[a-f0-9]{40}|legacy-[0-9]+)/skills', r)]
+                    for p, roots in saved_roots.items()})
+                point_to(target)
+                switched = True
+            except Exception:
+                skill_roots(saved_roots)
+                raise
         wait_healthy()
     except Exception:
         if switched:
             run('systemctl', 'stop', SERVICE)
             point_to(previous)
-            run('systemctl', 'start', SERVICE)
+            skill_roots(saved_roots)
+            start_service()
             wait_healthy()
             raise RuntimeError('新版本未通过健康检查，已回切旧代码；运行数据未回滚') from None
         raise
@@ -259,6 +321,8 @@ def deploy(archive):
             stage.chmod(0o755)
             stage.rename(target)
             # TemporaryDirectory tolerates an already-moved staging directory.
+    run('runuser', '-u', 'mikasa', '--', '/opt/mikasa-venv/bin/python', '-B', '-m', 'mikasa', '--help',
+        cwd=target, capture_output=True)
     switch(target)
     status()
 

@@ -4,6 +4,7 @@
 
 | 脚本 | 依赖与范围 |
 | --- | --- |
+| `package_vm.py PATH` | 标准库/Git；从干净提交生成带文件清单的 VM 发布包 |
 | `check_docs.py` | 标准库；相对链接、空白及 canonical 顺序 |
 | `probe_commands.py --config CONFIG` | 固定 SDK；命令注册、别名、参数与版本，无模型请求 |
 | `probe_native_cli.py` | 固定 SDK/本地模型目录夹具；原生命令、跨协议选择、偏好、恢复与启动退出 |

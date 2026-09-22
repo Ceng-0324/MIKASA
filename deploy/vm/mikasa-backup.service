@@ -1,6 +1,5 @@
 [Unit]
 Description=Encrypted Mikasa work and state backup
-After=mikasa-gateway.service
 
 [Service]
 Type=oneshot

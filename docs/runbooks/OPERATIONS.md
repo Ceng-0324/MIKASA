@@ -15,7 +15,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json engineer -- cron --he
 
 仓库是完整持久目录，包含 .git、二进制、规则文件和用户改动。中断后通过原生 --resume 恢复历史并核对现场；不会重新导出快照覆盖工作区。模型负责按项目要求测试、修复和交付，宿主不替模型创建提交或发布。推送、发消息和外部发布仍按用户实际授权执行。
 
-GitHub 专用 token 映射为 Hermes 主进程的 GH_TOKEN。固定 Hermes 的终端环境会清除该变量，gh 命令不能据此直接视为已登录；终端 Git/gh 按原生 credential helper 或 gh auth 准备，真实仓库操作留到后续验收。repositories 仅作为 connections github --probe 的可选检查清单，不限制工程访问范围。GitHub 实际 token scope、仓库权限和操作系统权限继续生效。
+GitHub 专用 token 映射为 Hermes 主进程的 GH_TOKEN。固定 Hermes 的终端环境会清除该变量，gh 命令不能据此直接视为已登录；终端 Git/gh 按原生 credential helper 或 gh auth 准备，FluxCore PR #28 已完成创建及负责人合并，正式 Review 仍待实测。repositories 仅作为 connections github --probe 的可选检查清单，不限制工程访问范围。GitHub 实际 token scope、仓库权限和操作系统权限继续生效。
 
 ## 旧链路退休
 
@@ -45,10 +45,14 @@ v3 清单覆盖 runtime 下 native、engineer、mikasa.sqlite3 及旧 engineerin
 在 `mikasa` VM 内以 root 运行 [维护入口](../../deploy/vm/manage.py)：
 
 ```sh
-sudo /opt/mikasa/deploy/vm/manage.py status
-sudo /opt/mikasa/deploy/vm/manage.py backup
-sudo /opt/mikasa/deploy/vm/manage.py check
-sudo /opt/mikasa/deploy/vm/manage.py restore SNAPSHOT /var/lib/mikasa-restore-check
+sudo python3 /opt/mikasa/deploy/vm/manage.py status
+sudo python3 /opt/mikasa/deploy/vm/manage.py backup
+sudo python3 /opt/mikasa/deploy/vm/manage.py check
+sudo python3 /opt/mikasa/deploy/vm/manage.py restore SNAPSHOT /var/lib/mikasa-restore-check
 ```
 
-源码发布包由宿主的 `scripts/package_vm.py` 从干净 Git checkout 生成，再用 `manage.py deploy` 安装。部署前会停止 Gateway；systemd 的 `SIGTERM` 交给 Hermes 原生排空当前工作，忙碌任务不会被维护脚本强制杀掉。新版本身份加载、双平台连接和服务健康检查失败会自动回切，运行状态不回滚。`mikasa-backup.timer` 每日执行一次加密备份并保留 7 个日、4 个周、3 个月快照。Restic 密码文件只在 `/etc/mikasa-backup/password`，恢复到 VM 外时需另外保管该密码，不能提交 Git。
+源码发布包由宿主的 `scripts/package_vm.py` 从干净 Git checkout 生成，再用 `manage.py deploy` 安装。维护先检查空闲，并通过 Hermes 原生 drain 请求关闭新任务准入；确认排空后才停止 Gateway。30 秒内未排空则取消维护，让任务继续执行。独立工程入口仍由维护锁保护；不通过停机强制中断任务。新版本身份加载、双平台连接和服务健康检查失败会自动回切，运行状态不回滚。`mikasa-backup.timer` 每日执行一次加密备份并保留 7 个日、4 个周、3 个月快照。Restic 密码文件只在 `/etc/mikasa-backup/password`，恢复到 VM 外时需另外保管该密码，不能提交 Git。
+
+定时服务直接执行维护入口，不能声明 `After=mikasa-gateway.service`：维护中需要同步重启 Gateway，该排序会使自身启动作业与 Gateway 启动作业互相等待。自维护由独立 systemd 作业执行，不能从 Gateway 内同步等待自己的停止。
+
+Restic 快照保留源目录的绝对链接和权限。演练时先在新目录检查 SQLite、记忆及 Git 字节，再修复副本中的 worktree 链接；不要通过副本的绝对链接误操作当前目录。灾难恢复需要先准备相同系统用户和系统依赖，再停服将选定数据放回原路径，恢复服务文件并核验；不是完整系统磁盘镜像。VM 外副本可由 Mac 显式拉取到被 Git 忽略的 `runtime/backups/`，密钥单独保存于 `config/local/`，两者不进入提交。每日 timer 只更新 VM 内仓库；VM 外副本应定期另行刷新，Mac 磁盘损坏仍需异机备份。

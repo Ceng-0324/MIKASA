@@ -69,6 +69,17 @@ def merge(current, generated):
         merged[name] = {**generated[name], **current.get(name, {})}
         for field in fields:
             merged[name][field] = list(dict.fromkeys(generated[name][field] + current.get(name, {}).get(field, [])))
+    # Track only the roots we own; a release update replaces them rather than
+    # accumulating copies of mikasa-persona. Preserve arbitrary user roots.
+    old_roots = current.get("_mikasa_skill_roots", [])
+    new_roots = generated["skills"]["external_dirs"]
+    def old_vm_root(value):
+        return value == "/opt/mikasa/skills" or bool(re.fullmatch(
+            r"/opt/mikasa-releases/(?:[a-f0-9]{40}|legacy-[0-9]+)/skills", value))
+    merged["skills"]["external_dirs"] = list(dict.fromkeys(new_roots + [
+        p for p in current.get("skills", {}).get("external_dirs", [])
+        if p not in old_roots and not old_vm_root(p)]))
+    merged["_mikasa_skill_roots"] = new_roots
     return merged
 
 

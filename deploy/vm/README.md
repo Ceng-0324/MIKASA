@@ -103,4 +103,4 @@ Mac 管理命令明确指定 `orb -m mikasa -u root -w / ...`。启动和重启�
 
 ## 版本与恢复
 
-宿主在干净 checkout 上运行 `python3.12 scripts/package_vm.py /private/tmp/mikasa-release.tar.gz`，再将包传入 VM，由 root 执行 `sudo /opt/mikasa/deploy/vm/manage.py deploy /path/to/mikasa-release.tar.gz`。入口会校验 Git revision 和每个文件的 SHA-256，停 Gateway 后复用 Hermes 原生排空，启动后检查身份摘要、飞书和微信连接；失败会回切到上一个版本。首次 `init` 会把现有 `/opt/mikasa` 保存为 `legacy-*` 回退目录，创建 Restic 加密仓库并安装每日备份 timer。`backup` 覆盖 `/home/mikasa/work`、Git 凭据、Hermes 状态、服务配置和固定运行环境，但排除缓存；`restore SNAPSHOT DIR` 只恢复到新目录，不覆盖运行中的服务。
+宿主在干净 checkout 上运行 `python3.12 scripts/package_vm.py /private/tmp/mikasa-release.tar.gz`，再将包传入 VM，由 root 执行 `sudo python3 /opt/mikasa/deploy/vm/manage.py deploy /path/to/mikasa-release.tar.gz`。入口会校验 Git revision 和每个文件的 SHA-256，先复用 Hermes 原生排空，再停 Gateway，启动后检查身份摘要、飞书和微信连接；失败会回切到上一个版本。首次 `init` 会把现有 `/opt/mikasa` 保存为 `legacy-*` 回退目录，创建 Restic 加密仓库并安装每日备份 timer。`backup` 覆盖 `/home/mikasa/work`、Git 凭据、Hermes 状态、服务配置和固定运行环境，但排除缓存；`restore SNAPSHOT DIR` 只恢复到新目录，不覆盖运行中的服务。

@@ -13,6 +13,24 @@ from tests.support import ROOT
 
 
 class NativeProfileTests(unittest.TestCase):
+    def test_release_skill_roots_replace_managed_paths_preserving_user_skills(self):
+        from workers.hermes.profile_config import merge
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        generated = json.loads((home / 'config.yaml').read_text())
+        old = json.loads(json.dumps(generated))
+        old['skills']['external_dirs'] = ['/opt/mikasa/skills',
+            '/opt/mikasa-releases/legacy-1790075750/skills',
+            '/opt/mikasa-releases/' + 'a' * 40 + '/skills', '/home/mikasa/custom-skills']
+        generated['skills']['external_dirs'] = ['/opt/mikasa-releases/' + 'b' * 40 + '/skills']
+        refreshed = merge(old, generated)
+        self.assertEqual(refreshed['skills']['external_dirs'],
+            generated['skills']['external_dirs'] + ['/home/mikasa/custom-skills'])
+        generated['skills']['external_dirs'] = ['/some/new/install/skills']
+        reverted = merge(refreshed, generated)
+        self.assertEqual(reverted['skills']['external_dirs'],
+            ['/some/new/install/skills', '/home/mikasa/custom-skills'])
+        self.assertEqual(reverted['model'], old['model'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='native-unit-')
         self.addCleanup(self.temp.cleanup)
