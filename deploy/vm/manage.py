@@ -181,6 +181,17 @@ def validate_release(root):
     return manifest
 
 
+def normalize_release_permissions(root):
+    """Git archives are extracted under umask 077; the service user needs traversal."""
+    for path in Path(root).rglob('*'):
+        if path.is_dir() and not path.is_symlink():
+            path.chmod(0o755)
+        elif path.is_file() and not path.is_symlink():
+            mode = path.stat().st_mode & 0o111
+            path.chmod(0o755 if mode else 0o644)
+    Path(root).chmod(0o755)
+
+
 def unpack(archive, destination):
     with tarfile.open(archive) as source:
         names = set()
@@ -244,6 +255,7 @@ def deploy(archive):
                 cwd=stage)
             run('/opt/mikasa-venv/bin/python', '-B', 'scripts/check_docs.py', cwd=stage)
             run('chown', '-R', 'root:mikasa', str(stage))
+            normalize_release_permissions(stage)
             stage.chmod(0o755)
             stage.rename(target)
             # TemporaryDirectory tolerates an already-moved staging directory.

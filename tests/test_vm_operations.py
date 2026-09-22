@@ -59,6 +59,17 @@ class VMOperationsTests(unittest.TestCase):
                 __import__('os').umask(old_umask)
         self.assertEqual(releases.stat().st_mode & 0o777, 0o755)
 
+    def test_release_tree_permissions_allow_service_user_to_import(self):
+        root = self.root / 'release'
+        package = root / 'mikasa'
+        package.mkdir(parents=True, mode=0o700)
+        (package / '__main__.py').write_text('')
+        root.chmod(0o700)
+        vm.normalize_release_permissions(root)
+        self.assertEqual(root.stat().st_mode & 0o777, 0o755)
+        self.assertEqual(package.stat().st_mode & 0o777, 0o755)
+        self.assertEqual((package / '__main__.py').stat().st_mode & 0o777, 0o644)
+
     def test_tar_rejects_traversal_links_and_duplicates(self):
         for name, kind in [('../outside', 'file'), ('/absolute', 'file'), ('link', 'link'), ('same', 'duplicate')]:
             archive = self.root / 'bad.tar'
