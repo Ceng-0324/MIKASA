@@ -35,6 +35,10 @@ flowchart LR
 
 不同会话原生并发，同会话 FIFO；普通群及话题共享上下文，私聊按平台隔离。聊天直接使用原生平台完整工具集，在同一工作机执行工程任务；没有工具白名单或 Mikasa 轮数预算。进度、阶段说明、长任务通知与最终回复由 Hermes 回传原会话，不另建任务转发或通知服务。同一聊天 profile 的 CLI 与消息 Gateway 互斥；独立工程 CLI 的 profile 可与消息服务同时使用，历史分别保存。
 
+上述互斥来自 Mikasa 启动器持有的整个进程生命周期锁，并非 Hermes 要求 CLI 与 Gateway 一律互斥。聊天入口只提供会话恢复参数和固定初始 workspace；完整原生 CLI 参数由独立 `engineer` 入口透传。工程与聊天的 profile 分离、仅链接长期记忆，也是本项目的布局选择。
+
+消息启动器仍有未收窄的适配边界：只接受飞书和微信，强制关闭 `multiplex_profiles` 与入站语音转文字；原生配置只向 `GatewayConfig` 复制并发、群/话题会话划分、流式设置和 home channel。自定义 `quick_commands`、`profile_routes`、平台 `channel_overrides` 等未透传，不能把此入口描述为原生 Gateway 全配置开放。底层 Agent 和工程工具复用不等于这些入口限制已经消除。
+
 各入口继承真实系统账号的 HOME、PATH 和显式工具环境变量，使用同一 gh 认证与系统依赖。原生 config.yaml、.env、插件和 MCP 由 Hermes 管理；初始化只清除旧聊天适配写入的工具子集和默认预算一次，保留用户后续偏好。飞书开放成员可调用工程工具，权限按现有整机和平台配置执行，没有新增负责人专用工具门禁。
 
 原生系统命令直接交给 Hermes。旧 `serve`、`chat --message`、HTTP 聊天和任务端点已删除；模型诊断也使用临时原生 CLI，不再启动本地 API 服务。

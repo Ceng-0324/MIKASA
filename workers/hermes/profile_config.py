@@ -9,20 +9,37 @@ from pathlib import Path
 
 def merge(current, generated):
     current = copy.deepcopy(current)
-    if "max_concurrent_sessions" in generated and current.get("_mikasa_native_tools") != 1:
-        # Remove only the exact defaults installed by the former chat-only adapter.
-        # User-selected limits, toolsets and subsequent native changes survive refresh.
+    if "max_concurrent_sessions" in generated and current.get("_mikasa_native_tools") != 2:
+        # Remove exact defaults installed by the former chat-only adapter. User-selected
+        # toolsets and subsequent native changes survive refresh; the version bump repairs
+        # profiles migrated by the earlier cleanup that missed the two-item default.
+        previous_version = current.get("_mikasa_native_tools")
         toolsets = current.get("platform_toolsets", {})
-        for platform in ("cli", "feishu", "weixin"):
-            if toolsets.get(platform) == ["memory", "skills", "session_search"]:
+        for platform in ("cli", "api_server", "feishu", "weixin"):
+            legacy = [["memory", "skills"]]
+            if previous_version != 1 or platform == "api_server":
+                legacy.append(["memory", "skills", "session_search"])
+            if toolsets.get(platform) in legacy:
                 del toolsets[platform]
-        agent = current.get("agent", {})
-        if agent.get("max_turns") == 12:
-            del agent["max_turns"]
-        display = current.get("display", {})
-        if display.get("tool_progress") == "off":
-            display["tool_progress"] = "new"
-        current["_mikasa_native_tools"] = 1
+        gateway = current.get("gateway")
+        api = gateway.get("api_server") if isinstance(gateway, dict) else None
+        if isinstance(api, dict) and api.get("max_concurrent_runs") == 1:
+            del api["max_concurrent_runs"]
+            if not api:
+                gateway.pop("api_server")
+            if not gateway:
+                current.pop("gateway")
+        # Version 1 already completed the old default migration. Its later user
+        # preferences must survive this repair; only unversioned profiles need
+        # the original max-turn and display cleanup.
+        if previous_version is None:
+            agent = current.get("agent", {})
+            if agent.get("max_turns") == 12:
+                del agent["max_turns"]
+            display = current.get("display", {})
+            if display.get("tool_progress") == "off":
+                display["tool_progress"] = "new"
+        current["_mikasa_native_tools"] = 2
     # Hermes owns user preferences, including /model --global and reasoning.
     merged = {**generated, **current}
     # Add newly introduced display defaults to existing profiles, preserving

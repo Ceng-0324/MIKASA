@@ -393,9 +393,12 @@ class NativeProfileTests(unittest.TestCase):
         current = json.loads(path.read_text())
         current.pop('_mikasa_native_tools', None)
         current.pop('_mikasa_live_progress', None)
-        current.update(platform_toolsets={'feishu': ['memory', 'skills', 'session_search'], 'weixin': ['terminal']},
+        current.update(platform_toolsets={'cli': ['memory', 'skills', 'session_search'],
+                                         'api_server': ['memory', 'skills'],
+                                         'feishu': ['memory', 'skills'], 'weixin': ['terminal']},
                        agent={'max_turns': 12, 'reasoning_effort': 'high'},
-                       gateway={'retired_api_server': {'max_concurrent_runs': 1, 'port': 9000}})
+                       gateway={'api_server': {'max_concurrent_runs': 1, 'port': 9000},
+                                'retired_api_server': {'max_concurrent_runs': 1, 'port': 9000}})
         current['display']['tool_progress'] = 'off'
         path.write_text(json.dumps(current))
         (home/'state.db').write_bytes(b'existing-history')
@@ -403,6 +406,7 @@ class NativeProfileTests(unittest.TestCase):
         migrated = json.loads(path.read_text())
         self.assertEqual(migrated['platform_toolsets'], {'weixin': ['terminal']})
         self.assertEqual(migrated['agent'], {'reasoning_effort': 'high', 'gateway_notify_interval': 60})
+        self.assertEqual(migrated['gateway']['api_server'], {'port': 9000})
         self.assertEqual(migrated['gateway']['retired_api_server'], {'max_concurrent_runs': 1, 'port': 9000})
         self.assertEqual(migrated['display']['tool_progress'], 'new')
         self.assertEqual((home/'state.db').read_bytes(), b'existing-history')
@@ -412,6 +416,28 @@ class NativeProfileTests(unittest.TestCase):
         path.write_text(json.dumps(migrated))
         prepare_profile(self.config, self.config.owner)
         self.assertEqual(json.loads(path.read_text()), migrated)
+
+    def test_chat_tool_migration_repairs_v1_without_resetting_preferences(self):
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        path = home / 'config.yaml'
+        current = json.loads(path.read_text())
+        current['_mikasa_native_tools'] = 1
+        current['gateway'] = None
+        current['platform_toolsets'] = {'cli': ['memory', 'skills', 'session_search'],
+                                       'feishu': ['memory', 'skills'], 'weixin': ['terminal']}
+        current['agent']['max_turns'] = 12
+        current['display']['tool_progress'] = 'off'
+        path.write_text(json.dumps(current))
+
+        prepare_profile(self.config, self.config.owner)
+
+        migrated = json.loads(path.read_text())
+        self.assertEqual(migrated['_mikasa_native_tools'], 2)
+        self.assertIsNone(migrated['gateway'])
+        self.assertEqual(migrated['platform_toolsets'],
+                         {'cli': ['memory', 'skills', 'session_search'], 'weixin': ['terminal']})
+        self.assertEqual(migrated['agent']['max_turns'], 12)
+        self.assertEqual(migrated['display']['tool_progress'], 'off')
 
     def test_chat_receives_account_home_and_explicit_tool_environment(self):
         from mikasa.native import runtime_environment
