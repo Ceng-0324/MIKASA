@@ -72,7 +72,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu
 python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu --probe
 ```
 
-9. 准备事件订阅：在 **事件与回调 → 事件配置** 选择 **使用长连接接收事件**。该方式不需要公网 URL、Encrypt Key 或 Verification Token。先检查 CCH 已配置，关闭同账号正在运行的 CLI，然后执行 `python3.12 -m mikasa --config config/local/hermes-cch.json gateway --platform feishu`。微信绑定完成后改为同一条 Gateway 命令追加 `--platform weixin`；不要让两个进程使用同一 profile。代码更新后需重启现有 Gateway 才会加载新策略。
+9. 准备事件订阅：在 **事件与回调 → 事件配置** 选择 **使用长连接接收事件**。该方式不需要公网 URL、Encrypt Key 或 Verification Token。先检查 CCH 已配置；CLI 可以与 Gateway 并存，若已有 Gateway 正在运行则先停止它再重启加载新代码，然后执行 `python3.12 -m mikasa --config config/local/hermes-cch.json gateway --platform feishu`。微信绑定完成后改为同一条 Gateway 命令追加 `--platform weixin`；不要启动第二个 Gateway。代码更新后需重启现有 Gateway 才会加载新策略。
 10. 控制台若要求先建立长连接，等待启动输出确认连接后，再保存订阅方式，添加 **接收消息 v2.0** 事件 `im.message.receive_v1`，按控制台提示发布新版本。无需订阅 Hermes 支持的所有事件。
 11. 在目标飞书群打开 **群设置 → 群机器人 → 添加机器人**，搜索 Mikasa 并添加。若搜索不到或不能添加，检查应用是否发布、操作者是否在应用可用范围，以及群管理员的添加限制；项目的消息过滤无法影响飞书客户端的添加列表。
 12. 在私聊和群内分别发送 `/help`、普通文字、`/model 完整模型ID` 和 `/new`；再用另一成员账号验证。群内先 @ Mikasa，再测试未 @ 消息，区分事件权限与本地策略。只有真实收到回复才算完成平台验收；同时检查身份/skills 加载与记忆保留。
