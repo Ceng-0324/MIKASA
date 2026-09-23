@@ -19,6 +19,9 @@ def private_write(path, content):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if path.is_symlink():
         raise MikasaError("原生 profile 文件不能为符号链接")
+    if path.is_file() and path.read_text() == content:
+        path.chmod(0o600)
+        return
     temporary = path.with_name(path.name + ".tmp")
     with open(temporary, "w", opener=lambda p, f: os.open(p, f, 0o600)) as stream:
         stream.write(content)

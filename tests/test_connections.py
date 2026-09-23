@@ -325,6 +325,48 @@ assert p.extra['app_id'] == 'cli_fixture'
         self.assertEqual(path.read_bytes(), before)
         self.assertNotIn('fixture-secret', explicit.read_text())
 
+    def test_native_cross_process_session_and_gateway_locks(self):
+        python = self.native_python('psutil')
+        source = ROOT / 'runtime/cache/hermes-source'
+        code = '''
+import json, os, subprocess, sys
+sys.path.insert(0, sys.argv[1])
+from hermes_cli.active_sessions import try_acquire_active_session
+from gateway.status import acquire_gateway_runtime_lock, release_gateway_runtime_lock
+def lease(session):
+    return try_acquire_active_session(session_id=session, surface='cli', config={'max_concurrent_sessions': None})
+if len(sys.argv) > 2:
+    owned, refusal = lease(sys.argv[2])
+    gateway = acquire_gateway_runtime_lock()
+    print(json.dumps({'session': owned is not None, 'refused': refusal is not None, 'gateway': gateway}))
+    if owned is not None:
+        owned.release()
+    if gateway:
+        release_gateway_runtime_lock()
+else:
+    owned, refusal = lease('first')
+    assert owned is not None and refusal is None
+    assert acquire_gateway_runtime_lock()
+    def child(session):
+        result = subprocess.run([sys.executable, '-B', __file__, sys.argv[1], session],
+                                capture_output=True, text=True, timeout=15)
+        assert result.returncode == 0, result.stderr
+        return json.loads(result.stdout)
+    try:
+        assert child('second') == {'session': True, 'refused': False, 'gateway': False}
+        assert child('first') == {'session': False, 'refused': True, 'gateway': False}
+    finally:
+        owned.release()
+        release_gateway_runtime_lock()
+    assert child('first') == {'session': True, 'refused': False, 'gateway': True}
+'''
+        script = self.path / 'native_locks.py'
+        script.write_text(code)
+        env = {'PATH': os.environ.get('PATH', ''), 'HERMES_HOME': str(self.path / 'lock-home')}
+        result = subprocess.run([str(python), '-B', str(script), str(source)],
+                                env=env, capture_output=True, text=True, timeout=45)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_native_sethome_survives_profile_refresh_restart_and_env_free_restore(self):
         from mikasa.native import prepare_profile
         self.native_python("dotenv", "openai", "anthropic", "aiohttp")

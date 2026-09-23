@@ -35,7 +35,7 @@ flowchart LR
 
 不同会话原生并发，同会话 FIFO；普通群及话题共享上下文，私聊按平台隔离。聊天直接使用原生平台完整工具集，在同一工作机执行工程任务；没有工具白名单或 Mikasa 轮数预算。进度、阶段说明、长任务通知与最终回复由 Hermes 回传原会话，不另建任务转发或通知服务。同一聊天 profile 的 CLI 与消息 Gateway 可以并存；独立工程 CLI 的 profile 也可与消息服务同时使用，历史分别保存。
 
-Mikasa 只在启动时短暂锁住 profile，避免两个入口同时刷新身份和配置；子进程启动后释放该锁。运行期由 Hermes 的会话 lease 和 Gateway runtime 锁处理并发，因此同一聊天 profile 可以同时运行一个 Gateway 和一个或多个 CLI，两个 Gateway 仍会被原生锁拒绝。聊天入口只提供会话恢复参数和固定初始 workspace；完整原生 CLI 参数由独立 `engineer` 入口透传。工程与聊天的 profile 分离、仅链接长期记忆，也是本项目的布局选择。
+Mikasa 只在启动时短暂锁住 profile，避免两个入口同时刷新身份和配置；子进程启动前释放该锁，无变化的文件不重写。运行期由 Hermes 的会话 lease 和 Gateway runtime 锁处理并发，因此同一聊天 profile 可以同时运行一个 Gateway 和一个或多个 CLI，两个 Gateway 仍会被原生锁拒绝。会话锁不等于全配置事务锁；同时修改共享 profile 设置仍遵循 Hermes 的原生保存语义。聊天入口只提供会话恢复参数和固定初始 workspace；完整原生 CLI 参数由独立 `engineer` 入口透传。工程与聊天的 profile 分离、仅链接长期记忆，也是本项目的布局选择。
 
 消息快捷入口接受飞书和微信，直接使用 Hermes 的 `load_gateway_config()` 处理原生 YAML、嵌套配置、环境变量和平台偏好，再绑定本次选中的平台账号。`quick_commands`、`profile_routes`、渠道覆盖、语音和多 profile 设置交由原生配置管理，不再用字段白名单或强制关闭覆盖。飞书开放参与、微信主人绑定继续作为接入配置；其他平台可通过完整工程 CLI 的原生 Gateway 配置使用，需自行准备对应账号与依赖。
 

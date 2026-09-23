@@ -86,6 +86,16 @@ class NativeProfileTests(unittest.TestCase):
         self.assertEqual(config['agent'], {'gateway_notify_interval': 15})
         self.assertEqual((home/'SOUL.md').read_bytes(), (ROOT/'identity.md').read_bytes())
 
+    def test_unchanged_bootstrap_does_not_replace_native_files(self):
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        path = home / 'config.yaml'
+        # Native JSON is also valid YAML; preserve the operator's formatting.
+        path.write_text(json.dumps(json.loads(path.read_text()), indent=4) + '\n')
+        files = [path, home / 'SOUL.md', home / 'policy/actor.json']
+        before = [(p.read_bytes(), p.stat().st_ino, p.stat().st_mtime_ns) for p in files]
+        prepare_profile(self.config, self.config.owner)
+        self.assertEqual(before, [(p.read_bytes(), p.stat().st_ino, p.stat().st_mtime_ns) for p in files])
+
     def test_existing_display_gets_missing_defaults_without_resetting_choices(self):
         home, *_ = prepare_profile(self.config, self.config.owner)
         path = home / 'config.yaml'
@@ -274,6 +284,10 @@ class NativeProfileTests(unittest.TestCase):
         def spawn(*args, **kwargs):
             with (prepared[0] / 'mikasa.lock').open('a') as other:
                 fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            from mikasa.maintenance import runtime_lock
+            from mikasa.errors import Conflict
+            with self.assertRaises(Conflict), runtime_lock(self.config.runtime, exclusive=True):
+                pass
             return process
 
         with patch('mikasa.native.prepare_profile', return_value=prepared), \
@@ -313,7 +327,7 @@ class NativeProfileTests(unittest.TestCase):
         self.assertEqual(native['skills']['auto_load'], ['mikasa-persona'])
         self.assertEqual(json.loads((prepared[0] / 'policy/actor.json').read_text())['actor'], self.config.owner)
 
-    def test_feishu_cannot_mutate_an_active_owner_profile(self):
+    def test_feishu_cannot_mutate_profile_during_initialization(self):
         import fcntl
         from mikasa.native import interactive
         from mikasa.errors import Conflict
@@ -327,6 +341,36 @@ class NativeProfileTests(unittest.TestCase):
                 interactive(self.config, platforms=('feishu',))
         spawn.assert_not_called()
         self.assertFalse((home / 'gateway-messaging.json').exists())
+
+    def test_concurrent_gateway_launches_keep_separate_binding_files(self):
+        from mikasa.native import interactive
+        from unittest.mock import Mock
+        self.config.data['feishu'] = {'owner_open_id': 'ou_owner'}
+        prepared = prepare_profile(self.config, self.config.owner)
+        paths = []
+
+        def spawn(command, **kwargs):
+            path = Path(command[-1])
+            paths.append(path)
+            child = Mock()
+            child.poll.return_value = 0
+            child.wait.return_value = 0
+            if len(paths) == 1:
+                def wait():
+                    content = path.read_bytes()
+                    self.assertEqual(interactive(self.config, platforms=('feishu',)), 0)
+                    self.assertNotEqual(paths[0], paths[1])
+                    self.assertEqual(path.read_bytes(), content)
+                    self.assertFalse(paths[1].exists())
+                    return 0
+                child.wait.side_effect = wait
+            return child
+
+        with patch.dict(os.environ, {'MIKASA_FEISHU_APP_ID': 'cli_fixture', 'MIKASA_FEISHU_APP_SECRET': 'secret'}), \
+                patch('mikasa.native.prepare_profile', return_value=prepared), \
+                patch('mikasa.native.subprocess.Popen', side_effect=spawn):
+            self.assertEqual(interactive(self.config, platforms=('feishu',)), 0)
+        self.assertFalse(any(p.parent.exists() for p in paths))
 
     def test_multiple_platforms_use_one_native_process_without_persisting_bot_token(self):
         from mikasa.native import interactive, private_write

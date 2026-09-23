@@ -135,7 +135,13 @@ def main():
         if not isinstance(current, dict):
             raise ValueError("profile config must be a mapping")
     generated = json.load(sys.stdin)
-    content = json.dumps(merge(current, generated), ensure_ascii=False, indent=2)
+    merged = merge(current, generated)
+    # Concurrent native entries need not replace unchanged operator configuration.
+    # Preserve YAML formatting and avoid writes on ordinary CLI startup.
+    if path.exists() and merged == current:
+        path.chmod(0o600)
+        return
+    content = json.dumps(merged, ensure_ascii=False, indent=2)
     temp = path.with_name(path.name + ".tmp")
     if temp.is_symlink():
         raise ValueError("profile temporary config cannot be a symlink")

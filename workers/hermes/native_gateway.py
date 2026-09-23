@@ -47,8 +47,8 @@ if __name__ == "__main__":
         for platform, settings in config.platforms.items():
             if not settings.enabled:
                 continue
-            # Explicit config skips Hermes' env loader. Keep bot tokens in process
-            # memory, so neither generated config nor state backups acquire them.
+            # Keep the validated bot token in memory; never serialize credentials
+            # into the per-launch platform binding file.
             if platform == Platform.WEIXIN:
                 settings.token = os.environ.get("WEIXIN_TOKEN")
                 if not settings.token or not settings.extra.get("account_id"):

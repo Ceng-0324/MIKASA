@@ -83,7 +83,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu --
 
 CLI 与消息 Gateway 可以使用同一负责人 profile 并存。启动时会短暂锁住 profile 以完成身份和配置刷新；运行期由 Hermes 的会话 lease 与 Gateway runtime 锁管理并发，重复启动第二个 Gateway 会被原生拒绝。Ctrl-C 停止前台；启动失败需处理错误后重启，不覆盖会话或记忆。
 
-已知限制：原生 `/sethome` 会保存默认投递设置并生成 profile `.env`，与当前禁止额外环境注入的启动检查冲突。当前验收不依赖默认投递；遇到此情况先核对文件字段并保留原设置，不能删除未知凭据或直接放开任意 `.env`。macOS 上过长的 profile 路径还会使 Hermes 可选 liveness socket 无法创建，消息长连接仍可工作；VM 使用短路径后复验存活检测。
+原生 `/sethome` 保存的默认投递目标和 profile `.env` 会在重启时由 Hermes 加载，详见[聊天手册](CHAT.md)。macOS 上过长的 profile 路径可能影响 Hermes 可选 liveness socket，消息长连接仍可工作；专用 VM 使用短路径。
 
 ## 微信扫码绑定
 
@@ -122,7 +122,7 @@ set -a
 set +a
 ```
 
-文件按 shell 赋值语法填写，值用单引号包裹，不启用 `set -x`，不在带密钥的命令行中直接赋值。Mikasa 不自动加载这个文件，也不会复制 Codex/Claude 认证文件。配置只保存环境变量名；飞书子进程只得到模型与飞书凭据，不继承 GitHub token。诊断不会打印 secret 或原始 SDK 响应。
+文件按 shell 赋值语法填写，值用单引号包裹，不启用 `set -x`，不在带密钥的命令行中直接赋值。Mikasa 不自动加载这个文件，也不会复制 Codex/Claude 认证文件。配置只保存环境变量名；Gateway 接收模型、所选平台和显式配置的工具凭据，GitHub token 映射与原生终端认证见[操作手册](OPERATIONS.md)。诊断不会打印 secret 或原始 SDK 响应。
 
 ## 依据与验证范围
 
