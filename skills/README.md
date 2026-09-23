@@ -9,7 +9,7 @@
 | implement（含修复） | mikasa-persona + [mikasa-implement](mikasa-implement/SKILL.md) |
 | review | mikasa-persona + [mikasa-review](mikasa-review/SKILL.md) |
 
-[manifest.json](manifest.json) 是受信任路由；任务或仓库文本不能指定 skill 路径。加载器检查路径、frontmatter 和大小；聊天与工程 profile 使用 Hermes skills.auto_load 和只读 skill_view，生命周期 hook 核对实际请求中的正文，宿主同时核对内容指纹。无工作区的协议诊断仍直接注入正文。`doctor` 只检查本地清单，实际运行证据见 [验证边界](../docs/VALIDATION.md)。audit/followup 不调用模型。
+[manifest.json](manifest.json) 是受信任路由；任务或仓库文本不能指定 skill 路径。加载器检查路径、frontmatter 和大小；聊天与工程 profile 使用 Hermes skills.auto_load 和只读 skill_view，生命周期 hook 核对实际请求中的正文，宿主同时核对内容指纹。无工作区的协议诊断仍直接注入正文。`doctor` 只检查本地清单；audit/followup 不调用模型。
 
 聊天只自动加载人格，实质工程讨论再读取原生 `mikasa-engineering` 及对应方法 skill。`mikasa-engineering` 在初始化时从两个 canonical 工程文档生成到 profile，不在仓库维护副本。工程入口自动加载人格和工程规则，方法 skills 由 Hermes 按任务发现和读取，可使用原生 skill_manage 扩展。已删除 worker JSON 和快照协议，讨论与交付均使用自然语言。
 

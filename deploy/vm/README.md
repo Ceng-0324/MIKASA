@@ -16,7 +16,7 @@ Hermes 承载执行和原生工具，CCH 提供模型，Mikasa 保留身份、sk
 | 消息入口 | [mikasa-gateway.service](mikasa-gateway.service)，统一飞书与微信 |
 | 工程入口 | `engineer --cwd DIR -- chat`，完整原生 Hermes CLI |
 
-`mylinux` 是迁移前环境，保留回退数据，不再作为 Mikasa 的工作机。具体迁移和验收结果见[验证边界](../../docs/VALIDATION.md)。
+这份手册描述专用开发机的通用部署方式；具体机器名、账号、凭据和恢复点由部署者自己维护，不写入仓库。
 
 ## 机器边界
 
@@ -73,13 +73,13 @@ Exa 免费入口和 Edge TTS 仍依赖外网服务可用性。图像理解使用
 
 先在新机验证依赖、真实模型和平台认证，旧机继续服务。路径一致时保留 provider、模型选择、会话路由和记忆链接；模型来源改变导致 provider ID 变化时，按模型对应关系单独重绑。
 
-切换前检查没有活跃任务，停止旧消息、工程及调度进程，按[状态手册](../../docs/runbooks/OPERATIONS.md)执行 `backup`。在新机 `restore` 到尚不存在的 `/var/lib/mikasa`，核验数据库数量、记忆哈希和内部链接，再调整为新机 mikasa 用户所有。不要覆盖运行中的 SQLite。
+切换前确认没有活跃任务，停止消息、工程及调度进程，再使用维护入口的 `backup` 和 `restore` 子命令。恢复到尚不存在的目标目录，核验数据库、记忆和内部链接后再切换，绝不覆盖运行中的 SQLite。
 
 微信 `credentials/weixin.json`、服务凭据和 gh 认证不在普通状态备份内，分别私密迁移或重新登录；既有机器人绑定无需重新扫码。外部仓库、用户工具和 `/home/mikasa` 数据须另行备份；管理员权限不会自动扩大 `backup` 范围。
 
 旧服务停用后才启用新服务，避免双实例消费。回退先停新服务，保存并核对新增会话、记忆和工程产出，再选择恢复点；不盲目重启旧副本，不重新执行旧任务。
 
-当前切换恢复点位于旧机 `/var/backups/mikasa/dedicated-machine-20260922`，部署依据在 `/var/backups/mikasa-service/dedicated-machine-20260922`。旧机和更早的 `native-engineering-20260922` 等恢复点均保留；私密状态不能提交 Git。
+恢复点位置、保留周期和迁移记录属于部署者的私有运维信息，不应提交 Git。
 
 ## 日常使用
 

@@ -12,4 +12,4 @@
 
 `probe_engineering.py --config CONFIG --model MODEL` 通过完整原生 CLI 使用真实 CCH 完成合成仓库修复、测试、后台进程、委派、本地提交、共享记忆与会话续接。平台显示与实际投递由原生 Gateway 单独验收。隔离 profile，不访问 GitHub 或消息平台；默认只输出结果，`--report PATH` 可选。
 
-有参数的探针先查看 `--help`；无参数脚本直接运行。固定 SDK、模型来源准备见 [执行器](../workers/hermes/README.md)。探针使用临时 profile/合成仓库，不发布 GitHub 或飞书内容。真实模型验证与本地夹具的证据分别记录，见 [验证边界](../docs/VALIDATION.md)。
+有参数的探针先查看 `--help`；无参数脚本直接运行。固定 SDK、模型来源准备见 [执行器](../workers/hermes/README.md)。探针使用临时 profile/合成仓库，不发布 GitHub 或飞书内容；它们服务于开发回归，不是产品运行入口。

@@ -54,4 +54,4 @@ Codex/Claude 来源仅显式只读本机配置；VM 使用环境引用，不复�
 | backup_adapter.py | Hermes SQLite 快照及恢复路径处理 |
 | feishu_probe.py / weixin_login.py | 官方平台探针与扫码，凭据留本机 |
 
-同一聊天 profile 的 CLI 与一个消息 Gateway 可并存；启动时的短暂初始化锁只保护配置刷新，运行期并发交给 Hermes，会话 lease 与 Gateway runtime 锁仍拒绝同 profile 的第二个 Gateway。工程 profile 可独立工作。方法 skills 不包含 worker 输出协议。固定源码、身份、记忆、工具和真实模型验收范围见 [验证边界](../../docs/VALIDATION.md)。
+同一聊天 profile 的 CLI 与一个消息 Gateway 可并存；启动时的短暂初始化锁只保护配置刷新，运行期并发交给 Hermes，会话 lease 与 Gateway runtime 锁仍拒绝同 profile 的第二个 Gateway。工程 profile 可独立工作。方法 skills 不包含 worker 输出协议。

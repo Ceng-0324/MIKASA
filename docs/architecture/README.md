@@ -1,64 +1,33 @@
-# 当前架构
+# 架构
 
-固定 Hermes 0.21.3：`f9524d3f119c672e4a4444f56d582e7475716ba3`，不修改上游源码。
+Mikasa 的设计很简单：人格属于 Mikasa，执行属于 Hermes，模型路由属于 CCH。
 
 ```mermaid
 flowchart LR
-    Messaging[飞书 / 微信] --> Gateway[Hermes 消息 Gateway]
-    Chat[终端聊天] --> NativeChat[Hermes CLI]
-    Engineer[engineer + 原生参数] --> CLI[完整 Hermes CLI]
-    CLI --> Tools[原生工具 / 会话 / Kanban / Cron]
-    Gateway --> Tools
-    NativeChat --> Tools
-    Gateway --> CCH[CCH 模型路由]
-    NativeChat --> CCH
-    CLI --> CCH
-    Mikasa[身份 / skills / 账号记忆 / 配置] --> Gateway
-    Mikasa --> CLI
+    User[终端 / 飞书 / 微信] --> Hermes[Hermes CLI / Gateway]
+    Hermes --> Tools[原生工具、会话、记忆、skills、调度]
+    Hermes --> CCH[CCH 模型路由]
+    Mikasa[身份、协作规则、账号绑定] --> Hermes
 ```
 
-## 工程
+## 三层边界
 
-`engineer --cwd 仓库 -- chat` 将控制权交给官方 `hermes_cli.main.main()`。原生参数原样透传，支持 chat、tools、skills、kanban、cron、gateway 等；使用实际工作目录和完整 Git 仓库。Hermes 决定工具发现、文件与终端操作、后台进程、委派、插件、MCP、会话压缩、worktree、预算和调度。Mikasa 工程插件只注入身份与协作约定、记录加载证据，不注册工具拦截器。
+Hermes 是唯一的 Agent harness。它负责工具发现、文件和终端操作、后台进程、委派、MCP、会话压缩、worktree、Kanban、Cron、记忆和消息投递。Mikasa 不复制工具循环、transcript、任务账本或审批引擎。
 
-工程 profile 默认使用原生 local terminal，可在原生配置中改为其他 backend。没有 Mikasa 工具/skills 白名单、文本快照、24 次迭代或 128 事件限制、强制 JSON 交付、宿主检查/提交/发布、串行 runner。工程启动器只在准备 profile 时短暂加锁；会话和调度并发由 Hermes 管理。
+CCH 只负责模型供应和路由。Hermes 原生处理 Responses、Messages 等协议；`/model` 由 Hermes 执行，Mikasa 只把已配置的模型来源生成原生 provider 和别名，不替 CCH 猜模型，也不偷偷做回退。
 
-这提供与相同配置的原生 Hermes 相同的能力入口，不保证未安装的外部工具自动可用。Git、gh、运行语言、浏览器、容器、MCP 和远端服务仍需实际依赖与权限。GitHub token 以 GH_TOKEN 提供给 Hermes 主进程及其原生凭据解析，不落盘；原生终端会清除该变量，gh 的独立登录仍需按原生认证流程准备；其他工具凭据通过 `engineering.env_allowlist` 显式注入或工程 profile 的原生配置提供。
+Mikasa 维护身份、人格 skill、工程协作规则、账号关系和平台启动适配。它在启动时生成 Hermes profile，保留 Hermes 自己写入的模型、显示偏好、记忆和会话；启动锁只保护初始化，运行期并发交给 Hermes 的 session lease 与 Gateway runtime lock。
 
-工程目标、推送、发布和审查安排由用户授权、skills 与记忆指导，不再由宿主角色/任务类型硬门槛执行。Mikasa 不自动合并。
+## 交互
 
-部署使用 Mikasa 自己的隔离工作机。普通用户具有完整 sudo，可自主安装依赖、运行容器和管理系统服务；服务进程不再套只写状态目录的沙箱。宿主文件、命令、SSH Agent 和其他机器网络在 OrbStack 配置层关闭。专用机原生普通命令审批设为 off，规则文件保护保留；运行权限及 OrbStack 共享内核的边界见 [工作机手册](../../deploy/vm/README.md)。
+一个 Gateway 可以接入多个已配置平台。飞书群聊是否需要 @、微信主人绑定等属于平台接入配置；消息进入后，Hermes 负责发送者识别、会话划分、队列、工具进度、长任务提醒和最终回复。终端 CLI 可以与一个 Gateway 并存，两个 Gateway 不能同时占用同一 profile。
 
-## 聊天
+同一 profile 共享长期记忆和历史检索能力，但每个聊天仍按平台、聊天和话题划分上下文。`/new` 只新建会话，不删除记忆；`/resume` 和 `session_search` 由 Hermes 原生实现。独立工程 profile 与聊天 profile 分开保存会话，需要时链接同账号记忆。
 
-一个 `gateway --platform feishu --platform weixin` 管理两个消息平台。飞书开放群聊、无需 @，保留原生回环保护；微信使用已绑定主人私聊。发言人依据 Hermes 发送者元数据识别，不能用 profile 归属替代。
+## 工程环境
 
-不同会话原生并发，同会话 FIFO；普通群及话题共享上下文，私聊按平台隔离。聊天直接使用原生平台完整工具集，在同一工作机执行工程任务；没有工具白名单或 Mikasa 轮数预算。进度、阶段说明、长任务通知与最终回复由 Hermes 回传原会话，不另建任务转发或通知服务。同一聊天 profile 的 CLI 与消息 Gateway 可以并存；独立工程 CLI 的 profile 也可与消息服务同时使用，历史分别保存。
+`engineer --cwd /path/to/repo -- chat` 直接进入 Hermes 原生工程入口。仓库中的规则文件、系统账号、Git、语言运行时、容器、MCP 和远端服务权限决定实际能力；Mikasa 不建立第二套文件黑名单或硬编码业务审批。
 
-Mikasa 只在启动时短暂锁住 profile，避免两个入口同时刷新身份和配置；子进程启动前释放该锁，无变化的文件不重写。运行期由 Hermes 的会话 lease 和 Gateway runtime 锁处理并发，因此同一聊天 profile 可以同时运行一个 Gateway 和一个或多个 CLI，两个 Gateway 仍会被原生锁拒绝。会话锁不等于全配置事务锁；同时修改共享 profile 设置仍遵循 Hermes 的原生保存语义。聊天入口只提供会话恢复参数和固定初始 workspace；完整原生 CLI 参数由独立 `engineer` 入口透传。工程与聊天的 profile 分离、仅链接长期记忆，也是本项目的布局选择。
+身份正文来自 [identity.md](../../identity.md)，工程规则来自 [engineering-contract.md](../../engineering-contract.md) 和 [engineering-workflow.md](../../engineering-workflow.md)。配置入口见[配置说明](../../config/README.md)，聊天和模型行为见[聊天手册](../runbooks/CHAT.md)与[CCH 手册](../runbooks/CCH.md)。
 
-消息快捷入口接受飞书和微信，直接使用 Hermes 的 `load_gateway_config()` 处理原生 YAML、嵌套配置、环境变量和平台偏好，再绑定本次选中的平台账号。`quick_commands`、`profile_routes`、渠道覆盖、语音和多 profile 设置交由原生配置管理，不再用字段白名单或强制关闭覆盖。飞书开放参与、微信主人绑定继续作为接入配置；其他平台可通过完整工程 CLI 的原生 Gateway 配置使用，需自行准备对应账号与依赖。
-
-各入口继承真实系统账号的 HOME、PATH 和显式工具环境变量，使用同一 gh 认证与系统依赖。原生 config.yaml、.env、插件和 MCP 由 Hermes 管理；初始化只清除旧聊天适配写入的工具子集和默认预算一次，保留用户后续偏好。飞书开放成员可调用工程工具，权限按现有整机和平台配置执行，没有新增负责人专用工具门禁。
-
-原生系统命令直接交给 Hermes。旧 `serve`、`chat --message`、HTTP 聊天和任务端点已删除；模型诊断也使用临时原生 CLI，不再启动本地 API 服务。
-
-## 状态和身份
-
-| runtime 下的路径 | 职责 |
-| --- | --- |
-| `native/<账号摘要>/` | 原生聊天会话、MEMORY/USER、配置和消息路由 |
-| `engineer/<账号摘要>/` | 原生工程会话、配置、Kanban、Cron、默认持久 workspace |
-| `engineer/<账号摘要>/memories` | 链接同账号聊天 memories，由 Hermes 负责锁和原子写入 |
-| `mikasa.sqlite3` | 旧状态档案，仅备份保留，不再创建或写入 |
-| `engineering/`、`kanban/`、`scheduler/`、`workspaces/` | 旧任务档案，保留备份，不再执行 |
-
-SOUL 来自 identity.md；人格 skill 常驻。工程契约与工作流生成 mikasa-engineering skill，工程入口自动加载，聊天按需加载。通用方法 skills 由原生发现和选择，没有指定任务白名单。长期记忆共享不等于当前实例即时刷新；会话历史分别保存在原生 SessionDB，同 profile 使用 session_search、/resume 或 --resume 续接；独立工程与聊天历史不会自动合并。
-
-## 迁移与恢复
-
-旧 worker v1 RPC、任务 CLI、runner、HTTP 聊天和工程 webhook 已删除。既有任务、工作区和发布回执不自动重跑、不删除。需要历史执行环境时从 Git 中的迁移前版本独立恢复副本；不要将旧 runner 对准正在使用的新 runtime。
-
-`backup`/ `restore` 复用 Hermes SQLite 快照，保留旧档案并纳入 engineer，支持 v2 备份读取与 v3 生成。VM 级维护入口另用 Restic 覆盖运行状态、`/home/mikasa/work`、服务配置和固定依赖，可在源码版本失败时回切旧目录。详见 [操作手册](../runbooks/OPERATIONS.md)。FluxCore PR #28 已完成首轮真实仓库交付验收。
-
-Hermes 自身的确认与安全语义仍然保留：例如仓库 AGENTS.md 的文件工具修改默认要求交互确认，即使 --yolo 也不越过该原生保护。原生 security 配置可由用户维护，Mikasa 不追加第二套文件禁改规则。
+固定 Hermes 版本、依赖安装和平台适配位于 [`workers/hermes/`](../../workers/hermes/)。VM 部署代码属于开发和运维实现，不能替代目标机器上的权限、凭据和外部服务配置。

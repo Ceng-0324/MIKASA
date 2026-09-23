@@ -15,11 +15,10 @@
 ## 本目录的维护边界
 
 - canonical 正文仅维护在上述三个文件；工具入口只保存简短摘要和指针，不复制全文。
-- [README.md](README.md) 说明目录职责，[来源记录](docs/ADAPTATION_SOURCES.md) 区分官方事实与本地适配。
-- [功能规划](MIKASA_FUNCTION_PLAN.md) 记录已确认方向和待定事项，不把候选方案当作已部署能力。
+- [README.md](README.md) 说明目录职责；架构和使用手册记录当前仍有效的公开边界。
 - `mikasa/` 保存运行与平台适配，`workers/hermes/` 保存原生集成；`config/`、`skills/`、`deploy/`、`tests/` 和 `scripts/` 分别承载配置、方法、部署与验证。当前分工见 [架构](docs/architecture/README.md)，不保留空占位目录或重复迁移文档。
 - `runtime/`、本地配置、worker home 和认证文件不进入 Git；不迁移真实 `auth.json`、token 或环境密钥。
-- 当前包含身份、工程规则及 `mikasa/` 运行实现；功能范围和验证边界见 [功能规划](MIKASA_FUNCTION_PLAN.md)。FluxCore 仅用于本体开发后的运行验收，不以开发该仓库为前置任务。
+- 当前包含身份、工程规则及 `mikasa/` 运行实现；真实仓库试运行已经完成，后续按具体工程任务维护，不再维护独立的项目路线档案。
 - 实现检查：`python3.12 -m unittest discover -v`、`python3.12 scripts/check_docs.py`、`python3.12 -m mikasa doctor`。任务状态、凭据与临时工作区不进入 Git；真实模型和平台联调不可用隔离测试替代。
 - 本仓库每轮任务完成后，对已验证且属于本任务的改动自动创建本地提交；禁止自动推送。具体提交约定见 [CONTRIBUTING.md](CONTRIBUTING.md)，无改动时不创建空提交。
 - 修改前阅读现有内容；同步直接受影响的入口与文档，按工作流中的文档检查要求验证。

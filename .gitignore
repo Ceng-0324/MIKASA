@@ -29,3 +29,14 @@ build/
 dist/
 *.egg-info/
 .coverage
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local release bundles, probe reports and temporary launcher files
+*.tar.gz
+*.tar.zst
+*.report.json
+*.probe.json
+.mikasa-*
+gateway-messaging.json

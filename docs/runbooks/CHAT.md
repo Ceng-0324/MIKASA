@@ -87,4 +87,4 @@ CLI 启动原生 CLI 子进程；同一账号使用同一 profile、SessionDB �
 
 聊天和独立工程 CLI 共用原生 MEMORY/USER，新实例会读取已保存约定，同一实例不承诺外部记忆热刷新。聊天中的工程任务直接使用当前聊天上下文与 SessionDB；独立 CLI 的会话历史仍分开保存，切换入口时使用原生会话与历史检索能力续接。详见 [当前架构](../architecture/README.md)。
 
-`backup DIRECTORY` 备份完整受管状态，包括原生会话、记忆与运行回执；`restore BACKUP NEW_RUNTIME` 校验后恢复到新目录。先停服，按 [备份说明](OPERATIONS.md) 重新提供外部配置与凭据；备份不上传 Git 或公开存储。
+备份和恢复由 Mikasa 的运行入口与部署环境负责；需要迁移 profile 时，先停止服务，再使用 `backup` / `restore` 命令的帮助和目标机器手册，绝不把运行状态或凭据上传 Git 或公开存储。

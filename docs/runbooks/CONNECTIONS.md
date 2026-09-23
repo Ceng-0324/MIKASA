@@ -1,6 +1,6 @@
 # 平台接入
 
-GitHub 使用 `Mikasa-0910` 独立账号，飞书使用企业自建应用机器人，微信使用 iLink 扫码身份。Hermes 负责消息连接、系统命令、会话与记忆，CCH 提供模型；Mikasa 补充配置、账号绑定和诊断。当前接入结果见[验证边界](../VALIDATION.md)。
+GitHub、飞书和微信只是可选入口：Hermes 负责消息连接、系统命令、会话与记忆，CCH 提供模型；Mikasa 补充配置、账号绑定和诊断。账号名称、负责人 ID 和平台凭据属于部署者自己的本地配置，不写进公开仓库。
 
 以下命令使用本机已有的 `config/local/hermes-cch.json`；其他机器替换为自己的配置路径。合并平台字段时保留已有 CCH 设置。
 
@@ -8,7 +8,7 @@ GitHub 使用 `Mikasa-0910` 独立账号，飞书使用企业自建应用机器�
 
 | 信息 | 获取与交付方式 |
 | --- | --- |
-| GitHub token | 使用 `Mikasa-0910` 创建；只告知本机文件路径或环境变量名 |
+| GitHub token | 使用 Mikasa 专用账号创建；只告知本机文件路径或环境变量名 |
 | 飞书应用 | 企业自建应用，名称 Mikasa，启用机器人；App ID / App Secret 保存在本机 |
 | 负责人身份 | 可选 `owner_open_id` / `owner_user_id` 说明身份关系，不作为飞书聊天白名单；本机已有绑定 |
 | 应用状态 | 是否发布、需要使用的人是否在可用范围、权限是否批准、消息事件是否订阅 |
@@ -17,18 +17,18 @@ GitHub 使用 `Mikasa-0910` 独立账号，飞书使用企业自建应用机器�
 
 ## GitHub 操作步骤
 
-本阶段目标是独立使用 `Mikasa-0910` 账号身份，不要求先指定仓库、接受邀请或配置 webhook。通过 token 使用 GitHub API，不接管密码、邮箱或双因素认证；账号身份验证与具体操作权限分开验收。
+本阶段目标是独立使用 Mikasa 专用账号身份，不要求先指定仓库、接受邀请或配置 webhook。通过 token 使用 GitHub API，不接管密码、邮箱或双因素认证；账号身份验证与具体操作权限分开验收。
 
-1. 登录 `Mikasa-0910`，确认当前账号，然后打开 **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)**，填写用途和有限有效期。
+1. 登录 Mikasa 专用账号，确认当前账号，然后打开 **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)**，填写用途和有限有效期。
 2. 只验证账号身份时无需选仓库 scope；计划开展公开仓库协作可选 `public_repo`，需要私有仓库时选 `repo`。其他能力按实际任务补充，不要求一次勾选全部权限。若组织禁止 classic PAT，后续接入该组织时再处理其授权方式。
 3. 将生成的 token 仅存入本机私密文件或密码管理器，注入 `MIKASA_GITHUB_TOKEN`。页面仅显示一次；泄露或遗失时撤销重建。只需告知本机凭据路径或变量名。
-4. 使用现有配置执行下方只读探针。`repositories` 可保持 `{}`；确认 `/user` 返回 `Mikasa-0910` 即通过账号接入检查。
+4. 使用现有配置执行下方只读探针。`repositories` 可保持 `{}`；确认 `/user` 返回预期的 Mikasa 专用账号即通过账号接入检查。
 
-后续进入具体仓库任务时，再按需要授予 Mikasa 账号实际访问权限。负责人可在仓库 **Settings → Collaborators / Manage access → Add people** 邀请 `Mikasa-0910`，由该账号接受。现有工程任务入口仍需配置目标仓库和 base 分支，例如：
+后续进入具体仓库任务时，再按需要授予 Mikasa 账号实际访问权限。仓库管理员可在 **Settings → Collaborators / Manage access → Add people** 邀请该账号，由账号持有人接受。现有工程任务入口仍需配置目标仓库和 base 分支，例如：
 
 ```json
 "repositories": {
-  "Ceng-0324/YOUR_REPOSITORY": {"base": "main"}
+  "OWNER/YOUR_REPOSITORY": {"base": "main"}
 },
 "github": {"token_env": "MIKASA_GITHUB_TOKEN"}
 ```
@@ -96,7 +96,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections weixin
 
 用负责人本人微信扫描终端二维码并在手机确认。扫码得到独立 iLink 机器人身份，不接管个人微信账号；当前支持主人私聊，通常无法加入普通微信群，放开本地策略不能让 iLink 投递未支持的群消息。登录不调用模型、不收发消息，也不修改正在运行的飞书 profile。绑定来自扫码返回的用户 ID，无需手工抄写；不要分享登录二维码。
 
-主人已确认本机绑定的手机微信账号属于 `Ceng-0324`（Shawn / Ceng）。准备原生 profile 时，从经校验的本机绑定提取 `user_id` 注入主人身份关系，以 Hermes 微信发送者元数据匹配；不将机器人 `account_id` 当作主人，也不向身份提示传入 token。没有绑定时不注入微信身份，绑定错误时拒绝更新；重新绑定后重启 Gateway 使新的身份映射生效。实际微信标识仅留在本机运行数据，不写入公开身份文档。
+准备原生 profile 时，从经校验的本机绑定提取 `user_id` 注入负责人身份关系，以 Hermes 微信发送者元数据匹配；不将机器人 `account_id` 当作负责人，也不向身份提示传入 token。没有绑定时不注入微信身份，绑定错误时拒绝更新；重新绑定后重启 Gateway 使新的身份映射生效。实际微信标识仅留在本机运行数据，不写入公开身份文档。
 
 完整绑定以 0600 保存到配置 runtime 下的 `credentials/weixin.json`；登录取消、超时或返回缺字段时保留旧文件。该目录被 Git 忽略且不属于受管状态备份范围，迁到 VM 时单独安全转移或重新扫码。登录临时 home 自动清理，凭据不写入会话、记忆或生成的 Gateway 配置。`connections weixin` 只检查本地绑定，不证明 token 尚有效；微信不提供本项目使用的只读认证探针，因此拒绝 `--probe`，避免探针消费真实消息。
 
@@ -122,7 +122,7 @@ set -a
 set +a
 ```
 
-文件按 shell 赋值语法填写，值用单引号包裹，不启用 `set -x`，不在带密钥的命令行中直接赋值。Mikasa 不自动加载这个文件，也不会复制 Codex/Claude 认证文件。配置只保存环境变量名；Gateway 接收模型、所选平台和显式配置的工具凭据，GitHub token 映射与原生终端认证见[操作手册](OPERATIONS.md)。诊断不会打印 secret 或原始 SDK 响应。
+文件按 shell 赋值语法填写，值用单引号包裹，不启用 `set -x`，不在带密钥的命令行中直接赋值。Mikasa 不自动加载这个文件，也不会复制 Codex/Claude 认证文件。配置只保存环境变量名；Gateway 接收模型、所选平台和显式配置的工具凭据。诊断不会打印 secret 或原始 SDK 响应。
 
 ## 依据与验证范围
 
@@ -134,4 +134,4 @@ set +a
 - [获取指定用户 Open ID](https://open.feishu.cn/document/uAjLw4CM/ugTN1YjL4UTN24CO1UjN/trouble-shooting/how-to-obtain-openid)
 - [通过手机号或邮箱获取用户 ID](https://open.feishu.cn/document/server-docs/contact-v3/user/batch_get_id)
 
-探针认证成功不能证明应用已发布、负责人绑定正确或消息往返成功；模拟测试不能替代真实 GitHub/飞书验收。当前结果见 [验证记录](../VALIDATION.md)。
+探针认证成功只证明凭据和本地配置可用，不能证明应用已发布、账号绑定正确或消息往返成功；真实平台仍需由部署者自己验收。
