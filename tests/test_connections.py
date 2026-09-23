@@ -526,6 +526,10 @@ for platform in ('feishu','weixin'):
     assert resolve_display_setting(cfg,platform,'long_running_notifications')
 assert cfg['agent']['gateway_notify_interval'] == 15
 assert cfg['display']['background_process_notifications'] == 'error'
+from gateway.run import _prepare_gateway_status_message
+from agent.conversation_compression import COMPACTION_STATUS
+for platform in ('feishu', 'weixin'):
+    assert _prepare_gateway_status_message(platform, 'info', COMPACTION_STATUS) == COMPACTION_STATUS
 for name in ('terminal','write_file','delegate_task','skill_manage','web_search'):
     assert get_pre_tool_call_directive(name, {})[0] is None
 # Exercise the actual pinned SessionDB, including deduplicated prompt storage,

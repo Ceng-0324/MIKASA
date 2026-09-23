@@ -45,6 +45,7 @@ def merge(current, generated):
     # Add newly introduced display defaults to existing profiles, preserving
     # explicit choices (including False) and platform-specific preferences.
     merged["display"] = {**generated["display"], **current.get("display", {})}
+    merged["compression"] = {**generated.get("compression", {}), **current.get("compression", {})}
     if "max_concurrent_sessions" in generated:
         merged["agent"] = {**generated["agent"], **current.get("agent", {})}
         merged["platforms"] = dict(current.get("platforms") or {})

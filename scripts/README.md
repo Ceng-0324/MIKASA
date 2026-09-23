@@ -9,6 +9,7 @@
 | `probe_native_cli.py` | 固定 SDK/本地模型目录夹具；原生命令、跨协议选择、偏好、恢复与启动退出 |
 | `probe_native_offline.py` | 固定 SDK；身份、按需工程 skills、历史检索及工具发现、原生记忆与工具策略 |
 | `probe_native_state.py --config CONFIG --model MODEL` | **真实 CCH 调用**；原生会话重启续接、新会话历史检索、聊天/工程共享记忆与临时进度不入长期记忆 |
+| `probe_compression.py --config CONFIG --summary-model MODEL --fallback-model MODEL` | **真实 CCH 调用**；原生自动压缩、进度与摘要后接续；`--force-fallback` 模拟主摘要连接失败并验证真实备用模型 |
 
 `probe_engineering.py --config CONFIG --model MODEL` 通过完整原生 CLI 使用真实 CCH 完成合成仓库修复、测试、后台进程、委派、本地提交、共享记忆与会话续接。平台显示与实际投递由原生 Gateway 单独验收。隔离 profile，不访问 GitHub 或消息平台；默认只输出结果，`--report PATH` 可选。
 

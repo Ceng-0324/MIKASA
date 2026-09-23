@@ -41,6 +41,8 @@ Codex/Claude 来源仅显式只读本机配置；VM 使用环境引用，不复�
 
 聊天默认逐工具显示原生进度，长任务每 15 秒通过原生 Gateway 提醒仍在执行；可在 profile 的 `display.tool_progress`、`agent.gateway_notify_interval` 和平台覆盖中调整。提醒不等于终端 stdout 逐行直播；长命令使用 Hermes 原生后台进程和 `process_manage` 查看输出，模型在工具调用间反馈已观察到的进展。
 
+自动上下文压缩同样由 Hermes 管理，默认显示压缩进度，尊重已有的 `compression.progress_notices` 选择。独立摘要模型和备用路由使用原生 `auxiliary.compression` 配置；示例及真实验收方法见 [CCH 手册](../../docs/runbooks/CCH.md#自动上下文压缩)。
+
 更新身份或协作提示并重启入口时，插件通过原生 SessionDB 清除过期的 Mikasa 系统提示缓存，下次请求重新组装；消息历史、会话 ID 和持久记忆保留，无需 `/new`。文件同步和模型实际加载分别由 `policy-loaded.json` 摘要与 `native-evidence.jsonl` 请求证据检查。
 
 ## 保留的集成文件

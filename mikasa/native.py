@@ -118,6 +118,7 @@ def prepare_profile(config, actor, *, engineering=False):
         "providers": providers,
         "model_aliases": {m: {"model": m, "provider": provider_id(select_source(settings, m))} for m in choices},
         "memory": {"memory_enabled": True, "user_profile_enabled": True},
+        "compression": {"progress_notices": True},
         "skills": {"external_dirs": [str(config.root / "skills")], "auto_load": ["mikasa-persona"]},
         "plugins": {"enabled": ["mikasa"]},
         "agent": {"gateway_notify_interval": 15},

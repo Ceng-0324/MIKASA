@@ -13,6 +13,26 @@ from tests.support import ROOT
 
 
 class NativeProfileTests(unittest.TestCase):
+    def test_compression_refresh_preserves_native_routes_thresholds_and_opt_out(self):
+        for engineering in (False, True):
+            with self.subTest(engineering=engineering):
+                home, *_ = prepare_profile(self.config, self.config.owner, engineering=engineering)
+                path = home / 'config.yaml'
+                current = json.loads(path.read_text())
+                current['compression'] = {'enabled': True, 'threshold_tokens': 180000}
+                current['auxiliary'] = {'compression': {
+                    'provider': 'operator-primary', 'model': 'summary-model',
+                    'fallback_chain': [{'provider': 'operator-backup', 'model': 'backup-model'}]}}
+                path.write_text(json.dumps(current))
+                prepare_profile(self.config, self.config.owner, engineering=engineering)
+                updated = json.loads(path.read_text())
+                self.assertEqual(updated['compression'], {**current['compression'], 'progress_notices': True})
+                self.assertEqual(updated['auxiliary'], current['auxiliary'])
+                updated['compression']['progress_notices'] = False
+                path.write_text(json.dumps(updated))
+                prepare_profile(self.config, self.config.owner, engineering=engineering)
+                self.assertEqual(json.loads(path.read_text()), updated)
+
     def test_progress_restore_is_once_and_keeps_platform_preferences(self):
         home, *_ = prepare_profile(self.config, self.config.owner)
         path = home / 'config.yaml'

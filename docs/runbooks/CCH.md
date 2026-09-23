@@ -28,6 +28,39 @@ VM 使用 `environment` 来源，不复制个人 Codex/Claude 认证文件。`mo
 
 完整双协议示例见 [VM 配置](../../deploy/vm/config.example.json)及[环境模板](../../deploy/vm/runtime.env.example)：GPT 使用 Responses，Claude 使用 Messages。Hermes 聊天和工程 profile 都接收已配置 provider 的 Key 环境引用，由原生选择模型和协议。模型 ID 与端点按实际 CCH 配置填写，分组仍由 CCH Key 决定。
 
+## 自动上下文压缩
+
+自动压缩由 Hermes 原生执行。Mikasa 默认开启压缩进度通知；已有的 `compression` 设置和 `auxiliary` 路由在 profile 刷新时保留。摘要请求失败时，Hermes 会保留历史并报告失败，手动 `/compress` 仍依赖摘要服务可用。
+
+在需要配置的聊天或工程 profile 的 `config.yaml` 中合并以下字段。`provider` 必须替换为该文件 `model_aliases` 中对应模型的真实 provider ID；原生 provider 会解析端点、协议及 `key_env`，无需复制密钥。模型名须以部署者的 CCH 配置为准：
+
+```yaml
+compression:
+  enabled: true
+  progress_notices: true
+auxiliary:
+  compression:
+    provider: cch-<GPT来源摘要>
+    model: gpt-5.6-luna
+    reasoning_effort: low
+    timeout: 300
+    no_progress_timeout: 120
+    fallback_chain:
+      - provider: cch-<Claude来源摘要>
+        model: claude-opus-4-6
+```
+
+这是独立的摘要路由，不改变 `/model` 选中的对话模型。`timeout` 是请求时间预算；Responses 流的无进展超时由 `no_progress_timeout` 单独控制。备用模型也必须具有足够的上下文容量。修改运行中的配置前等待任务结束，并按部署方式重启，使缓存的 Agent 使用新配置。
+
+使用 [probe_compression.py](../../scripts/probe_compression.py) 可在临时 profile 中验证真实自动触发、摘要后接续与备用路由：
+
+```sh
+python3.12 scripts/probe_compression.py --config config/local/hermes-cch.json --summary-model gpt-5.6-luna --fallback-model claude-opus-4-6
+python3.12 scripts/probe_compression.py --config config/local/hermes-cch.json --summary-model gpt-5.6-luna --fallback-model claude-opus-4-6 --force-fallback
+```
+
+探针会消耗模型额度，使用合成历史并只在临时 profile 中降低触发阈值；第二条模拟主摘要连接失败，备用请求仍访问真实 CCH。不发送平台消息或修改正式会话。两个模型共用的 CCH 整体不可用时，跨模型备用也无法消除该故障。
+
 ## /model 跨 GPT 与 Claude 切换
 
 终端和消息网关中的 `/model` 均由 Hermes 原生执行，可使用 `/model gpt-6-astra` 或 `/model claude-opus-4-6` 并保留上下文。session/once/global、provider/reasoning 等参数按原生语义处理。选择器与目录校验不额外发送推理探针；实际可用性通过 `doctor --model ID --probe-model` 或真实对话验证。见[聊天手册](CHAT.md)。
