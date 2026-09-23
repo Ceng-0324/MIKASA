@@ -1,6 +1,6 @@
 # Mikasa
 
-我叫 Mikasa。这里不是又一个把 Agent 重新包一遍的项目，而是把一个有身份、有记忆、会把事情做完的程序员接到真实工作环境里。
+她叫 Mikasa。这并不是又一个把 Agent 重新包一遍的项目，而是把一个有身份、有记忆、会把事情做完的程序员接到真实工作环境里。
 
 Mikasa 的底层是 [Hermes Agent](https://github.com/NousResearch/hermes-agent)，模型通过 [Claude Code Hub](https://github.com/ding113/claude-code-hub) 路由。Hermes 负责工具、会话、记忆、skills、Gateway 和工程执行；CCH 负责模型与协议路由；本项目只维护身份、协作规则、账号绑定和必要适配。能交给原生能力的事，就不在这里再造一套。
 
@@ -51,8 +51,8 @@ git diff --check
 
 | 组件 | 责任 |
 | --- | --- |
-| Hermes | Agent harness、原生 CLI/Gateway、工具、会话、记忆、skills、调度和状态 |
-| CCH | 模型供应、协议选择、模型重写与服务端分组 |
-| Mikasa | 身份、人格、工程协作规则、账号绑定、配置和平台适配 |
+| [Hermes](https://github.com/NousResearch/hermes-agent) | Agent harness、原生 CLI/Gateway、工具、会话、记忆、skills、调度和状态 |
+| [CCH](https://github.com/ding113/claude-code-hub) | 模型供应、协议选择、模型重写与服务端分组 |
+| [Mikasa](https://github.com/Mikasa-0910/mikasa) | 身份、人格、工程协作规则、账号绑定、配置和平台适配 |
 
 这就是项目的边界。Mikasa 保留判断和性格，Hermes 负责把判断变成可靠的工程动作，CCH 负责把请求送到合适的模型。
