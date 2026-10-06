@@ -258,6 +258,15 @@ print('pinned Feishu SDK admission and Gateway configuration: passed')
                                input=json.dumps(settings), capture_output=True, text=True, timeout=30)
         self.assertEqual(reply.returncode, 0, reply.stderr)
 
+    def test_pinned_feishu_attachments(self):
+        python = self.native_python("lark_oapi", "aiohttp")
+        env = {"PATH": os.environ.get("PATH", ""), "HERMES_HOME": str(self.path),
+               "MIKASA_HERMES_SOURCE": str(ROOT / "runtime/cache/hermes-source"),
+               "HERMES_ENABLE_PROJECT_PLUGINS": "0"}
+        reply = subprocess.run([str(python), str(ROOT / "tests/feishu_attachments_sdk.py"), "-v"],
+                               cwd=self.path, env=env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(reply.returncode, 0, reply.stderr)
+
     def test_native_gateway_loader_preserves_nested_settings_and_platform_preferences(self):
         from mikasa.native import prepare_profile
         self.native_python('dotenv', 'openai', 'anthropic', 'aiohttp')

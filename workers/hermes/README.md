@@ -2,6 +2,8 @@
 
 固定 NousResearch/hermes-agent `f9524d3f119c672e4a4444f56d582e7475716ba3`，版本 0.21.3。Mikasa 不修改上游、不重写工具循环。
 
+飞书引用附件通过原生平台注册接口扩展适配器：读取当前聊天中被引用的消息，复用 Hermes 下载、缓存及附件上下文，再进入原生 Agent。仅补齐固定版本只传引用文件名的缺口；上游覆盖该行为并通过附件回归后删除此扩展。直接上传仍走原生接收链路，群内独立文件消息需要飞书授予 `im:message.group_msg`。
+
 ## 安装
 
 在项目根目录准备独立环境，目录须尚不存在：
@@ -51,6 +53,7 @@ Codex/Claude 来源仅显式只读本机配置；VM 使用环境引用，不复�
 | --- | --- |
 | native_engineer.py | 官方 hermes_cli.main.main 工程总入口 |
 | native_cli.py / native_gateway.py | 聊天 CLI/Gateway 生命周期与加载检查 |
+| feishu_attachments.py | 引用附件补下载与传输失败提示，复用原生适配器 |
 | plugin/ | 身份/协作提示及加载证据；不注册工具拦截器 |
 | profile_config.py | 保留原生偏好、刷新受管 provider 与身份 skill |
 | backup_adapter.py | Hermes SQLite 快照及恢复路径处理 |

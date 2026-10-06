@@ -79,6 +79,8 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu --
 
 飞书现采用 Hermes 原生开放准入：所有用户、群聊与其他机器人均可进入，群聊不要求 @。通过 `FEISHU_ALLOW_ALL_USERS=true`、`FEISHU_GROUP_POLICY=open`、`FEISHU_ALLOW_BOTS=all`、`FEISHU_REQUIRE_MENTION=false` 实现，无成员或群白名单；Hermes 自身消息回环过滤、消息去重与机器人循环保护保留。只对飞书开放，微信仍使用扫码负责人的单聊绑定。
 
+**群附件没有进入会话时**：先检查应用已发布的 `im:message.group_msg` 权限。文件独立发送时通常不带 @，只授予 `im:message.group_at_msg:readonly` 不会投递这些消息；文字能回复不代表附件事件也会到达。飞书消息列表接口返回 `230027` 且提示 `need scope: im:message.group_msg` 时，应在权限管理开通此权限并重新发布、完成审批。引用文件并 @ 机器人可让适配器按该条消息补下载，但仍需应用具有相应消息资源的访问权限。代码中的开放群策略无法替代飞书授权。
+
 私聊按平台和聊天区分；普通群及话题内共享上下文，发送者仍使用 Hermes 元数据识别。同一 Gateway 共用负责人 profile 的 MEMORY/USER、SessionDB、身份与 skills，具体会话仍按平台、聊天和话题标识隔离，并非每人的私有记忆空间。开放用户可调用原生系统命令与工程工具，部分操作影响共享 profile 和工作机。不同会话并发，同会话忙碌时排队；工程进度与结果直接回复原会话，详细语义见[聊天手册](CHAT.md)。
 
 CLI 与消息 Gateway 可以使用同一负责人 profile 并存。启动时会短暂锁住 profile 以完成身份和配置刷新；运行期由 Hermes 的会话 lease 与 Gateway runtime 锁管理并发，重复启动第二个 Gateway 会被原生拒绝。Ctrl-C 停止前台；启动失败需处理错误后重启，不覆盖会话或记忆。
