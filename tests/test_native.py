@@ -324,7 +324,7 @@ class NativeProfileTests(unittest.TestCase):
         process.poll.return_value = 0
         with patch.dict(os.environ, {'MIKASA_FEISHU_APP_ID': 'cli_fixture', 'MIKASA_FEISHU_APP_SECRET': 'feishu-secret',
                                      'FEISHU_ALLOW_ALL_USERS': 'false', 'GATEWAY_ALLOW_ALL_USERS': 'true',
-                                     'FEISHU_GROUP_POLICY': 'disabled', 'FEISHU_REQUIRE_MENTION': 'true',
+                                     'FEISHU_GROUP_POLICY': 'disabled', 'FEISHU_REQUIRE_MENTION': 'false',
                                      'FEISHU_HOME_CHANNEL': 'oc_unwanted', 'GH_TOKEN': 'private'}), \
                 patch('mikasa.native.prepare_profile', return_value=prepared), \
                 patch('mikasa.native.subprocess.Popen', return_value=process) as spawn:
@@ -338,7 +338,7 @@ class NativeProfileTests(unittest.TestCase):
         self.assertEqual(env['GATEWAY_ALLOW_ALL_USERS'], 'false')
         self.assertEqual(env['FEISHU_GROUP_POLICY'], 'open')
         self.assertEqual(env['FEISHU_ALLOW_BOTS'], 'all')
-        self.assertEqual(env['FEISHU_REQUIRE_MENTION'], 'false')
+        self.assertEqual(env['FEISHU_REQUIRE_MENTION'], 'true')
         self.assertNotIn('FEISHU_HOME_CHANNEL', env)
         self.assertNotIn('GH_TOKEN', env)
         self.assertFalse(any(b'feishu-secret' in p.read_bytes() for p in prepared[0].rglob('*') if p.is_file()))

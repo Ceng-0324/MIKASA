@@ -83,7 +83,7 @@ def feishu_environment(config):
         "FEISHU_DOMAIN": settings.get("domain", "feishu"),
         "FEISHU_CONNECTION_MODE": "websocket", "FEISHU_ALLOWED_USERS": "",
         "FEISHU_ALLOW_ALL_USERS": "true", "FEISHU_GROUP_POLICY": "open",
-        "FEISHU_ALLOW_BOTS": "all", "FEISHU_REQUIRE_MENTION": "false",
+        "FEISHU_ALLOW_BOTS": "all", "FEISHU_REQUIRE_MENTION": "true",
         # The platform opt-in opens Feishu without opening other Gateway adapters.
         "GATEWAY_ALLOW_ALL_USERS": "false",
     }
@@ -99,7 +99,7 @@ def messaging_gateway(config, platforms):
         if platform == "feishu":
             env.update(feishu_environment(config))
             extra = {"app_id": env["FEISHU_APP_ID"], "default_group_policy": "open",
-                     "allow_bots": "all", "require_mention": False}
+                     "allow_bots": "all", "require_mention": True}
         else:
             binding = weixin_binding(config)
             env.update(WEIXIN_TOKEN=binding["token"], WEIXIN_ALLOW_ALL_USERS="false",
@@ -130,7 +130,7 @@ def diagnostics(config, platform, *, probe=False):
     else:
         result.update(owner_bound=bool(settings.get("owner_open_id")), domain=settings.get("domain", "feishu"),
                       transport="websocket", messages="not_checked", owner_identity="not_checked",
-                      access={"users": "all", "groups": "open", "bots": "all", "require_mention": False})
+                      access={"users": "all", "groups": "open", "bots": "all", "require_mention": True})
     if probe:
         if missing:
             raise MikasaError("缺少接入凭据环境变量：" + ", ".join(missing))

@@ -51,7 +51,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections github --
 1. 使用能管理目标企业应用的账号登录 [飞书开发者后台](https://open.feishu.cn/app)，选择目标企业，**创建企业自建应用**，填写 Mikasa 名称、描述与头像。若没有创建权限，让企业管理员授予开发者权限或创建应用并将你加入应用协作者。
 2. 在应用的 **添加应用能力 → 机器人** 启用机器人。这是 Hermes 使用的独立飞书身份，无需先注册普通成员号。不要选择群聊中的自定义 Webhook 机器人；Hermes 此入口需要企业自建应用的 App ID / App Secret 和长连接事件能力。
 3. 在 **凭证与基础信息** 找到 `App ID`（通常 `cli_...`）和 `App Secret`，存入本机 `MIKASA_FEISHU_APP_ID`、`MIKASA_FEISHU_APP_SECRET`。不要把它们写入 Git JSON 或聊天消息。
-4. 在 **权限管理** 保留 `im:message.p2p_msg:readonly`（单聊读取）和 `im:message:send_as_bot`（发送回复）；群聊补充 `im:message.group_at_msg:readonly`（接收群内 @ 机器人的消息）。要让普通未 @ 的群消息也送达，申请 `im:message.group_msg`（获取群组中所有消息，敏感权限，以控制台审批为准）。项目取消 @ 限制不等于飞书自动投递全部消息。Hermes 查询显示名、引用和附件所需额外权限按实际使用补充。
+4. 在 **权限管理** 保留 `im:message.p2p_msg:readonly`（单聊读取）和 `im:message:send_as_bot`（发送回复）；群聊补充 `im:message.group_at_msg:readonly`（接收群内 @ 机器人的消息）。要读取未 @ 的群聊背景，申请 `im:message.group_msg`（获取群组中所有消息，敏感权限，以控制台审批为准）。读取权限与回复触发独立：保留全部群消息权限，群聊仍需 @ 才启动回复。Hermes 查询显示名、引用和附件所需额外权限按实际使用补充。
 5. 在 **版本管理与发布** 创建版本，把应用可用范围扩大到需要与 Mikasa 交互的成员或部门，提交并完成企业审批/发布。原先只选负责人会限制其他人的使用。修改权限或可用范围后按控制台要求重新发布。
 6. 可选 `feishu.owner_open_id` 填负责人在 Mikasa 应用中的 `ou_...`，不是机器人 ID；用于身份说明，不限制准入。如已有 User ID 权限，可补同一人的 `owner_user_id`；本机已有绑定无需重复配置。
 7. 检查配置中的 `feishu` 段应类似下面这样，App ID 和 App Secret 仍只通过环境变量提供：
@@ -75,11 +75,11 @@ python3.12 -m mikasa --config config/local/hermes-cch.json connections feishu --
 9. 准备事件订阅：在 **事件与回调 → 事件配置** 选择 **使用长连接接收事件**。该方式不需要公网 URL、Encrypt Key 或 Verification Token。先检查 CCH 已配置；CLI 可以与 Gateway 并存，若已有 Gateway 正在运行则先停止它再重启加载新代码，然后执行 `python3.12 -m mikasa --config config/local/hermes-cch.json gateway --platform feishu`。微信绑定完成后改为同一条 Gateway 命令追加 `--platform weixin`；不要启动第二个 Gateway。代码更新后需重启现有 Gateway 才会加载新策略。
 10. 控制台若要求先建立长连接，等待启动输出确认连接后，再保存订阅方式，添加 **接收消息 v2.0** 事件 `im.message.receive_v1`，按控制台提示发布新版本。无需订阅 Hermes 支持的所有事件。
 11. 在目标飞书群打开 **群设置 → 群机器人 → 添加机器人**，搜索 Mikasa 并添加。若搜索不到或不能添加，检查应用是否发布、操作者是否在应用可用范围，以及群管理员的添加限制；项目的消息过滤无法影响飞书客户端的添加列表。
-12. 在私聊和群内分别发送 `/help`、普通文字、`/model 完整模型ID` 和 `/new`；再用另一成员账号验证。群内先 @ Mikasa，再测试未 @ 消息，区分事件权限与本地策略。只有真实收到回复才算完成平台验收；同时检查身份/skills 加载与记忆保留。
+12. 在私聊发送 `/help`、普通文字、`/model 完整模型ID` 和 `/new`；群内执行时须 @ Mikasa，再用另一成员账号验证。群内未 @ 应保持安静，随后 @ 她询问刚才的讨论，确认可以读取背景。实际回复、未 @ 时不触发、背景读取分别验收；同时检查身份/skills 加载与记忆保留。
 
-飞书现采用 Hermes 原生开放准入：所有用户、群聊与其他机器人均可进入，群聊不要求 @。通过 `FEISHU_ALLOW_ALL_USERS=true`、`FEISHU_GROUP_POLICY=open`、`FEISHU_ALLOW_BOTS=all`、`FEISHU_REQUIRE_MENTION=false` 实现，无成员或群白名单；Hermes 自身消息回环过滤、消息去重与机器人循环保护保留。只对飞书开放，微信仍使用扫码负责人的单聊绑定。
+飞书允许所有用户、群聊与其他机器人进入；私聊直接回复，群聊须 @ Mikasa 才触发任务或系统命令。通过 `FEISHU_ALLOW_ALL_USERS=true`、`FEISHU_GROUP_POLICY=open`、`FEISHU_ALLOW_BOTS=all`、`FEISHU_REQUIRE_MENTION=true` 实现，无成员或群白名单；Hermes 自身消息回环过滤、消息去重与机器人循环保护保留。触发判断沿用 Hermes；原生将 @所有人也视为提及。微信仍使用扫码负责人的单聊绑定。
 
-**群附件没有进入会话时**：先检查应用已发布的 `im:message.group_msg` 权限。文件独立发送时通常不带 @，只授予 `im:message.group_at_msg:readonly` 不会投递这些消息；文字能回复不代表附件事件也会到达。飞书消息列表接口返回 `230027` 且提示 `need scope: im:message.group_msg` 时，应在权限管理开通此权限并重新发布、完成审批。引用文件并 @ 机器人可让适配器按该条消息补下载，但仍需应用具有相应消息资源的访问权限。代码中的开放群策略无法替代飞书授权。
+**群消息读取与附件**：保留应用已发布的 `im:message.group_msg` 权限，用于被 @ 时读取近期群聊背景。未 @ 的消息和独立文件不会启动任务；要处理文件，引用附件并 @ Mikasa。只有 `im:message.group_at_msg:readonly` 时，普通群消息不会投递，近期背景查询也可能失败。飞书消息列表接口返回 `230027` 且提示 `need scope: im:message.group_msg` 时，应在权限管理开通此权限并重新发布、完成审批。引用文件并 @ 机器人可让适配器按该条消息补下载，但仍需应用具有相应消息资源的访问权限。代码中的开放群策略无法替代飞书授权。
 
 私聊按平台和聊天区分；普通群及话题内共享上下文，发送者仍使用 Hermes 元数据识别。同一 Gateway 共用负责人 profile 的 MEMORY/USER、SessionDB、身份与 skills，具体会话仍按平台、聊天和话题标识隔离，并非每人的私有记忆空间。开放用户可调用原生系统命令与工程工具，部分操作影响共享 profile 和工作机。不同会话并发，同会话忙碌时排队；工程进度与结果直接回复原会话，详细语义见[聊天手册](CHAT.md)。
 

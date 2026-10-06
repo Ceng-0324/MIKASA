@@ -55,7 +55,9 @@ python3.12 -m mikasa --config config/local/hermes-cch.json chat --session NATIVE
 
 ## 在聊天中做工程
 
-飞书可直接上传文件，也可引用已发送的附件并说明任务；ZIP 下载到工作机后，由 Hermes 原生终端解压、读取和分析。引用获取仅针对当前聊天中的那条消息，不自动遍历历史附件。要比较多份文件，先让每份附件进入会话，或分别引用它们。群内直接上传的文件通常没有 @，需要已发布的 `im:message.group_msg` 权限；只有 @ 消息权限时，可以引用文件并 @ Mikasa。传输失败会明确进入上下文，不将文件名当作已读取的内容。飞书云文档链接需要独立的文档权限与接入，和聊天附件不同。
+飞书私聊可直接上传文件；群聊先上传，再引用附件并 @ Mikasa 说明任务。ZIP 下载到工作机后，由 Hermes 原生终端解压、读取和分析。引用获取仅针对当前聊天中的那条消息；要比较多份文件，分别引用它们并 @ 她。传输失败会明确进入上下文，不将文件名当作已读取的内容。飞书云文档链接需要独立的文档权限与接入，和聊天附件不同。
+
+群聊未 @ 时不会启动 Agent 或执行系统命令。被 @ 后，适配器从飞书补读触发消息之前、当前群或话题最近最多 20 条消息，通过 Hermes 原生 `channel_context` 提供背景；内容按单条和总量截断，附件只显示名称，不自动下载。这是有界的近期快照，不是全群永久记忆；更早的材料请明确引用。读取失败时保留当前任务，并向模型说明背景缺失。需要保留已发布的 `im:message.group_msg` 权限，开启权限本身不会绕过 @ 触发。
 
 直接说明仓库路径、目标和验收条件，例如：“在 `/home/mikasa/work/demo` 修复登录测试，运行相关检查并创建本地提交，不推送。”Hermes 在当前会话直接调用原生工具，使用当前聊天模型，不经过 Mikasa 任务转发器。仓库与产出保留在工作机，独立工程 CLI 也可以访问。
 
@@ -73,7 +75,7 @@ python3.12 -m mikasa --config config/local/hermes-cch.json chat --session NATIVE
 
 普通群聊和话题共用各自上下文，私聊按平台和聊天分开，发送者仍使用 Hermes 元数据区分。首次从旧的按成员群会话切换时开启新的群上下文，旧历史保留。飞书使用原生输入状态和流式回复，微信保留完整回复和长任务通知；系统界面默认中文，尚未本地化的上游提示仍可能是英文。偏好迁移只执行一次，之后原生 `/busy`、显示及会话设置保留。
 
-CLI 启动原生 CLI 子进程；同一账号使用同一 profile、SessionDB 和 MEMORY/USER。`mikasa gateway --platform feishu [--platform weixin]` 使用负责人 profile，由同一个 Hermes Gateway 处理开放的飞书私聊/群聊及已绑定负责人的微信单聊；飞书不要求 @，其他机器人也可进入。会话按 Hermes 原生规则划分，长期记忆仍为 profile 共享；开放用户也能调用原生系统命令，不将其描述为每人的独立沙箱。平台配置和生效步骤见[接入手册](CONNECTIONS.md)。CLI 与一个消息 Gateway 可以同时管理同一账号 profile；启动阶段短暂的 profile 初始化锁只防止配置刷新竞争，运行期并发由 Hermes 会话 lease 处理。两个 Gateway 同时启动时会被 Hermes 原生 runtime 锁拒绝。退出会收回对应子进程，重新打开继续使用原生数据。模型凭据只从显式 CCH 来源读取到子进程环境，不复制个人认证文件。
+CLI 启动原生 CLI 子进程；同一账号使用同一 profile、SessionDB 和 MEMORY/USER。`mikasa gateway --platform feishu [--platform weixin]` 使用负责人 profile，由同一个 Hermes Gateway 处理开放的飞书私聊/群聊及已绑定负责人的微信单聊；飞书群聊需要 @，其他机器人也须遵循相同触发规则；Hermes 原生将 @所有人也视为提及。会话按 Hermes 原生规则划分，长期记忆仍为 profile 共享；开放用户也能调用原生系统命令，不将其描述为每人的独立沙箱。平台配置和生效步骤见[接入手册](CONNECTIONS.md)。CLI 与一个消息 Gateway 可以同时管理同一账号 profile；启动阶段短暂的 profile 初始化锁只防止配置刷新竞争，运行期并发由 Hermes 会话 lease 处理。两个 Gateway 同时启动时会被 Hermes 原生 runtime 锁拒绝。退出会收回对应子进程，重新打开继续使用原生数据。模型凭据只从显式 CCH 来源读取到子进程环境，不复制个人认证文件。
 
 初始化更新身份/规则、必需 skills/plugin 和生成的 CCH 配置，保留 Hermes 自己保存的默认模型、推理和显示偏好。`config.yaml` 的 YAML/JSON 都可读取，无变化时保留原文件；需要刷新时写为 JSON（合法 YAML），不保留 YAML 注释。格式错误时保留原文件并阻止启动。长期记忆和原生数据库不由配置初始化覆盖。
 

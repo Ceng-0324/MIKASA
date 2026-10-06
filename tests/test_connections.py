@@ -54,7 +54,7 @@ class ConnectionTests(unittest.TestCase):
             result = diagnostics(self.config, "feishu")
         self.assertEqual(result["configuration"], "ready")
         self.assertFalse(result["owner_bound"])
-        self.assertEqual(result["access"], {"users": "all", "groups": "open", "bots": "all", "require_mention": False})
+        self.assertEqual(result["access"], {"users": "all", "groups": "open", "bots": "all", "require_mention": True})
 
     def test_weixin_binding_fails_closed_and_diagnostics_do_not_expose_credentials(self):
         value = {"actor": self.config.owner, "account_id": "fixture@im.bot", "user_id": "owner@im.wechat",
@@ -213,8 +213,29 @@ owner = N(sender_type='user', sender_id=N(open_id='ou_owner', user_id=None, unio
 stranger = N(sender_type='user', sender_id=N(open_id='ou_stranger', user_id=None, union_id=None))
 bot = N(sender_type='bot', sender_id=N(open_id='ou_owner', user_id=None, union_id=None))
 dm = N(chat_type='p2p', chat_id='oc_fixture')
-group = N(chat_type='group', chat_id='oc_fixture', mentions=[], content='ordinary unmentioned text')
+group = N(chat_type='group', chat_id='oc_fixture', mentions=[N(id=N(open_id='ou_mikasa_bot'))], content='mention text')
 adapter._bot_open_id = 'ou_mikasa_bot'
+# Receiving group events is independent from allowing them to start a turn.
+from unittest.mock import AsyncMock
+async def check_trigger():
+    adapter._process_inbound_message = AsyncMock()
+    for index, (chat_type, text, target, allowed) in enumerate([
+        ('group', 'ordinary message', None, False),
+        ('group', '/help', None, False),
+        ('group', 'hello', 'ou_other_bot', False),
+        ('group', 'hello', 'ou_mikasa_bot', True),
+        ('group', '/help', 'ou_mikasa_bot', True),
+        ('group', '@_all hello', None, True),
+        ('p2p', 'hello', None, True),
+        ('p2p', '/help', None, True),
+    ]):
+        message = N(message_id=f'om_trigger_{index}', chat_type=chat_type, chat_id='oc_fixture',
+                    message_type='text', content=json.dumps({'text': text}),
+                    mentions=[N(id=N(open_id=target))] if target else [])
+        adapter._process_inbound_message.reset_mock()
+        await adapter._handle_message_event_data(N(event=N(message=message, sender=stranger)))
+        assert adapter._process_inbound_message.await_count == int(allowed), (chat_type, text, target)
+asyncio.run(check_trigger())
 from gateway.authz_mixin import GatewayAuthorizationMixin
 from gateway.session import build_session_key
 auth = GatewayAuthorizationMixin()
@@ -258,12 +279,12 @@ print('pinned Feishu SDK admission and Gateway configuration: passed')
                                input=json.dumps(settings), capture_output=True, text=True, timeout=30)
         self.assertEqual(reply.returncode, 0, reply.stderr)
 
-    def test_pinned_feishu_attachments(self):
+    def test_pinned_feishu_ingress(self):
         python = self.native_python("lark_oapi", "aiohttp")
         env = {"PATH": os.environ.get("PATH", ""), "HERMES_HOME": str(self.path),
                "MIKASA_HERMES_SOURCE": str(ROOT / "runtime/cache/hermes-source"),
                "HERMES_ENABLE_PROJECT_PLUGINS": "0"}
-        reply = subprocess.run([str(python), str(ROOT / "tests/feishu_attachments_sdk.py"), "-v"],
+        reply = subprocess.run([str(python), str(ROOT / "tests/feishu_ingress_sdk.py"), "-v"],
                                cwd=self.path, env=env, capture_output=True, text=True, timeout=60)
         self.assertEqual(reply.returncode, 0, reply.stderr)
 
@@ -288,7 +309,7 @@ print('pinned Feishu SDK admission and Gateway configuration: passed')
         saved['platforms']['feishu'].update(
             reply_to_mode='all', typing_indicator=False, gateway_restart_notification=True,
             channel_overrides={'room': {'model': 'fixture-alt', 'system_prompt': 'room-specific'}},
-            extra={'custom_setting': 'keep', 'require_mention': True})
+            extra={'custom_setting': 'keep', 'require_mention': False})
         saved['platforms']['discord'] = {'enabled': True, 'token': 'unselected-fixture-token'}
         path.write_text(json.dumps(saved))
         with patch.dict(os.environ, model_env):
@@ -324,7 +345,7 @@ assert p.enabled and p.reply_to_mode == 'all' and not p.typing_indicator
 assert p.gateway_restart_notification is True
 assert p.channel_overrides['room'].model == 'fixture-alt'
 assert p.channel_overrides['room'].system_prompt == 'room-specific'
-assert p.extra['custom_setting'] == 'keep' and p.extra['require_mention'] is False
+assert p.extra['custom_setting'] == 'keep' and p.extra['require_mention'] is True
 assert p.extra['app_id'] == 'cli_fixture'
 '''
         before = path.read_bytes()
