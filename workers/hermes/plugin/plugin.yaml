@@ -1,4 +1,4 @@
 name: mikasa
 kind: standalone
 version: 1.0.0
-description: Mikasa conversation context, on-demand engineering skills and native history access.
+description: Mikasa context, engineering skills and on-demand Feishu message and attachment access.

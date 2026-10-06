@@ -2,7 +2,11 @@
 
 固定 NousResearch/hermes-agent `f9524d3f119c672e4a4444f56d582e7475716ba3`，版本 0.21.3。Mikasa 不修改上游、不重写工具循环。
 
-飞书引用附件通过原生平台注册接口扩展适配器：读取当前聊天中被明确引用的消息，复用 Hermes 下载、缓存及附件上下文，再进入原生 Agent。补齐固定版本只传引用文件名、遗漏 `folder` 类型的缺口，不查询群历史；上游覆盖这些行为并通过附件回归后删除扩展。`folder` 复用原生文件解析和下载，资源接口失败时保留名称并提示改发 ZIP，不把元数据当作文件内容。群聊使用原生 @ 触发，文件可通过引用并 @ 读取；私聊直接上传仍走原生接收链路。飞书访问权限决定消息和资源是否可读，不改变触发规则。
+飞书引用附件通过原生平台注册接口扩展适配器：读取当前聊天中被明确引用的消息，复用 Hermes 下载、缓存及附件上下文，再进入原生 Agent。补齐固定版本只传引用文件名、遗漏 `folder` 类型的缺口；上游覆盖这些行为并通过附件回归后删除扩展。飞书官方仅支持通过客户端下载聊天 `folder`，适配器保留名称并说明需改发 ZIP，不做无效下载。群聊使用原生 @ 触发，文件可通过引用并 @ 读取；私聊直接上传仍走原生接收链路。
+
+需要以前发过的文件时，Agent 通过原生插件工具 `feishu_messages` 按聊天、话题、时间和关键词分页查找，再用 `feishu_download_attachment` 取得原生缓存路径，交终端或文件工具处理。当前飞书聊天作为默认查询目标，其他聊天可显式传 ID，平台权限决定可访问范围。列表查询不会下载文件，没有自动群历史回填。工具只在已连接飞书的 Gateway 中可用，Hermes 管理发现、调用、进度与取消，Mikasa 不建立第二套执行循环。
+
+采用这项薄适配的依据：[官方 MCP 暂不支持文件上传下载](https://github.com/larksuite/lark-openapi-mcp/blob/main/README_ZH.md#自定义配置开启api)；[消息内容说明](https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/im-v1/message/events/message_content)限定聊天文件夹为客户端下载。查询使用[会话历史接口](https://open.feishu.cn/document/server-docs/im-v1/message/list)，二进制下载沿用 Hermes。上游提供等价查询、下载工具并通过回归后删除自有工具。
 
 ## 安装
 
@@ -54,7 +58,7 @@ Codex/Claude 来源仅显式只读本机配置；VM 使用环境引用，不复�
 | native_engineer.py | 官方 hermes_cli.main.main 工程总入口 |
 | native_cli.py / native_gateway.py | 聊天 CLI/Gateway 生命周期与加载检查 |
 | feishu_attachments.py | 引用附件补下载与传输失败提示，复用原生适配器 |
-| plugin/ | 身份/协作提示及加载证据；不注册工具拦截器 |
+| plugin/ | 身份/协作提示、加载证据及按需飞书资源工具；不注册工具拦截器 |
 | profile_config.py | 保留原生偏好、刷新受管 provider 与身份 skill |
 | backup_adapter.py | Hermes SQLite 快照及恢复路径处理 |
 | feishu_probe.py / weixin_login.py | 官方平台探针与扫码，凭据留本机 |

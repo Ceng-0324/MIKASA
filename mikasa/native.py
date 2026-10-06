@@ -176,7 +176,7 @@ def prepare_profile(config, actor, *, engineering=False):
     actor_identity["feishu_owner"] = {"account": config.owner, "ids": owner_ids}
     private_write(home / "policy/actor.json", json.dumps(actor_identity, ensure_ascii=False))
     plugin = config.root / "workers/hermes/plugin"
-    for name in ("plugin.yaml", "__init__.py"):
+    for name in ("plugin.yaml", "__init__.py", "feishu_files.py"):
         private_write(home / "plugins/mikasa" / name, (plugin / name).read_text())
     return home, source, python, credentials
 

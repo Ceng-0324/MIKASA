@@ -17,6 +17,7 @@ from gateway.config import PlatformConfig
 from gateway.platform_registry import platform_registry
 from gateway.platforms.event import MessageEvent, MessageType
 from workers.hermes.feishu_attachments import install_attachment_support
+from workers.hermes.plugin import feishu_files
 
 discover_plugins()
 native_entry = platform_registry.get("feishu")
@@ -47,6 +48,11 @@ class AttachmentTests(unittest.IsolatedAsyncioTestCase):
         self.history = self.enterContext(patch.object(NativeAdapter, "_tenant_get_raw", AsyncMock()))
         self.source = self.adapter.build_source(chat_id="oc_room", chat_type="group", user_id="ou_sender",
                                                 user_name="sender", thread_id="omt_topic")
+        self.live = self.enterContext(patch("tools.send_message_senders._live_adapter",
+                                           return_value=(N(_gateway_loop=None), self.adapter)))
+        from gateway.session_context import set_session_vars, clear_session_vars
+        tokens = set_session_vars(platform="feishu", chat_id="oc_room")
+        self.addCleanup(clear_session_vars, tokens)
 
     def quoted(self, **kwargs):
         return MessageEvent(text="分析这份项目", source=self.source, reply_to_message_id="om_file",
@@ -92,7 +98,7 @@ class AttachmentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(flags, [False])
         self.adapter._client.im.v1.message.get.assert_not_called()
 
-    async def test_raw_group_quote_preserves_folder_name_and_reports_api_failure(self):
+    async def test_raw_group_quote_preserves_folder_name_and_explains_platform_limit(self):
         # Feishu's desktop folder upload is type=folder, even though the UI says
         # [file]. Exercise admission and native parent parsing, not a prebuilt event.
         self.adapter._bot_open_id = "ou_bot"
@@ -123,24 +129,20 @@ class AttachmentTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("文件夹", event.text)
         self.assertIn("ZIP", event.text)
         self.assertFalse(event.media_urls)
-        self.fetch.assert_awaited_once_with(message_id="om_file", file_key="file_fixture", resource_type="file")
+        self.fetch.assert_not_awaited()
         self.history.assert_not_awaited()
         self.assertIsNone(event.channel_context)
 
-    async def test_direct_folder_uses_native_downloader_and_preserves_failure(self):
+    async def test_direct_folder_reports_client_only_download_without_api_retry(self):
         incoming = N(message_id="om_folder", message_type="folder", mentions=[],
                      content=json.dumps({"file_key": "file_fixture", "file_name": "project-folder"}))
-        self.fetch.return_value = N(success=lambda: False, code=40009)
         text, kind, paths, _, _, _ = await self.adapter._extract_message_content(incoming)
         self.assertEqual(kind, MessageType.DOCUMENT)
         self.assertFalse(paths)
         self.assertIn("project-folder", text)
         self.assertIn("ZIP", text)
-        # If the platform supplies bytes, the same native cache/context path works.
-        self.fetch.return_value = self.resource
-        text, _, paths, _, _, _ = await self.adapter._extract_message_content(incoming)
-        self.assertEqual(Path(paths[0]).read_bytes(), b"archive fixture")
-        self.assertNotIn("未取得", text)
+        self.assertIn("不支持", text)
+        self.fetch.assert_not_awaited()
 
     async def test_quoted_text_and_new_attachments_are_preserved(self):
         self.resource.file_name = "notes.md"
@@ -221,6 +223,107 @@ class AttachmentTests(unittest.IsolatedAsyncioTestCase):
         for name in vars(native_entry):
             if name != "adapter_factory":
                 self.assertEqual(getattr(fixed, name), getattr(native_entry, name), name)
+
+    async def test_on_demand_search_preserves_empty_page_cursor_and_downloads_found_file(self):
+        found = message(content={"file_key": "file_fixture", "file_name": "中文项目.zip"})
+        self.adapter._client.im.v1.message.list = Mock(side_effect=[
+            success(items=[message("text", {"text": "ordinary discussion"})], has_more=True, page_token="next"),
+            success(items=[found], has_more=False, page_token=None)])
+        args = {"query": "中文项目", "attachments_only": True, "start_time": "1000"}
+        first = json.loads(await feishu_files.messages(args))
+        self.assertEqual(first["items"], [])
+        self.assertTrue(first["has_more"])
+        second = json.loads(await feishu_files.messages({**args, "page_token": first["page_token"]}))
+        self.assertEqual(second["items"][0]["attachments"][0]["name"], "中文项目.zip")
+        self.assertFalse(second["has_more"])
+        self.fetch.assert_not_awaited()  # metadata lookup never downloads files
+        request = self.adapter._client.im.v1.message.list.call_args.args[0]
+        self.assertIn(("container_id", "oc_room"), request.queries)
+        self.assertIn(("page_token", "next"), request.queries)
+        self.assertIn(("start_time", "1000"), request.queries)
+        self.adapter._client.im.v1.message.get.return_value = success(items=[found])
+        downloaded = json.loads(await feishu_files.download({"message_id": second["items"][0]["message_id"]}))
+        self.assertEqual(downloaded["status"], "downloaded")
+        self.assertEqual(Path(downloaded["files"][0]["path"]).read_bytes(), b"archive fixture")
+        self.dispatch.assert_not_awaited()  # read tools do not start turns or send messages
+
+    async def test_on_demand_folder_is_identified_without_futile_download(self):
+        self.adapter._client.im.v1.message.get.return_value = success(items=[
+            message("folder", {"file_key": "folder_key", "file_name": "project-folder"})])
+        result = json.loads(await feishu_files.messages({"action": "get", "message_id": "om_file"}))
+        self.assertIn("project-folder", result["items"][0]["text"])
+        result = json.loads(await feishu_files.download({"message_id": "om_file"}))
+        self.assertEqual(result["status"], "unsupported")
+        self.assertFalse(result["files"])
+        self.fetch.assert_not_awaited()
+
+    async def test_lookup_permissions_and_foreign_message_errors_preserve_retry(self):
+        self.adapter._client.im.v1.message.get.return_value = N(success=lambda: False, code=230027, msg="private SDK diagnostic")
+        result = json.loads(await feishu_files.download({"message_id": "om_file"}))
+        self.assertEqual(result["code"], 230027)
+        self.assertNotIn("private SDK", json.dumps(result))
+        foreign = message()
+        foreign.chat_id = "oc_other"
+        self.adapter._client.im.v1.message.get.return_value = success(items=[foreign])
+        result = json.loads(await feishu_files.download({"message_id": "om_file"}))
+        self.assertIn("different chat", result["error"])
+        self.fetch.assert_not_awaited()
+        result = json.loads(await feishu_files.download({"message_id": "om_file", "chat_id": "oc_other"}))
+        self.assertEqual(result["status"], "downloaded")
+
+    async def test_partial_download_does_not_claim_all_files_read(self):
+        self.adapter._client.im.v1.message.get.return_value = success(items=[message("post", {
+            "zh_cn": {"title": "archives", "content": [[
+                {"tag": "file", "file_key": "file_a", "file_name": "a.zip"},
+                {"tag": "file", "file_key": "file_b", "file_name": "b.zip"}]]}})])
+        self.fetch.side_effect = [self.resource, N(success=lambda: False, code=234003)]
+        result = json.loads(await feishu_files.download({"message_id": "om_file"}))
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["expected_files"], 2)
+        self.assertEqual(len(result["files"]), 1)
+
+    async def test_query_validation_no_gateway_and_cancel(self):
+        for args in ({"page_size": 0}, {"page_size": 51}, {"page_size": True},
+                     {"action": "send"}, {"thread_id": "omt_topic", "start_time": "1000"}):
+            with self.subTest(args=args):
+                self.assertIn("error", json.loads(await feishu_files.messages(args)))
+        self.live.return_value = (None, None)
+        self.assertIn("No live Feishu", json.loads(await feishu_files.messages({}))["error"])
+        self.live.return_value = (N(_gateway_loop=None), self.adapter)
+        self.fetch.side_effect = asyncio.CancelledError
+        with self.assertRaises(asyncio.CancelledError):
+            await feishu_files.download({"message_id": "om_file"})
+
+    async def test_concurrent_tools_keep_native_chat_context(self):
+        from gateway.session_context import set_session_vars, clear_session_vars
+        self.adapter._client.im.v1.message.list = Mock(return_value=success(items=[], has_more=False, page_token=None))
+        async def read(chat):
+            tokens = set_session_vars(platform="feishu", chat_id=chat)
+            try:
+                await asyncio.sleep(0)
+                return json.loads(await feishu_files.messages({}))
+            finally:
+                clear_session_vars(tokens)
+        results = await asyncio.gather(read("oc_one"), read("oc_two"))
+        self.assertTrue(all("items" in r for r in results))
+        chats = [dict(c.args[0].queries)["container_id"] for c in self.adapter._client.im.v1.message.list.call_args_list]
+        self.assertCountEqual(chats, ["oc_one", "oc_two"])
+
+    async def test_tool_worker_dispatches_reads_on_gateway_loop(self):
+        # Production tool calls run on a worker loop, while adapter clients and
+        # semaphores belong to the Gateway loop. Exercise the real cross-loop hop.
+        loop = asyncio.get_running_loop()
+        self.live.return_value = (N(_gateway_loop=loop), self.adapter)
+        observed = []
+        native_run = self.adapter._run_blocking
+        async def capture(*args, **kwargs):
+            observed.append(asyncio.get_running_loop())
+            return await native_run(*args, **kwargs)
+        with patch.object(self.adapter, "_run_blocking", capture):
+            result = await asyncio.to_thread(lambda: asyncio.run(feishu_files.download({"message_id": "om_file"})))
+        self.assertEqual(json.loads(result)["status"], "downloaded")
+        self.assertTrue(observed)
+        self.assertTrue(all(actual is loop for actual in observed))
 
 
 if __name__ == "__main__":

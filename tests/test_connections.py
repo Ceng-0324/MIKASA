@@ -539,6 +539,11 @@ assert 'session_search' in described.get('tools',{})
 name,args,blocked=_unwrap_tool_search_call(SimpleNamespace(enabled_toolsets=toolsets), 'tool_call', {'name':'session_search','arguments':{'profile':'other','query':'private'}})
 assert name == 'session_search' and blocked is None
 assert get_pre_tool_call_directive(name, args)[0] is None
+files=json.loads(handle_function_call('tool_describe', {'names':['feishu_messages','feishu_download_attachment']}, enabled_toolsets=['feishu_files']))
+assert {'feishu_messages','feishu_download_attachment'} <= files.get('tools',{}).keys()
+name,args,blocked=_unwrap_tool_search_call(SimpleNamespace(enabled_toolsets=['feishu_files']), 'tool_call', {'calls':[{'name':'feishu_messages','arguments':{'query':'project.zip'}}]})
+assert name == 'feishu_messages' and blocked is None
+assert 'No live Feishu' in json.loads(handle_function_call('tool_call', {'calls':[{'name':name,'arguments':args}]}, enabled_toolsets=['feishu_files']))['error']
 for args in ({'profile':'other'}, {'session_id':'other/id'}):
     assert get_pre_tool_call_directive('session_search', args)[0] is None
 from hermes_cli.config import load_config
@@ -550,6 +555,7 @@ for platform in ('feishu','weixin'):
     enabled=sorted(_get_platform_tools(cfg,platform))
     tools={t['function']['name'] for t in get_tool_definitions(enabled_toolsets=enabled,quiet_mode=True,skip_tool_search_assembly=True)}
     assert {'terminal','read_file','write_file','process_manage','delegate_task','skill_manage'} <= tools, tools
+    assert {'feishu_messages','feishu_download_attachment'} <= tools, tools
     assert resolve_display_setting(cfg,platform,'tool_progress') == 'all'
     assert resolve_display_setting(cfg,platform,'tool_progress_grouping') == 'accumulate'
     assert resolve_display_setting(cfg,platform,'interim_assistant_messages')

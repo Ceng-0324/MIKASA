@@ -15,10 +15,13 @@ class ReplyAttachments:
         if str(message_type or "").strip().lower() == "folder":
             # Desktop folder uploads carry file_key/file_name too, but pinned
             # Hermes drops this type (and renders the parent as literal "None").
-            # Reuse its file parser/downloader; metadata alone is not file access.
+            # Feishu documents folder downloads as client-only. Preserve metadata
+            # without repeatedly calling a resource API that cannot return it.
             normalized = super()._normalize("file", raw_content, mentions)
-            return replace(normalized, raw_type="folder",
-                           text_content="[飞书文件夹] " + normalized.metadata["placeholder_text"])
+            return replace(normalized, raw_type="folder", media_refs=[],
+                           text_content="[飞书文件夹] " + normalized.metadata["placeholder_text"] +
+                           "\n[飞书开放 API 不支持下载聊天文件夹，仅能取得名称；"
+                           "请将目录压缩为 ZIP 后发送，或提供可访问的仓库。]")
         return super()._normalize(message_type, raw_content, mentions)
 
     async def _fetch_message_resource(self, **kwargs):
@@ -36,12 +39,8 @@ class ReplyAttachments:
                                      getattr(message, "content", ""), getattr(message, "mentions", None))
         expected = len(normalized.image_keys) + len(normalized.media_refs)
         if len(paths) < expected:
-            if normalized.raw_type == "folder":
-                text += ("\n[飞书文件夹未取得内容：消息资源接口未能下载该文件夹，当前只有名称。"
-                         "可将文件夹压缩为 ZIP 后发送，再引用 ZIP 并 @；不能据此分析文件内容。]")
-            else:
-                text += ("\n[飞书附件下载未完成：部分或全部文件未取得，不能据此判断文件内容。"
-                         "请说明附件传输失败；检查平台权限或稍后引用原文件重试。]")
+            text += ("\n[飞书附件下载未完成：部分或全部文件未取得，不能据此判断文件内容。"
+                     "请说明附件传输失败；检查平台权限或稍后引用原文件重试。]")
         return text, kind, paths, types, inlined, mentions
 
     async def _dispatch_inbound_event(self, event):
@@ -67,7 +66,7 @@ class ReplyAttachments:
                                       content=getattr(parent.body, "content", ""),
                                       mentions=getattr(parent, "mentions", None))
             normalized = self._normalize(message.message_type, message.content, message.mentions)
-            if not normalized.media_refs and not normalized.image_keys:
+            if not normalized.media_refs and not normalized.image_keys and normalized.raw_type != "folder":
                 return
             # Only the explicitly quoted message, never ancestors or chat history.
             # This also works when the standalone file event was never delivered.
