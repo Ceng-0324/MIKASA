@@ -11,6 +11,16 @@ logger = logging.getLogger(__name__)
 
 
 class ReplyAttachments:
+    def _normalize(self, message_type, raw_content, mentions):
+        if str(message_type or "").strip().lower() == "folder":
+            # Desktop folder uploads carry file_key/file_name too, but pinned
+            # Hermes drops this type (and renders the parent as literal "None").
+            # Reuse its file parser/downloader; metadata alone is not file access.
+            normalized = super()._normalize("file", raw_content, mentions)
+            return replace(normalized, raw_type="folder",
+                           text_content="[飞书文件夹] " + normalized.metadata["placeholder_text"])
+        return super()._normalize(message_type, raw_content, mentions)
+
     async def _fetch_message_resource(self, **kwargs):
         response = await super()._fetch_message_resource(**kwargs)
         if not response or not response.success():
@@ -26,8 +36,12 @@ class ReplyAttachments:
                                      getattr(message, "content", ""), getattr(message, "mentions", None))
         expected = len(normalized.image_keys) + len(normalized.media_refs)
         if len(paths) < expected:
-            text += ("\n[飞书附件下载未完成：部分或全部文件未取得，不能据此判断文件内容。"
-                     "请说明附件传输失败；检查平台权限或稍后引用原文件重试。]")
+            if normalized.raw_type == "folder":
+                text += ("\n[飞书文件夹未取得内容：消息资源接口未能下载该文件夹，当前只有名称。"
+                         "可将文件夹压缩为 ZIP 后发送，再引用 ZIP 并 @；不能据此分析文件内容。]")
+            else:
+                text += ("\n[飞书附件下载未完成：部分或全部文件未取得，不能据此判断文件内容。"
+                         "请说明附件传输失败；检查平台权限或稍后引用原文件重试。]")
         return text, kind, paths, types, inlined, mentions
 
     async def _dispatch_inbound_event(self, event):

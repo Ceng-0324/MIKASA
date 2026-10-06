@@ -92,6 +92,56 @@ class AttachmentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(flags, [False])
         self.adapter._client.im.v1.message.get.assert_not_called()
 
+    async def test_raw_group_quote_preserves_folder_name_and_reports_api_failure(self):
+        # Feishu's desktop folder upload is type=folder, even though the UI says
+        # [file]. Exercise admission and native parent parsing, not a prebuilt event.
+        self.adapter._bot_open_id = "ou_bot"
+        self.adapter._require_mention = True
+        self.adapter._default_group_policy = "open"
+        self.adapter.get_chat_info = AsyncMock(return_value={"name": "room"})
+        self.adapter._resolve_sender_profile = AsyncMock(return_value={
+            "user_id": "ou_sender", "user_name": "sender", "user_id_alt": None})
+        self.adapter._client.im.v1.message.get.return_value = success(items=[
+            message("folder", {"file_key": "file_fixture", "file_name": "project-folder"})])
+        self.fetch.return_value = N(success=lambda: False, code=40009)
+        incoming = N(message_id="om_unmentioned", message_type="text", chat_type="group",
+                     chat_id="oc_room", parent_id="om_file", mentions=[],
+                     content=json.dumps({"text": "分析这个项目"}))
+        data = N(event=N(message=incoming, sender=N(sender_type="user",
+                         sender_id=N(open_id="ou_sender"))))
+        await self.adapter._handle_message_event_data(data)
+        self.dispatch.assert_not_awaited()
+        self.adapter._client.im.v1.message.get.assert_not_called()
+        incoming.message_id = "om_mentioned"
+        incoming.mentions = [N(key="@_user_1", name="Mikasa", id=N(open_id="ou_bot"))]
+        incoming.content = json.dumps({"text": "@_user_1 分析这个项目"})
+        await self.adapter._handle_message_event_data(data)
+        event = self.dispatch.await_args.args[0]
+        self.assertIn("project-folder", event.reply_to_text)
+        self.assertNotEqual(event.reply_to_text, "None")
+        self.assertIn("project-folder", event.text)
+        self.assertIn("文件夹", event.text)
+        self.assertIn("ZIP", event.text)
+        self.assertFalse(event.media_urls)
+        self.fetch.assert_awaited_once_with(message_id="om_file", file_key="file_fixture", resource_type="file")
+        self.history.assert_not_awaited()
+        self.assertIsNone(event.channel_context)
+
+    async def test_direct_folder_uses_native_downloader_and_preserves_failure(self):
+        incoming = N(message_id="om_folder", message_type="folder", mentions=[],
+                     content=json.dumps({"file_key": "file_fixture", "file_name": "project-folder"}))
+        self.fetch.return_value = N(success=lambda: False, code=40009)
+        text, kind, paths, _, _, _ = await self.adapter._extract_message_content(incoming)
+        self.assertEqual(kind, MessageType.DOCUMENT)
+        self.assertFalse(paths)
+        self.assertIn("project-folder", text)
+        self.assertIn("ZIP", text)
+        # If the platform supplies bytes, the same native cache/context path works.
+        self.fetch.return_value = self.resource
+        text, _, paths, _, _, _ = await self.adapter._extract_message_content(incoming)
+        self.assertEqual(Path(paths[0]).read_bytes(), b"archive fixture")
+        self.assertNotIn("未取得", text)
+
     async def test_quoted_text_and_new_attachments_are_preserved(self):
         self.resource.file_name = "notes.md"
         self.resource.file = io.BytesIO(b"quoted document content")
