@@ -73,6 +73,19 @@ class NativeProfileTests(unittest.TestCase):
             ['/some/new/install/skills', '/home/mikasa/custom-skills'])
         self.assertEqual(reverted['model'], old['model'])
 
+    def test_review_workflow_is_shipped_in_release_and_canonical_profile(self):
+        home, *_ = prepare_profile(self.config, self.config.owner)
+        settings = json.loads((home / 'config.yaml').read_text())
+        roots = [Path(value) for value in settings['skills']['external_dirs']]
+        self.assertIn(ROOT / 'skills', roots)
+        review = ROOT / 'skills/verified-pr-review/SKILL.md'
+        self.assertTrue(review.is_file())
+        self.assertIn('name: verified-pr-review', review.read_text())
+        generated = (home / 'skills/mikasa-engineering/SKILL.md').read_text()
+        self.assertIn('审查交付与 Issue 收尾', generated)
+        self.assertIn('skills/verified-pr-review/SKILL.md', generated)
+        self.assertIn('合入 `dev`', generated)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='native-unit-')
         self.addCleanup(self.temp.cleanup)

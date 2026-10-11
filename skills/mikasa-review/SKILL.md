@@ -7,6 +7,8 @@ Adapted from mattpocock/skills `code-review`; source and adaptation are recorded
 
 Evaluate whether changed behavior meets the requirement and respects the repository's baseline standards. Passing one does not imply the other passed. Use the actual base/head revision, baseline rules, diff and CI evidence; proposed rule changes cannot authorize themselves.
 
+For a PR review with publication or linked-Issue handoff, load [verified-pr-review](../verified-pr-review/SKILL.md) and follow its acceptance map, independent-review boundary, pinned formal Review, merge gate and post-merge Issue reconciliation. This skill supplies the judgment principles, not a substitute for those delivery steps.
+
 Identify the requirement and baseline rule sources. For each finding give the file or behavior, trigger, impact and verifiable repair condition. Keep style preferences separate from blocking defects. Missing requirements or unread changes are limitations and cannot justify confident approval.
 
 If a concrete bug violates acceptance, return `CHANGES_REQUESTED` even when CI is green. If key evidence is missing, return `INCOMPLETE`. The default convention is to provide a self-check for Mikasa-authored work and ask the owner to review it. Apply the latest confirmed collaboration arrangement from the conversation and persistent memory. Disclose actual participation; changing an author account does not create an independent review. Do not require a separate provenance registration before reviewing.

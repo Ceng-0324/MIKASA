@@ -14,7 +14,10 @@ class SkillTests(BaseTest):
         for kind in ("plan", "implement", "review"):
             with self.subTest(kind=kind):
                 skills = load_skills(ROOT, kind)
-                self.assertEqual([s["name"] for s in skills], ["mikasa-persona", "mikasa-" + kind])
+                expected = ["mikasa-persona", "mikasa-" + kind]
+                if kind == "review":
+                    expected.append("verified-pr-review")
+                self.assertEqual([s["name"] for s in skills], expected)
                 self.assertTrue(all(s["sha256"] == hashlib.sha256(s["content"].encode()).hexdigest() for s in skills))
         self.assertEqual(load_skills(ROOT, "audit"), [])
 

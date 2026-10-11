@@ -527,6 +527,15 @@ for name in ('engineering-contract.md', 'engineering-workflow.md'):
     assert (home/'policy'/name).read_text() not in sections
 skill=json.loads(skill_view('mikasa-engineering'))
 assert '工程工作流' in json.dumps(skill,ensure_ascii=False)
+release_skills=Path(json.loads((home/'config.yaml').read_text())['skills']['external_dirs'][0])
+review=json.loads(skill_view('verified-pr-review'))
+expected=release_skills/'verified-pr-review/SKILL.md'
+assert review['success'] and Path(review['_source_path']) == expected
+assert review['content'] == expected.read_text()
+for relative in ('templates/review-report.md', 'references/audio-fixture-verification.md',
+                 'references/ui-state-verification.md', 'references/runtime-verification.md'):
+    reference=json.loads(skill_view('verified-pr-review', relative))
+    assert reference['success'] and reference['content'] == (expected.parent/relative).read_text()
 assert get_pre_tool_call_directive('session_search', {'query': 'past discussion'})[0] is None
 for name in ('tool_search', 'tool_describe', 'tool_call'):
     assert get_pre_tool_call_directive(name, {})[0] is None
