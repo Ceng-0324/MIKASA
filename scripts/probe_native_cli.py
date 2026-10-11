@@ -99,9 +99,13 @@ print('MIKASA_PROBE='+json.dumps(checks))
                 if not all(checks.values()):
                     print(result.stdout[-4500:], file=sys.stderr)
                 # Hermes writes YAML; refresh must parse it in the SDK environment and retain preferences.
-                before = subprocess.check_output([str(python), '-c', "import yaml,json,os; from pathlib import Path; print(json.dumps(yaml.safe_load((Path(os.environ['HERMES_HOME'])/'config.yaml').read_text())['model']))"], env=env, text=True)
+                def selected_model():
+                    output = subprocess.check_output([str(python), '-c', "import yaml,json,os; from pathlib import Path; print(json.dumps(yaml.safe_load((Path(os.environ['HERMES_HOME'])/'config.yaml').read_text())['model']))"], env=env, text=True)
+                    return json.loads(output)
+
+                before = selected_model()
                 prepare_profile(config, config.owner)
-                checks['native_yaml_selection_survives_refresh'] = json.loads(before) == json.loads((home / 'config.yaml').read_text())['model']
+                checks['native_yaml_selection_survives_refresh'] = before == selected_model()
                 bootstrap = subprocess.run([str(python), str(root / 'workers/hermes/native_cli.py')],
                                            input='', cwd=home / 'workspace', env=env,
                                            capture_output=True, text=True, timeout=45)
