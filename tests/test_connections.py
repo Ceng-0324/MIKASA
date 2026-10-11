@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from mikasa.cli import main
@@ -83,9 +84,12 @@ class ConnectionTests(unittest.TestCase):
             weixin_binding(self.config)
 
     def test_weixin_login_is_model_independent_and_preserves_active_profile(self):
+        # Replace only this module's worker launcher, not subprocess.run shared by Git verification.
+        process = SimpleNamespace(run=Mock(return_value=Mock(returncode=0)), TimeoutExpired=subprocess.TimeoutExpired)
         with patch.dict(os.environ, {"GH_TOKEN": "unrelated", "MIKASA_MODEL_API_KEY": "unrelated"}), \
-                patch("mikasa.connections.subprocess.run", return_value=Mock(returncode=0)) as run:
+                patch("mikasa.connections.subprocess", process):
             self.assertEqual(login_weixin(self.config), 0)
+        run = process.run
         self.assertNotIn("GH_TOKEN", run.call_args.kwargs["env"])
         self.assertNotIn("MIKASA_MODEL_API_KEY", run.call_args.kwargs["env"])
         self.assertFalse(Path(run.call_args.kwargs["env"]["HERMES_HOME"]).exists())
@@ -169,18 +173,23 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.assertEqual(result["repositories"][0]["read_access"], "failed")
 
     def test_feishu_probe_is_ephemeral_redacts_output_and_does_not_need_model(self):
+        # Native source verification must use real Git subprocesses even while the probe is mocked.
+        process = SimpleNamespace(run=Mock(return_value=Mock(returncode=0,
+            stdout='{"connection":"passed","bot_identity":"passed"}')), TimeoutExpired=subprocess.TimeoutExpired)
         with patch.dict(os.environ, {"MIKASA_FEISHU_APP_ID": "cli_fixture", "MIKASA_FEISHU_APP_SECRET": "fixture-secret",
                                      "GH_TOKEN": "unrelated"}), \
-                patch("mikasa.connections.subprocess.run", return_value=Mock(returncode=0, stdout='{"connection":"passed","bot_identity":"passed"}')) as run:
+                patch("mikasa.connections.subprocess", process):
             result = diagnostics(self.config, "feishu", probe=True)
+        run = process.run
         self.assertEqual(result["connection"], "passed")
         self.assertEqual(result["messages"], "not_checked")
         self.assertNotIn("GH_TOKEN", run.call_args.kwargs["env"])
         self.assertNotIn("fixture-secret", repr(run.call_args.args))
         self.assertFalse(Path(run.call_args.kwargs["env"]["HERMES_HOME"]).exists())
         self.assertFalse(self.config.runtime.exists())
+        process.run.side_effect = subprocess.TimeoutExpired("probe", 45, output="fixture-secret")
         with patch.dict(os.environ, {"MIKASA_FEISHU_APP_ID": "cli_fixture", "MIKASA_FEISHU_APP_SECRET": "fixture-secret"}), \
-                patch("mikasa.connections.subprocess.run", side_effect=subprocess.TimeoutExpired("probe", 45, output="fixture-secret")):
+                patch("mikasa.connections.subprocess", process):
             with self.assertRaises(MikasaError) as error:
                 probe_feishu(self.config)
         self.assertNotIn("fixture-secret", str(error.exception))
